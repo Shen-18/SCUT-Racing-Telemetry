@@ -68,6 +68,68 @@ cd code
 
 ---
 
+## XRK 文件解析方案
+
+本项目的核心挑战之一是解析 AiM 数据记录仪生成的 `.xrk` / `.xrz` 二进制遥测文件。AiM 官方并未公开其文件格式规范，这给开发者带来了不小的障碍。
+
+### 常见方案及其局限
+
+| 方案 | 问题 |
+|------|------|
+| 逆向工程文件格式 | 工作量大，易随固件更新失效，精度无法保证 |
+| 用 RaceStudio3 导出 CSV 再处理 | 额外步骤，无法自动化批量处理 |
+| 使用 AimNexus API | 需要 .NET 环境，跨语言调用复杂，文档稀少 |
+
+### 本项目的方案：ctypes + 官方 DLL
+
+我们采用了另一种思路：**直接通过 Python 的 `ctypes` 加载 AiM 官方提供的解析 DLL（`MatLabXRK-2022-64-ReleaseU.dll`）来读取 XRK 文件**。
+
+核心实现在 [`code/scut_telemetry/xrk_dll.py`](code/scut_telemetry/xrk_dll.py) 中：
+
+```python
+# 加载 AiM 官方 DLL
+dll = ctypes.CDLL("MatLabXRK-2022-64-ReleaseU.dll")
+
+# 通过 DLL API 打开文件、枚举通道、读取数据
+dll.open_file(path)           # 打开 XRK 文件
+dll.get_channels_count(idx)   # 获取通道数量
+dll.get_channel_name(idx, i)  # 获取通道名称
+dll.get_channel_samples(...)  # 读取采样数据
+```
+
+**这种方案的优势：**
+
+- **100% 精度**：使用 AiM 自身的解析代码，数据与 RaceStudio3 完全一致
+- **无需逆向**：不需要逆向二进制格式，不依赖未公开的文档
+- **固件兼容**：官方 DLL 会跟随新固件更新，自动支持新型号
+- **自动化**：可在 Python 中直接调用，无缝集成到数据分析流水线
+
+### 关键代码结构
+
+`XrkDll` 类封装了所有 DLL 交互细节：
+
+1. **DLL 加载**：自动定位 DLL 及其依赖（`libxml2-2.dll`、`libiconv-2.dll` 等），处理 DLL 搜索路径
+2. **函数绑定**：使用 `ctypes` 声明 DLL 导出函数的参数和返回值类型
+3. **数据读取**：枚举标准通道和 GPS 通道，从原始时间戳重采样到 20 Hz 统一时间轴
+4. **单位转换**：自动处理单位换算（m/s → km/h、cm → mm 等）
+5. **衍生计算**：基于 GPS 速度计算行驶距离
+
+详细实现见：[技术细节文档 — DLL 桥接架构](code/docs/TECHNICAL_DETAILS.md#3-dll-桥接架构)
+
+### 给其他开发者的参考
+
+如果你也需要在 Python 中解析 AiM XRK 文件，可以参考以下要点：
+
+- AiM 的解析 DLL 通常位于 RaceStudio3 安装目录或 SDK 中，文件名为 `MatLabXRK*.dll`
+- DLL 依赖 MSVC 运行时和 `libxml2`、`libiconv` 等 C 库
+- 使用 `ctypes.CDLL` 加载，通过 `os.add_dll_directory()` 设置搜索路径
+- 标准通道和 GPS 通道使用两组独立的 API 函数族
+- 原始采样是不规则时间戳，需要重采样到均匀时间轴
+
+本项目中的 `TestMatLabXRK/` 目录包含了我们使用的 DLL 版本及其所有依赖，可以作为起点直接使用。
+
+---
+
 ## 项目结构
 
 ```
