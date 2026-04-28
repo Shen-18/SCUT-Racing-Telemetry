@@ -1,0 +1,11 @@
+{
+  "library_root": "./library",
+  "recursive_import": false,
+  "default_theme": "dark",
+  "display_preset": "medium",
+  "export_notes_to_csv": true,
+  "main_window_width": 1500,
+  "main_window_height": 920,
+  "import_folder_dialog_width": 860,
+  "import_folder_dialog_height": 180
+}
