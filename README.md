@@ -4,15 +4,13 @@
 
 它可以读取 AiM 赛道数据记录仪生成的 `.xrk` / `.xrz` 文件以及 RaceStudio3 导出的 `.csv` 文件，提供交互式图表分析、双文件对比和数据导出功能。
 
----
+> 📖 **想了解技术细节？** 请查阅 [`docs/TECHNICAL_DETAILS.md`](docs/TECHNICAL_DETAILS.md) — 涵盖 DLL 桥接原理、解析器实现、分析引擎算法、UI 组件树、打包策略等深度内容。
 
-## 快速导航
-
-| 文档 | 说明 |
+| 快速入口 | 说明 |
 |------|------|
-| **[源码详细文档](code/README.md)** | 功能特性、技术栈、数据流图、模块职责、开发环境配置、打包说明 |
-| **[技术细节](code/docs/TECHNICAL_DETAILS.md)** | 架构深究、DLL 桥接原理、解析器实现、分析引擎算法、UI 组件树、打包策略 |
-| **[发布版使用手册](code/RELEASE_README.md)** | 面向终端用户的详细操作方法（build 时自动打包到 exe 目录） |
+| **[技术细节文档](docs/TECHNICAL_DETAILS.md)** | 架构深究、DLL 桥接、解析器、分析引擎、UI、打包 |
+| **[源码详细文档](code/README.md)** | 功能特性、技术栈、模块职责、数据流、开发指南 |
+| **[发布版使用手册](code/RELEASE_README.md)** | 面向终端用户的详细操作方法 |
 
 ---
 
@@ -114,7 +112,7 @@ dll.get_channel_samples(...)  # 读取采样数据
 4. **单位转换**：自动处理单位换算（m/s → km/h、cm → mm 等）
 5. **衍生计算**：基于 GPS 速度计算行驶距离
 
-详细实现见：[技术细节文档 — DLL 桥接架构](code/docs/TECHNICAL_DETAILS.md#3-dll-桥接架构)
+详细实现见：[技术细节文档 — DLL 桥接架构](docs/TECHNICAL_DETAILS.md#3-dll-桥接架构)
 
 ### 给其他开发者的参考
 
@@ -145,12 +143,13 @@ SCUTRacing/
 │   │   ├── models.py            # 数据模型
 │   │   └── settings.py          # 配置系统
 │   ├── scripts/                 # CLI 工具
-│   ├── docs/                    # 技术文档
 │   ├── README.md                # 源码详细文档
 │   ├── RELEASE_README.md        # 发布版使用手册模板
 │   ├── requirements.txt
 │   ├── run_app.ps1 / build.ps1
 │   └── setting.md / settings.json
+├── docs/                        # 技术文档
+│   └── TECHNICAL_DETAILS.md     # 架构、DLL 桥接、分析引擎详解
 ├── Data/                        # 示例遥测数据
 │   └── SCUTRacing.ico           # 应用图标
 ├── TestMatLabXRK/               # AiM 官方解析 DLL

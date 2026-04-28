@@ -328,8 +328,6 @@ SCUTRacing/
 │   ├── scripts/                  # CLI 工具
 │   │   ├── xrk_to_csv.py         # XRK → CSV 转换
 │   │   └── compare_xrk_csv.py    # 解析精度验证
-│   ├── docs/
-│   │   └── TECHNICAL_DETAILS.md  # 技术细节文档
 │   ├── README.md                 # 本文档
 │   ├── RELEASE_README.md         # 发布版 README 模板
 │   ├── requirements.txt          # Python 依赖
