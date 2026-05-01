@@ -10,16 +10,23 @@ from .processor import visible_frame
 def summarize_channel(dataset: TelemetryDataset, channel: str, window: TimeWindow | None = None) -> dict[str, float]:
     if channel not in dataset.frame:
         return {"min": np.nan, "max": np.nan, "avg": np.nan, "std": np.nan, "count": 0}
-    frame = visible_frame(dataset, window)
-    values = pd.to_numeric(frame[channel], errors="coerce").dropna()
-    if values.empty:
+    if window is None:
+        values = dataset.frame[channel].to_numpy(dtype=float, copy=False)
+    else:
+        time = dataset.frame["Time"].to_numpy(dtype=float, copy=False)
+        win = window.clamped(dataset.max_time)
+        left = int(np.searchsorted(time, win.start, side="left"))
+        right = int(np.searchsorted(time, win.end, side="right"))
+        values = dataset.frame[channel].to_numpy(dtype=float, copy=False)[left:right]
+    values = values[np.isfinite(values)]
+    if len(values) == 0:
         return {"min": np.nan, "max": np.nan, "avg": np.nan, "std": np.nan, "count": 0}
     return {
-        "min": float(values.min()),
-        "max": float(values.max()),
-        "avg": float(values.mean()),
-        "std": float(values.std(ddof=0)),
-        "count": int(values.count()),
+        "min": float(np.min(values)),
+        "max": float(np.max(values)),
+        "avg": float(np.mean(values)),
+        "std": float(np.std(values)),
+        "count": int(len(values)),
     }
 
 

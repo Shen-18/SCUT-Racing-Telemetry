@@ -27,19 +27,23 @@ def clamp_window(start: float, end: float, max_time: float) -> TimeWindow:
 def sample_at(dataset: TelemetryDataset, channel: str, t: float, offset: float = 0.0) -> float:
     if channel not in dataset.frame:
         return float("nan")
-    time = dataset.frame["Time"].to_numpy(dtype=float) + float(offset)
-    values = dataset.frame[channel].to_numpy(dtype=float)
-    mask = np.isfinite(time) & np.isfinite(values) & (time >= 0)
-    if not np.any(mask):
+    time = dataset.frame["Time"].to_numpy(dtype=float, copy=False)
+    values = dataset.frame[channel].to_numpy(dtype=float, copy=False)
+    if len(time) == 0 or len(values) == 0:
         return float("nan")
-    x = time[mask]
-    y = values[mask]
-    idx = int(np.searchsorted(x, t))
+    target = float(t) - float(offset)
+    if not np.isfinite(target):
+        return float("nan")
+    idx = int(np.searchsorted(time, target))
     if idx <= 0:
-        return float(y[0])
-    if idx >= len(x):
-        return float(y[-1])
-    return float(y[idx - 1] if abs(t - x[idx - 1]) <= abs(x[idx] - t) else y[idx])
+        value = values[0]
+    elif idx >= len(time):
+        value = values[-1]
+    else:
+        before = time[idx - 1]
+        after = time[idx]
+        value = values[idx - 1] if abs(target - before) <= abs(after - target) else values[idx]
+    return float(value) if np.isfinite(value) else float("nan")
 
 
 def export_selected_csv(

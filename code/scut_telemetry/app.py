@@ -18,7 +18,7 @@ def main() -> int:
         load_telemetry(sys.argv[idx + 1], fallback_csv=False)
         return 0
 
-    pg.setConfigOptions(antialias=True, foreground="#F4F4F5")
+    pg.setConfigOptions(antialias=False, foreground="#F4F4F5")
     app = QApplication(sys.argv)
     app.setApplicationName("SCUT Racing Telemetry")
     app.setOrganizationName("SCUT Racing")

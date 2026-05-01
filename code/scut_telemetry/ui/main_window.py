@@ -307,9 +307,58 @@ class ChannelList(QFrame):
 @dataclass
 class PlotEntry:
     plot: pg.PlotItem
-    curves: list[tuple[str, str, np.ndarray, np.ndarray]]
+    curves: list[tuple[str, str, np.ndarray, np.ndarray, pg.PlotDataItem]]
     color_map: list[tuple[str, QColor]]
     legend_item: pg.TextItem | None = None
+
+
+MAIN_PLOT_MIN_POINTS = 2500
+MAIN_PLOT_MAX_POINTS = 9000
+OVERVIEW_MAX_POINTS = 3500
+TRACK_MAX_POINTS = 5000
+
+
+def finite_sorted_xy(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    mask = np.isfinite(x) & (x >= 0)
+    x = x[mask]
+    y = y[mask]
+    y = np.where(np.isfinite(y), y, np.nan)
+    if len(x) > 1 and np.any(np.diff(x) < 0):
+        sort_idx = np.argsort(x, kind="mergesort")
+        x = x[sort_idx]
+        y = y[sort_idx]
+    return x, y
+
+
+def downsample_true_xy(x: np.ndarray, y: np.ndarray, max_points: int) -> tuple[np.ndarray, np.ndarray]:
+    """Reduce dense lines by keeping real samples in original order."""
+    n = len(x)
+    if n <= max_points or max_points < 8:
+        return x, y
+    step = int(np.ceil(n / max_points))
+    keep_arr = np.arange(0, n, step, dtype=np.int64)
+    if keep_arr[-1] != n - 1:
+        keep_arr = np.append(keep_arr, n - 1)
+    return x[keep_arr], y[keep_arr]
+
+
+def visible_downsampled_xy(
+    x: np.ndarray,
+    y: np.ndarray,
+    window: TimeWindow,
+    max_points: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    if len(x) <= max_points:
+        return x, y
+    span = max(0.0, float(window.end) - float(window.start))
+    margin = max(0.05, span * 0.03)
+    start = max(0.0, float(window.start) - margin)
+    end = float(window.end) + margin
+    left = max(0, int(np.searchsorted(x, start, side="left")) - 1)
+    right = min(len(x), int(np.searchsorted(x, end, side="right")) + 1)
+    if right <= left:
+        return x[:0], y[:0]
+    return downsample_true_xy(x[left:right], y[left:right], max_points)
 
 
 class TelemetryPlotStack(QWidget):
@@ -331,6 +380,7 @@ class TelemetryPlotStack(QWidget):
         self._last_cursor_emit = 0.0
         self._last_legend_update = 0.0
         self._last_tooltip_update = 0.0
+        self._tooltip_interval = 0.25
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -412,26 +462,18 @@ class TelemetryPlotStack(QWidget):
         # Disable automatic range to let our manual _auto_y and setXRange work
         plot.getViewBox().disableAutoRange()
 
-        curves: list[tuple[str, str, np.ndarray, np.ndarray]] = []
+        curves: list[tuple[str, str, np.ndarray, np.ndarray, pg.PlotDataItem]] = []
         color_map: list[tuple[str, QColor]] = []
         for dataset, role, offset, color in specs:
             x = dataset.frame["Time"].to_numpy(dtype=float) + offset
             y = dataset.frame[channel].to_numpy(dtype=float)
-            mask = np.isfinite(x) & np.isfinite(y) & (x >= 0)
-            x = x[mask]
-            y = y[mask]
-            
-            # Ensure x is strictly sorted, otherwise pyqtgraph might not render lines properly
-            sort_idx = np.argsort(x)
-            x = x[sort_idx]
-            y = y[sort_idx]
+            x, y = finite_sorted_xy(x, y)
 
             pen = pg.mkPen(color=color, width=2, style=Qt.SolidLine if role == "A" else Qt.DashLine)
-            curve = plot.plot(x, y, pen=pen, name=role)
-            curve.setDownsampling(auto=True, method="subsample")
+            curve = plot.plot([], [], pen=pen, name=role)
             if hasattr(curve, "setClipToView"):
                 curve.setClipToView(True)
-            curves.append((role, channel, x, y))
+            curves.append((role, channel, x, y, curve))
             color_map.append((role, color))
 
         # Add legend-style label in top-right corner (like MATLAB legend)
@@ -460,11 +502,24 @@ class TelemetryPlotStack(QWidget):
     def set_window(self, window: TimeWindow, *, auto_y: bool = True, update_legend: bool = True) -> None:
         self.window = window
         for entry in self.entries:
+            self._update_curve_data(entry)
             entry.plot.setXRange(window.start, window.end, padding=0)
             if auto_y:
                 self._auto_y(entry)
         if update_legend:
             self._update_legends()
+
+    def _plot_point_budget(self, entry: PlotEntry) -> int:
+        width = int(entry.plot.getViewBox().sceneBoundingRect().width())
+        if width <= 0:
+            return MAIN_PLOT_MIN_POINTS
+        return max(MAIN_PLOT_MIN_POINTS, min(MAIN_PLOT_MAX_POINTS, width * 4))
+
+    def _update_curve_data(self, entry: PlotEntry) -> None:
+        budget = self._plot_point_budget(entry)
+        for _, _, x, y, curve in entry.curves:
+            dx, dy = visible_downsampled_xy(x, y, self.window, budget)
+            curve.setData(dx, dy, stepMode="left", connect="finite")
 
     def set_cursor(self, t: float, force: bool = False) -> None:
         self.cursor_time = max(0.0, float(t))
@@ -499,7 +554,7 @@ class TelemetryPlotStack(QWidget):
                 continue
             values: dict[str, str] = {}
             meta = None
-            for role, channel, x, y in entry.curves:
+            for role, channel, x, y, _curve in entry.curves:
                 if self.dataset_a:
                     meta = self.dataset_a.channels.get(channel)
                 if meta is None and self.dataset_b:
@@ -532,9 +587,10 @@ class TelemetryPlotStack(QWidget):
 
     def _auto_y(self, entry: PlotEntry) -> None:
         all_visible: list[np.ndarray] = []
-        for _, _, x, y in entry.curves:
-            mask = (x >= self.window.start) & (x <= self.window.end)
-            visible = y[mask]
+        for _, _, x, y, _curve in entry.curves:
+            left = int(np.searchsorted(x, self.window.start, side="left"))
+            right = int(np.searchsorted(x, self.window.end, side="right"))
+            visible = y[left:right]
             visible = visible[np.isfinite(visible)]
             if len(visible) > 0:
                 all_visible.append(visible)
@@ -573,7 +629,7 @@ class TelemetryPlotStack(QWidget):
                 self._last_cursor_emit = now
                 self.cursorChanged.emit(snap_to_sample_time(self.dataset_a, t))
         now = time.perf_counter()
-        if now - self._last_tooltip_update >= 0.10:
+        if now - self._last_tooltip_update >= self._tooltip_interval:
             self._last_tooltip_update = now
             self._show_tooltip(snap_to_sample_time(self.dataset_a, t))
 
@@ -647,7 +703,7 @@ class TimelineWidget(QFrame):
         self.theme = LIGHT
         self._updating = False
         self._last_range_emit = 0.0
-        self._range_emit_interval = 1 / 60
+        self._range_emit_interval = 1 / 30
         self.max_time = 1.0
         self.region = pg.LinearRegionItem([0, 1], bounds=[0, 1], brush=QColor(94, 106, 210, 40))
         self.cursor_line = pg.InfiniteLine(pos=0, angle=90, movable=False)
@@ -746,17 +802,10 @@ class TimelineWidget(QFrame):
     def _plot_dataset(self, dataset: TelemetryDataset, channel: str, color: QColor, role: str) -> np.ndarray:
         x = dataset.frame["Time"].to_numpy(dtype=float)
         y = dataset.frame[channel].to_numpy(dtype=float)
-        
-        mask = np.isfinite(x) & np.isfinite(y) & (x >= 0)
-        x = x[mask]
-        y = y[mask]
-        
-        sort_idx = np.argsort(x)
-        x = x[sort_idx]
-        y = y[sort_idx]
+        x, y = finite_sorted_xy(x, y)
+        plot_x, plot_y = downsample_true_xy(x, y, OVERVIEW_MAX_POINTS)
 
-        curve = self.plot.plot(x, y, pen=pg.mkPen(color=color, width=1.1), name=role)
-        curve.setDownsampling(auto=True, method="subsample")
+        curve = self.plot.plot(plot_x, plot_y, pen=pg.mkPen(color=color, width=1.1), name=role)
         return y
 
     def _set_y_range(self, y_arrays: list[np.ndarray]) -> None:
@@ -1027,7 +1076,8 @@ class TrackPanel(QFrame):
         mask = np.isfinite(lon) & np.isfinite(lat)
         if np.count_nonzero(mask) < 2:
             return
-        self.plot.plot(lon[mask], lat[mask], pen=pg.mkPen(color=color, width=2))
+        x, y = downsample_true_xy(lon[mask], lat[mask], TRACK_MAX_POINTS)
+        curve = self.plot.plot(x, y, pen=pg.mkPen(color=color, width=2))
 
     def _set_marker(self, dataset: TelemetryDataset | None, marker: pg.ScatterPlotItem | None, t: float, offset: float) -> None:
         if not dataset or not marker or "GPS Longitude" not in dataset.frame or "GPS Latitude" not in dataset.frame:
@@ -2009,7 +2059,7 @@ class MainWindow(QMainWindow):
         self.offset_b = 0.0
         self._syncing_offset = False
         self._last_detail_update = 0.0
-        self._detail_update_interval = 0.05
+        self._detail_update_interval = 0.15
         self.library = TelemetryLibrary(Path(self.settings.library_root))
         self.home_page = LibraryHome(self.library, self.display_profile, self.settings)
         self.home_page.recursive_check.setChecked(self.settings.recursive_import)
@@ -2452,8 +2502,7 @@ class MainWindow(QMainWindow):
         # Snap to nearest actual data sample time (e.g. 20Hz = every 0.05s)
         t = max(0.0, min(float(t), max_time))
         if self.dataset_a:
-            time_arr = self.dataset_a.frame["Time"].to_numpy(dtype=float)
-            time_arr = time_arr[np.isfinite(time_arr) & (time_arr >= 0)]
+            time_arr = self.dataset_a.frame["Time"].to_numpy(dtype=float, copy=False)
             if len(time_arr) > 0:
                 idx = int(np.searchsorted(time_arr, t))
                 if idx <= 0:
@@ -2475,20 +2524,17 @@ class MainWindow(QMainWindow):
     def update_current_values(self) -> None:
         values: dict[str, str] = {}
         if self.dataset_a and not self.dataset_a.frame.empty:
-            time_arr = self.dataset_a.frame["Time"].to_numpy(dtype=float)
-            finite_time = np.isfinite(time_arr) & (time_arr >= 0)
+            time_arr = self.dataset_a.frame["Time"].to_numpy(dtype=float, copy=False)
             idx = 0
-            if np.any(finite_time):
-                valid_indices = np.flatnonzero(finite_time)
-                valid_times = time_arr[valid_indices]
-                pos = int(np.searchsorted(valid_times, self.cursor_time))
+            if len(time_arr) > 0:
+                pos = int(np.searchsorted(time_arr, self.cursor_time))
                 if pos <= 0:
-                    idx = int(valid_indices[0])
-                elif pos >= len(valid_times):
-                    idx = int(valid_indices[-1])
+                    idx = 0
+                elif pos >= len(time_arr):
+                    idx = len(time_arr) - 1
                 else:
-                    before = valid_indices[pos - 1]
-                    after = valid_indices[pos]
+                    before = pos - 1
+                    after = pos
                     idx = int(before if abs(self.cursor_time - time_arr[before]) <= abs(time_arr[after] - self.cursor_time) else after)
             for key in self.channel_list.items_by_key:
                 if key in self.dataset_a.frame:

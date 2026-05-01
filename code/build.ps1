@@ -53,7 +53,11 @@ if (Test-Path $distApp) {
     foreach ($item in $preserveItems) {
         $source = Join-Path $backupRoot $item
         if (Test-Path $source) {
-            Copy-Item -LiteralPath $source -Destination (Join-Path $distApp $item) -Recurse -Force
+            $destination = Join-Path $distApp $item
+            if (Test-Path $destination) {
+                Remove-Item -LiteralPath $destination -Recurse -Force
+            }
+            Copy-Item -LiteralPath $source -Destination $destination -Recurse -Force
         }
     }
 

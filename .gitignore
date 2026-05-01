@@ -1,0 +1,46 @@
+# ─── Claude Code ────────────────────────────────────
+.claude/
+
+# ─── Temp files ─────────────────────────────────────
+.tmp_*
+
+# ─── Project specific ───────────────────────────────
+/miaoda/
+
+# ─── Python ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist-info/
+
+# ─── Build artifacts ─────────────────────────────────
+code/build/
+code/build_latest/
+code/dist/
+
+# ─── Runtime data ───────────────────────────────────
+code/library/
+
+# ─── Test output images ─────────────────────────────
+code/home_out.png
+code/test_out.png
+code/test_out_light.png
+code/*.png
+
+# ─── IDE / Editor ───────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Windows ────────────────────────────────────────
+Thumbs.db
+Desktop.ini
+
+# ─── Environment ────────────────────────────────────
+.venv/
+venv/
+env/
+.env
