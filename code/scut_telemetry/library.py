@@ -186,6 +186,22 @@ class TelemetryLibrary:
                 (title.strip(), body.strip(), record_id),
             )
 
+    def sync_record_comment_to_csv(self, record_id: str) -> bool:
+        """Write a record's current note/comment data back into its stored CSV file.
+
+        XRK/XRZ files cannot carry a CSV Comment row, so those records are kept in
+        SQLite and will still export with comments through export_records_zip().
+        """
+        record = self.get_record(record_id)
+        if not record:
+            return False
+        stored_path = Path(record.stored_path)
+        if stored_path.suffix.lower() != ".csv" or not stored_path.exists():
+            return False
+        dataset = load_telemetry(stored_path)
+        export_racestudio_like_csv(dataset, stored_path, comment_override=record_note_text(record))
+        return True
+
     def date_notes(self) -> dict[str, DateNote]:
         with self._connection() as conn:
             rows = conn.execute("SELECT * FROM date_notes").fetchall()
@@ -417,6 +433,9 @@ def note_from_comment(comment: str) -> tuple[str, str]:
         body = body_match.group(1).strip() if body_match else ""
         body = body.replace("\\n", "\n")
         return title[:80], body
+    # Comment-block form (e.g. starts with "--- 评论 ---" or contains structured comments) — keep title empty.
+    if "--- 评论 ---" in text or re.search(r"\[\d{4}/\d{1,2}/\d{1,2}\s+\d{1,2}:\d{2}", text):
+        return "", text
     first_line = next((line.strip() for line in text.splitlines() if line.strip()), text)
     return first_line[:80], text
 
@@ -425,6 +444,9 @@ def record_note_text(record: RunRecord) -> str:
     title = (record.note_title or "").strip()
     body = (record.note_body or "").strip()
     body_export = body.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\n")
+    # Pure comment thread: keep the on-disk form used by RaceStudio exports.
+    if not title and body.startswith("--- 评论 ---"):
+        return body_export
     if title and body:
         return f"备注标题：{title}；备注内容：{body_export}"
     if title:

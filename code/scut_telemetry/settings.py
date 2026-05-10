@@ -38,6 +38,8 @@ class AppSettings:
     analysis_plot_width: int = 870
     analysis_detail_width: int = 350
     default_compare_offset_range_seconds: float = 10.0
+    metadata_panel_expanded: bool = False
+    metadata_panel_fields: str = "session,vehicle,racer,championship,date,start_time,duration,sample_rate_hz,laps,comment"
     display_profile: DisplayProfile | None = None
 
 
@@ -124,6 +126,13 @@ def load_settings() -> AppSettings:
     analysis_plot = _to_int(_value(data, "layout", "analysis_plot_width", "870"), 870)
     analysis_detail = _to_int(_value(data, "layout", "analysis_detail_width", "350"), 350)
     offset_range = _to_float(_value(data, "interaction", "default_compare_offset_range_seconds", "10.0"), 10.0)
+    metadata_expanded = _to_bool(_value(data, "interaction", "metadata_panel_expanded", "false"))
+    metadata_fields = _value(
+        data,
+        "interaction",
+        "metadata_panel_fields",
+        "session,vehicle,racer,championship,date,start_time,duration,sample_rate_hz,laps,comment",
+    )
     if preset not in DEFAULT_PROFILES:
         preset = "medium"
     profile = _profile_from_data(data, preset)
@@ -143,6 +152,8 @@ def load_settings() -> AppSettings:
         analysis_plot_width=analysis_plot,
         analysis_detail_width=analysis_detail,
         default_compare_offset_range_seconds=max(1.0, offset_range),
+        metadata_panel_expanded=metadata_expanded,
+        metadata_panel_fields=metadata_fields,
         display_profile=profile,
     )
 
@@ -316,6 +327,10 @@ def _render_setting_md(settings: AppSettings, profile: DisplayProfile) -> str:
         "## 交互",
         "# B 文件手动时间偏移滑条范围，单位秒",
         f"default_compare_offset_range_seconds = {settings.default_compare_offset_range_seconds:g}",
+        "# 通道列表上方元数据面板默认是否展开",
+        f"metadata_panel_expanded = {str(settings.metadata_panel_expanded).lower()}",
+        "# 元数据面板显示的字段，逗号分隔。可选：session,vehicle,racer,championship,date,start_time,duration,sample_rate_hz,laps,comment,file_path",
+        f"metadata_panel_fields = {settings.metadata_panel_fields}",
         "",
         "## 显示",
         "下面三个预设可以直接改数字。软件界面选择的是 small / medium / large。",

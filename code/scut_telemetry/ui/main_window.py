@@ -49,6 +49,14 @@ from PySide6.QtWidgets import (
 )
 
 from ..analyzer import estimate_offset, summarize_channel
+from ..comments import (
+    add_comment as add_comment_to_note,
+    delete_comment as delete_comment_from_note,
+    format_time_for_display,
+    parse_comments,
+    split_note,
+    update_comment as update_comment_in_note,
+)
 from ..library import (
     DateNote,
     ImportSummary,
@@ -89,6 +97,20 @@ COLORS = [
 ]
 SUPPORTED_TELEMETRY_SUFFIXES = {".xrk", ".csv", ".zip"}
 CURSOR_PEN = "#FF2D2D"
+
+METADATA_FIELD_LABELS: list[tuple[str, str]] = [
+    ("file_path", "文件路径"),
+    ("session", "Session"),
+    ("vehicle", "车辆"),
+    ("racer", "车手"),
+    ("championship", "赛事"),
+    ("date", "日期"),
+    ("start_time", "开始时间"),
+    ("duration", "时长"),
+    ("sample_rate_hz", "采样率"),
+    ("laps", "圈数"),
+    ("comment", "备注"),
+]
 
 
 def app_icon_path() -> Path | None:
@@ -207,6 +229,8 @@ class ChannelList(QFrame):
         self.rows_by_key: dict[str, ChannelRow] = {}
         self.value_cache: dict[str, str] = {}
         self._updating = False
+        self._metadata_fields: list[str] = [k for k, _ in METADATA_FIELD_LABELS]
+        self._metadata_expanded: bool = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -216,6 +240,29 @@ class ChannelList(QFrame):
         title.setObjectName("Title")
         self.file_label = QLabel("未加载文件")
         self.file_label.setObjectName("Muted")
+        self.file_label.setWordWrap(True)
+
+        # Collapsible metadata panel
+        self.meta_toggle = QPushButton("▸ 文件信息")
+        self.meta_toggle.setCheckable(True)
+        self.meta_toggle.setObjectName("MetaToggle")
+        self.meta_toggle.setStyleSheet(
+            "QPushButton#MetaToggle{text-align:left;padding:4px 6px;border:none;background:transparent;}"
+            "QPushButton#MetaToggle:hover{background:rgba(127,127,127,0.12);border-radius:4px;}"
+        )
+        self.meta_toggle.toggled.connect(self._on_meta_toggled)
+        self.meta_panel = QFrame()
+        self.meta_panel.setObjectName("MetaPanel")
+        meta_layout = QVBoxLayout(self.meta_panel)
+        meta_layout.setContentsMargins(8, 4, 8, 6)
+        meta_layout.setSpacing(2)
+        self.meta_text = QLabel("")
+        self.meta_text.setWordWrap(True)
+        self.meta_text.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.meta_text.setObjectName("Muted")
+        meta_layout.addWidget(self.meta_text)
+        self.meta_panel.setVisible(False)
+
         self.search = QLineEdit()
         self.search.setPlaceholderText("搜索通道或单位")
         self.search.textChanged.connect(self.apply_filter)
@@ -223,8 +270,91 @@ class ChannelList(QFrame):
 
         layout.addWidget(title)
         layout.addWidget(self.file_label)
+        layout.addWidget(self.meta_toggle)
+        layout.addWidget(self.meta_panel)
         layout.addWidget(self.search)
         layout.addWidget(self.list_widget, 1)
+
+    def apply_metadata_settings(self, expanded: bool, fields_csv: str) -> None:
+        self._metadata_fields = [f.strip() for f in (fields_csv or "").split(",") if f.strip()]
+        self._metadata_expanded = bool(expanded)
+        self.meta_toggle.blockSignals(True)
+        self.meta_toggle.setChecked(self._metadata_expanded)
+        self.meta_toggle.blockSignals(False)
+        self._update_meta_toggle_label()
+        self.meta_panel.setVisible(self._metadata_expanded)
+        self._refresh_meta_text()
+
+    def _on_meta_toggled(self, checked: bool) -> None:
+        self._metadata_expanded = bool(checked)
+        self.meta_panel.setVisible(self._metadata_expanded)
+        self._update_meta_toggle_label()
+
+    def _update_meta_toggle_label(self) -> None:
+        arrow = "▾" if self._metadata_expanded else "▸"
+        self.meta_toggle.setText(f"{arrow} 文件信息")
+
+    def _format_meta_value(self, dataset: TelemetryDataset, key: str) -> str | None:
+        meta = dataset.meta
+        if key == "file_path":
+            return str(meta.file_path)
+        if key == "session":
+            return meta.session or None
+        if key == "vehicle":
+            return meta.vehicle or None
+        if key == "racer":
+            return meta.racer or None
+        if key == "championship":
+            return meta.championship or None
+        if key == "date":
+            return meta.date or None
+        if key == "start_time":
+            return meta.start_time or None
+        if key == "duration":
+            if meta.duration:
+                return f"{meta.duration:.2f} s"
+            return None
+        if key == "sample_rate_hz":
+            if meta.sample_rate_hz:
+                return f"{meta.sample_rate_hz:g} Hz"
+            return None
+        if key == "laps":
+            return str(len(meta.laps)) if meta.laps else None
+        if key == "comment":
+            return meta.comment or None
+        return None
+
+    def _build_meta_html(self, dataset: TelemetryDataset, role: str) -> str:
+        label_map = dict(METADATA_FIELD_LABELS)
+        rows: list[str] = []
+        for key in self._metadata_fields:
+            label = label_map.get(key, key)
+            val = self._format_meta_value(dataset, key)
+            if not val:
+                continue
+            rows.append(
+                f'<tr><td style="color:#888;padding-right:8px;white-space:nowrap;">{escape(label)}</td>'
+                f'<td style="white-space:pre-wrap;word-break:break-all;">{escape(val)}</td></tr>'
+            )
+        if not rows:
+            return ""
+        header = f'<div style="font-weight:600;margin:2px 0 2px 0;">{escape(role)}</div>'
+        return header + '<table style="border-spacing:0;">' + "".join(rows) + "</table>"
+
+    def _refresh_meta_text(self) -> None:
+        parts: list[str] = []
+        if self.dataset_a:
+            html = self._build_meta_html(self.dataset_a, f"A · {self.dataset_a.meta.file_path.name}")
+            if html:
+                parts.append(html)
+        if self.dataset_b:
+            html = self._build_meta_html(self.dataset_b, f"B · {self.dataset_b.meta.file_path.name}")
+            if html:
+                parts.append(html)
+        if parts:
+            self.meta_text.setText('<div style="line-height:1.35;">' + "<hr>".join(parts) + "</div>")
+        else:
+            self.meta_text.setText("（暂无元数据）")
 
     def set_datasets(self, dataset_a: TelemetryDataset | None, dataset_b: TelemetryDataset | None) -> None:
         old_selected = set(self.selected_channels())
@@ -235,6 +365,7 @@ class ChannelList(QFrame):
         self.list_widget.clear()
         if not dataset_a:
             self.file_label.setText("未加载文件")
+            self._refresh_meta_text()
             return
         if dataset_b:
             self.file_label.setText(f"A: {dataset_a.meta.file_path.name}\nB: {dataset_b.meta.file_path.name}")
@@ -242,6 +373,7 @@ class ChannelList(QFrame):
         else:
             self.file_label.setText(dataset_a.meta.file_path.name)
             keys = [key for key in dataset_a.header_order if key != "Time"]
+        self._refresh_meta_text()
         for key in keys:
             meta = dataset_a.channels.get(key) or (dataset_b.channels.get(key) if dataset_b else None)
             if not meta or meta.dtype == "text":
@@ -310,6 +442,32 @@ class PlotEntry:
     curves: list[tuple[str, str, np.ndarray, np.ndarray, pg.PlotDataItem]]
     color_map: list[tuple[str, QColor]]
     legend_item: pg.TextItem | None = None
+    y_user_zoomed: bool = False
+
+
+class YAxisZoomItem(pg.AxisItem):
+    """Left axis that consumes wheel events and zooms only its plot's Y range."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.on_wheel = None  # callback(steps: float, scene_y: float)
+        self.setAcceptHoverEvents(True)
+
+    def wheelEvent(self, event) -> None:
+        if self.on_wheel is None:
+            super().wheelEvent(event)
+            return
+        delta = event.delta() if hasattr(event, "delta") else 0
+        if delta == 0:
+            super().wheelEvent(event)
+            return
+        steps = delta / 120.0 if abs(delta) >= 15 else delta / 40.0
+        try:
+            scene_y = float(event.scenePos().y())
+        except Exception:
+            scene_y = 0.0
+        self.on_wheel(steps, scene_y)
+        event.accept()
 
 
 MAIN_PLOT_MIN_POINTS = 2500
@@ -331,15 +489,46 @@ def finite_sorted_xy(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarr
 
 
 def downsample_true_xy(x: np.ndarray, y: np.ndarray, max_points: int) -> tuple[np.ndarray, np.ndarray]:
-    """Reduce dense lines by keeping real samples in original order."""
+    """Reduce dense lines while preserving per-bucket min/max so brief extrema remain visible."""
     n = len(x)
     if n <= max_points or max_points < 8:
         return x, y
-    step = int(np.ceil(n / max_points))
-    keep_arr = np.arange(0, n, step, dtype=np.int64)
-    if keep_arr[-1] != n - 1:
-        keep_arr = np.append(keep_arr, n - 1)
-    return x[keep_arr], y[keep_arr]
+    n_buckets = max(4, max_points // 2)
+    if n_buckets >= n:
+        return x, y
+    edges = np.linspace(0, n, n_buckets + 1, dtype=np.int64)
+    starts = edges[:-1]
+    # Drop empty buckets (can happen for small n_buckets vs n ratios).
+    keep = edges[1:] > starts
+    starts = starts[keep]
+    if len(starts) == 0:
+        return x, y
+
+    finite = np.isfinite(y)
+    y_for_min = np.where(finite, y, np.inf)
+    y_for_max = np.where(finite, y, -np.inf)
+
+    # Vectorized per-bucket reductions.
+    seg_min = np.minimum.reduceat(y_for_min, starts)
+    seg_max = np.maximum.reduceat(y_for_max, starts)
+    # All-NaN buckets surface as inf / -inf.
+    nan_bucket = ~np.isfinite(seg_min) | ~np.isfinite(seg_max)
+
+    # Use bucket boundaries for x positions: alternate min then max at bucket start/end.
+    # This is approximate but visually preserves spikes.
+    ends = np.empty_like(starts)
+    ends[:-1] = starts[1:]
+    ends[-1] = n
+    x_start = x[starts]
+    x_end = x[ends - 1]
+
+    out_x = np.empty(len(starts) * 2, dtype=x.dtype)
+    out_y = np.empty(len(starts) * 2, dtype=np.float64)
+    out_x[0::2] = x_start
+    out_x[1::2] = x_end
+    out_y[0::2] = np.where(nan_bucket, np.nan, seg_min)
+    out_y[1::2] = np.where(nan_bucket, np.nan, seg_max)
+    return out_x, out_y
 
 
 def visible_downsampled_xy(
@@ -440,7 +629,8 @@ class TelemetryPlotStack(QWidget):
         title = f"{meta.name} [{meta.unit}]"
         if suffix:
             title = f"{title} - {suffix}"
-        plot = self.graphics.addPlot(row=row, col=0)
+        y_axis = YAxisZoomItem(orientation="left")
+        plot = self.graphics.addPlot(row=row, col=0, axisItems={"left": y_axis})
         plot.setTitle(title, color=self.theme.text, size="10pt")
         plot.showGrid(x=True, y=True, alpha=0.35)
         plot.setLabel("left", meta.name, units=meta.unit)
@@ -497,17 +687,51 @@ class TelemetryPlotStack(QWidget):
         self.entries.append(entry)
         # Connect range change to reposition legend
         plot.getViewBox().sigRangeChanged.connect(lambda: self._reposition_legend(entry))
+        # Wire Y-axis wheel zoom (scroll on the left numbers area).
+        y_axis.on_wheel = lambda steps, scene_y, e=entry: self._zoom_entry_y(e, steps, scene_y)
         return row + 1
+
+    def _zoom_entry_y(self, entry: PlotEntry, steps: float, scene_y: float) -> None:
+        vb = entry.plot.getViewBox()
+        vr = vb.viewRect()
+        ymin = float(vr.top())
+        ymax = float(vr.bottom())
+        if ymax < ymin:
+            ymin, ymax = ymax, ymin
+        span = ymax - ymin
+        if span <= 0:
+            return
+        vb_rect = vb.sceneBoundingRect()
+        if vb_rect.height() > 0:
+            rel = (scene_y - vb_rect.top()) / vb_rect.height()
+            rel = float(min(1.0, max(0.0, rel)))
+            center_y = ymax - rel * span  # scene Y is inverted vs plot Y
+        else:
+            center_y = (ymin + ymax) / 2.0
+        factor = 0.85 ** steps
+        new_span = max(span * factor, 1e-9)
+        ratio = (center_y - ymin) / span
+        new_min = center_y - new_span * ratio
+        new_max = new_min + new_span
+        entry.plot.setYRange(new_min, new_max, padding=0)
+        entry.y_user_zoomed = True
 
     def set_window(self, window: TimeWindow, *, auto_y: bool = True, update_legend: bool = True) -> None:
         self.window = window
         for entry in self.entries:
             self._update_curve_data(entry)
             entry.plot.setXRange(window.start, window.end, padding=0)
-            if auto_y:
+            if auto_y and not entry.y_user_zoomed:
                 self._auto_y(entry)
         if update_legend:
             self._update_legends()
+
+    def reset_y_zoom(self) -> None:
+        """Clear per-plot user Y zoom and re-fit each plot to its visible extrema."""
+        for entry in self.entries:
+            entry.y_user_zoomed = False
+            self._auto_y(entry)
+        self._update_legends()
 
     def _plot_point_budget(self, entry: PlotEntry) -> int:
         width = int(entry.plot.getViewBox().sceneBoundingRect().width())
@@ -653,7 +877,8 @@ class TelemetryPlotStack(QWidget):
         pixmap.save(str(path), "PNG")
 
     def wheelEvent(self, event) -> None:
-        """Zoom time axis with mouse wheel centered on mouse position."""
+        """Zoom time axis with mouse wheel centered on mouse position.
+        (Y-axis zoom is handled by the YAxisZoomItem on each plot's left axis.)"""
         if not self.dataset_a or not self.entries:
             event.accept()
             return
@@ -666,11 +891,11 @@ class TelemetryPlotStack(QWidget):
         steps = delta / 120.0 if abs(delta) >= 15 else delta / 40.0
         factor = 0.85 ** steps
         mouse_pos = event.position() if hasattr(event, 'position') else event.posF()
+        graphics_pos = self.graphics.mapFrom(self, mouse_pos.toPoint())
+        scene_pos = self.graphics.mapToScene(graphics_pos)
         center = self.cursor_time
         for entry in self.entries:
             vb = entry.plot.getViewBox()
-            graphics_pos = self.graphics.mapFrom(self, mouse_pos.toPoint())
-            scene_pos = self.graphics.mapToScene(graphics_pos)
             if vb.sceneBoundingRect().contains(scene_pos):
                 mapped = vb.mapSceneToView(scene_pos)
                 center = max(0.0, float(mapped.x()))
@@ -685,6 +910,9 @@ class TelemetryPlotStack(QWidget):
         new_start = center - new_span * ratio
         new_end = new_start + new_span
         window = bounded_time_window(new_start, new_end, max_time)
+        # Scrolling on the plot interior also returns Y axes to default fit.
+        for entry in self.entries:
+            entry.y_user_zoomed = False
         self.zoomChanged.emit(window.start, window.end)
         event.accept()
         return
@@ -1166,8 +1394,27 @@ class SettingsDialog(QDialog):
         advanced_layout.addWidget(open_md)
         advanced_layout.addStretch(1)
 
+        interaction_tab = QWidget()
+        interaction_layout = QVBoxLayout(interaction_tab)
+        interaction_layout.setContentsMargins(12, 12, 12, 12)
+        interaction_layout.setSpacing(6)
+        interaction_layout.addWidget(QLabel("分析页通道列表上方元数据面板"))
+        self.metadata_expanded_check = QCheckBox("默认展开元数据面板")
+        self.metadata_expanded_check.setChecked(settings.metadata_panel_expanded)
+        interaction_layout.addWidget(self.metadata_expanded_check)
+        interaction_layout.addWidget(QLabel("显示哪些字段（取消勾选可隐藏）"))
+        self._metadata_field_checks: dict[str, QCheckBox] = {}
+        active_fields = {f.strip() for f in (settings.metadata_panel_fields or "").split(",") if f.strip()}
+        for key, label in METADATA_FIELD_LABELS:
+            cb = QCheckBox(label)
+            cb.setChecked(key in active_fields)
+            interaction_layout.addWidget(cb)
+            self._metadata_field_checks[key] = cb
+        interaction_layout.addStretch(1)
+
         tabs.addTab(system_tab, "系统")
         tabs.addTab(file_tab, "文件")
+        tabs.addTab(interaction_tab, "界面")
         tabs.addTab(advanced_tab, "高级")
         layout.addWidget(tabs, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -1203,9 +1450,168 @@ class SettingsDialog(QDialog):
             analysis_plot_width=self.settings.analysis_plot_width,
             analysis_detail_width=self.settings.analysis_detail_width,
             default_compare_offset_range_seconds=self.settings.default_compare_offset_range_seconds,
+            metadata_panel_expanded=self.metadata_expanded_check.isChecked(),
+            metadata_panel_fields=",".join(
+                key for key, _ in METADATA_FIELD_LABELS if self._metadata_field_checks[key].isChecked()
+            ),
             display_profile=profile,
         )
 
+
+class CommentsPanel(QFrame):
+    """Renders structured comments for a record and supports adding/editing/deleting comments."""
+
+    commentAdded = Signal(str, str, str)
+    commentEdited = Signal(str, int, str, str)
+    commentDeleted = Signal(str, int)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("Panel")
+        self._record_id: str | None = None
+        self._note_text: str = ""
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
+
+        header = QHBoxLayout()
+        title = QLabel("评论")
+        title.setObjectName("Title")
+        header.addWidget(title)
+        header.addStretch(1)
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("Muted")
+        header.addWidget(self.count_label)
+        layout.addLayout(header)
+
+        self.thread = QListWidget()
+        self.thread.setObjectName("CommentsThread")
+        self.thread.setMinimumHeight(220)
+        self.thread.setWordWrap(True)
+        self.thread.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.thread.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.thread.customContextMenuRequested.connect(self._show_comment_menu)
+        layout.addWidget(self.thread, 1)
+
+        form = QVBoxLayout()
+        form.setSpacing(6)
+        self.author_edit = QLineEdit()
+        self.author_edit.setPlaceholderText("姓名")
+        self.text_edit = QTextEdit()
+        self.text_edit.setPlaceholderText("评论内容")
+        self.text_edit.setMinimumHeight(86)
+        self.send_button = QPushButton("添加评论")
+        self.send_button.clicked.connect(self._on_send)
+        form.addWidget(self.author_edit)
+        form.addWidget(self.text_edit)
+        form.addWidget(self.send_button)
+        layout.addLayout(form)
+
+        self.set_record(None, "")
+
+    def set_record(self, record_id: str | None, note_text: str) -> None:
+        self._record_id = record_id
+        self._note_text = note_text or ""
+        prefix, comments = split_note(self._note_text)
+
+        def sort_key(item):
+            _idx, comment = item
+            dt = comment.time_dt()
+            return dt.timestamp() if dt else 0.0
+
+        comments_sorted = sorted(list(enumerate(comments)), key=sort_key, reverse=True)
+        self.thread.clear()
+        if record_id is None:
+            self.count_label.setText("")
+            self.thread.addItem("选择一条记录后查看评论。")
+            self.author_edit.setEnabled(False)
+            self.text_edit.setEnabled(False)
+            self.send_button.setEnabled(False)
+            return
+
+        self.author_edit.setEnabled(True)
+        self.text_edit.setEnabled(True)
+        self.send_button.setEnabled(True)
+        self.count_label.setText(f"{len(comments_sorted)} 条")
+        if prefix:
+            item = QListWidgetItem(f"备注\n{prefix}")
+            item.setFlags(Qt.ItemIsEnabled)
+            self.thread.addItem(item)
+        if not comments_sorted and not prefix:
+            self.thread.addItem("还没有评论。在下方输入姓名和评论内容后添加。")
+            return
+        for original_idx, comment in comments_sorted:
+            time_disp = format_time_for_display(comment.time)
+            item = QListWidgetItem(f"@{comment.author}    {time_disp}\n{comment.text}")
+            item.setData(Qt.UserRole, original_idx)
+            self.thread.addItem(item)
+
+    def set_default_author(self, name: str) -> None:
+        if name and not self.author_edit.text().strip():
+            self.author_edit.setText(name)
+
+    def _on_send(self) -> None:
+        if self._record_id is None:
+            return
+        author = self.author_edit.text().strip() or "匿名"
+        text = self.text_edit.toPlainText().strip()
+        if not text:
+            return
+        self.text_edit.clear()
+        self.commentAdded.emit(self._record_id, author, text)
+
+    def _show_comment_menu(self, pos) -> None:
+        if self._record_id is None:
+            return
+        item = self.thread.itemAt(pos)
+        if not item:
+            return
+        original_idx = item.data(Qt.UserRole)
+        if original_idx is None:
+            return
+        _prefix, comments = split_note(self._note_text)
+        if original_idx < 0 or original_idx >= len(comments):
+            return
+        comment = comments[original_idx]
+        menu = QMenu(self)
+        edit_action = menu.addAction("修改")
+        delete_action = menu.addAction("删除")
+        action = menu.exec(self.thread.viewport().mapToGlobal(pos))
+        if action is edit_action:
+            values = self._edit_comment_values(comment.author, comment.text)
+            if values is None:
+                return
+            author, text = values
+            self.commentEdited.emit(self._record_id, int(original_idx), author, text)
+        elif action is delete_action:
+            result = QMessageBox.question(self, "删除评论", "删除这条评论？")
+            if result == QMessageBox.Yes:
+                self.commentDeleted.emit(self._record_id, int(original_idx))
+
+    def _edit_comment_values(self, current_author: str, current_text: str) -> tuple[str, str] | None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("修改评论")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("姓名"))
+        author_edit = QLineEdit(current_author)
+        layout.addWidget(author_edit)
+        layout.addWidget(QLabel("评论内容"))
+        text_edit = QTextEdit()
+        text_edit.setPlainText(current_text)
+        text_edit.setMinimumHeight(140)
+        layout.addWidget(text_edit)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return None
+        author = author_edit.text().strip() or "匿名"
+        text = text_edit.toPlainText().strip()
+        if not text:
+            return None
+        return author, text
 
 class LibraryHome(QWidget):
     openRun = Signal(str)
@@ -1324,7 +1730,7 @@ class LibraryHome(QWidget):
         header_row.addWidget(self.table_count)
         self.run_table = QTableWidget()
         self.run_table.setObjectName("LibraryTable")
-        self.run_table.setColumnCount(4)
+        self.run_table.setColumnCount(3)
         self._update_time_header()
         self.run_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.run_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -1334,8 +1740,7 @@ class LibraryHome(QWidget):
         self.run_table.horizontalHeader().setStretchLastSection(False)
         self.run_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
         self.run_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
-        self.run_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
-        self.run_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.run_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.run_table.horizontalHeader().setSectionsClickable(True)
         self.run_table.horizontalHeader().sectionClicked.connect(self._header_clicked)
         self.run_table.setColumnWidth(0, 96)
@@ -1344,8 +1749,22 @@ class LibraryHome(QWidget):
         self.run_table.cellDoubleClicked.connect(self._open_row)
         self.run_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.run_table.customContextMenuRequested.connect(self._show_context_menu)
-        right_layout.addLayout(header_row)
-        right_layout.addWidget(self.run_table, 1)
+        self.run_table.itemSelectionChanged.connect(self._selected_row_changed)
+        right_splitter = QSplitter(Qt.Horizontal)
+        table_host = QFrame()
+        table_host_layout = QVBoxLayout(table_host)
+        table_host_layout.setContentsMargins(0, 0, 0, 0)
+        table_host_layout.addLayout(header_row)
+        table_host_layout.addWidget(self.run_table)
+        right_splitter.addWidget(table_host)
+        self.comments_panel = CommentsPanel()
+        self.comments_panel.commentAdded.connect(self._on_comment_added)
+        self.comments_panel.commentEdited.connect(self._on_comment_edited)
+        self.comments_panel.commentDeleted.connect(self._on_comment_deleted)
+        right_splitter.addWidget(self.comments_panel)
+        right_splitter.setStretchFactor(0, 3)
+        right_splitter.setStretchFactor(1, 1)
+        right_layout.addWidget(right_splitter, 1)
         body.addWidget(left_panel)
         body.addWidget(right_panel)
         body.setSizes(
@@ -1636,7 +2055,7 @@ class LibraryHome(QWidget):
         self._update_headers()
 
     def _update_headers(self) -> None:
-        labels = ["跑动时间", "赛车手", "车辆", "备注"]
+        labels = ["跑动时间", "赛车手", "车辆"]
         labels[self.sort_column] += " " + ("↑" if self.sort_ascending else "↓")
         self.run_table.setHorizontalHeaderLabels(labels)
 
@@ -1673,7 +2092,6 @@ class LibraryHome(QWidget):
                 QTableWidgetItem(time_text),
                 QTableWidgetItem(record.driver or "未填写"),
                 QTableWidgetItem(record.vehicle or "未填写"),
-                QTableWidgetItem(record.note_title),
             ]
             items[0].setData(Qt.UserRole, record.id)
             for col, item in enumerate(items):
@@ -1694,6 +2112,60 @@ class LibraryHome(QWidget):
         if self.category_mode == "vehicle":
             return record.vehicle or "未填写车辆"
         return format_chinese_date(record.run_datetime)
+
+    def _selected_row_changed(self) -> None:
+        ids = self.selected_record_ids()
+        if not ids:
+            self.comments_panel.set_record(None, "")
+            return
+        record = self.library.get_record(ids[0])
+        if not record:
+            self.comments_panel.set_record(None, "")
+            return
+        # Reuse note_body as the rich note (since CSV "Comment" round-trips into note_body when no title is set).
+        text = (record.note_body or "").strip()
+        if record.note_title and not text.startswith(record.note_title):
+            # Combine for legacy entries where title is the first comment header.
+            text = (record.note_title + ("\n" + text if text else "")).strip() if text else record.note_title
+        self.comments_panel.set_record(record.id, text)
+
+    def _on_comment_added(self, record_id: str, author: str, text: str) -> None:
+        record = self.library.get_record(record_id)
+        if not record:
+            return
+        existing_text = (record.note_body or "").strip()
+        if record.note_title and not existing_text:
+            existing_text = record.note_title
+        new_body = add_comment_to_note(existing_text, author, text)
+        self._save_record_note(record_id, record.note_title, new_body)
+
+    def _on_comment_edited(self, record_id: str, comment_index: int, author: str, text: str) -> None:
+        record = self.library.get_record(record_id)
+        if not record:
+            return
+        existing_text = (record.note_body or "").strip()
+        new_body = update_comment_in_note(existing_text, comment_index, author, text)
+        self._save_record_note(record_id, record.note_title, new_body)
+
+    def _on_comment_deleted(self, record_id: str, comment_index: int) -> None:
+        record = self.library.get_record(record_id)
+        if not record:
+            return
+        existing_text = (record.note_body or "").strip()
+        new_body = delete_comment_from_note(existing_text, comment_index)
+        self._save_record_note(record_id, record.note_title, new_body)
+
+    def _save_record_note(self, record_id: str, title: str, body: str) -> None:
+        self.library.update_note(record_id, title, body)
+        try:
+            self.library.sync_record_comment_to_csv(record_id)
+        except Exception as exc:
+            QMessageBox.warning(self, "同步评论失败", str(exc))
+        self.refresh_records()
+        for r in range(self.run_table.rowCount()):
+            if self.record_id_at_row(r) == record_id:
+                self.run_table.selectRow(r)
+                break
 
     def _open_row(self, row: int, _column: int) -> None:
         item = self.run_table.item(row, 0)
@@ -1761,8 +2233,7 @@ class LibraryHome(QWidget):
         if values is None:
             return
         title, body = values
-        self.library.update_note(record_id, title, body)
-        self.refresh_records()
+        self._save_record_note(record_id, title, body)
 
     def _edit_note_values(self, title: str, current_title: str, current_body: str) -> tuple[str, str] | None:
         dialog = QDialog(self)
@@ -1893,7 +2364,7 @@ class LibraryRunDialog(QDialog):
         header.addStretch(1)
         self.table = QTableWidget()
         self.table.setObjectName("LibraryTable")
-        self.table.setColumnCount(4)
+        self.table.setColumnCount(3)
         self._update_time_header()
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -1903,8 +2374,7 @@ class LibraryRunDialog(QDialog):
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionsClickable(True)
         self.table.horizontalHeader().sectionClicked.connect(self._header_clicked)
         self.table.setColumnWidth(0, 96)
@@ -1967,7 +2437,7 @@ class LibraryRunDialog(QDialog):
         self._fill_table()
 
     def _update_time_header(self) -> None:
-        labels = ["跑动时间", "赛车手", "车辆", "备注"]
+        labels = ["跑动时间", "赛车手", "车辆"]
         labels[self.sort_column] += " " + ("↑" if self.sort_ascending else "↓")
         self.table.setHorizontalHeaderLabels(labels)
 
@@ -2004,7 +2474,6 @@ class LibraryRunDialog(QDialog):
                 QTableWidgetItem(time_text),
                 QTableWidgetItem(record.driver or "未填写"),
                 QTableWidgetItem(record.vehicle or "未填写"),
-                QTableWidgetItem(record.note_title),
             ]
             items[0].setData(Qt.UserRole, record.id)
             for col, item in enumerate(items):
@@ -2065,6 +2534,10 @@ class MainWindow(QMainWindow):
         self.home_page.recursive_check.setChecked(self.settings.recursive_import)
 
         self.channel_list = ChannelList()
+        self.channel_list.apply_metadata_settings(
+            self.settings.metadata_panel_expanded,
+            self.settings.metadata_panel_fields,
+        )
         self.plot_stack = TelemetryPlotStack()
         self.timeline = TimelineWidget()
         self.track_panel = TrackPanel()
@@ -2246,6 +2719,10 @@ class MainWindow(QMainWindow):
             self.theme = new_theme
         self.home_page.recursive_check.setChecked(self.settings.recursive_import)
         self.home_page.set_settings(self.settings)
+        self.channel_list.apply_metadata_settings(
+            self.settings.metadata_panel_expanded,
+            self.settings.metadata_panel_fields,
+        )
         self._apply_theme()
 
         if new_root != old_root:
@@ -2472,7 +2949,9 @@ class MainWindow(QMainWindow):
             self.dataset_b.max_time + self.offset_b if self.dataset_b else 1.0,
         )
         self.current_window = TimeWindow(start, end).clamped(max_time)
-        self.plot_stack.set_window(self.current_window, auto_y=False, update_legend=False)
+        # Dragging the timeline returns plots to default (auto-fit) Y range.
+        self.plot_stack.reset_y_zoom()
+        self.plot_stack.set_window(self.current_window, auto_y=True, update_legend=False)
 
     def set_window(self, start: float, end: float) -> None:
         max_time = max(
@@ -2480,6 +2959,7 @@ class MainWindow(QMainWindow):
             self.dataset_b.max_time + self.offset_b if self.dataset_b else 1.0,
         )
         self.current_window = TimeWindow(start, end).clamped(max_time)
+        self.plot_stack.reset_y_zoom()
         self.plot_stack.set_window(self.current_window)
         self.update_current_values()
 
@@ -2629,3 +3109,4 @@ def format_value(value: float) -> str:
     if abs(value) >= 10:
         return f"{value:.3f}"
     return f"{value:.4f}"
+
