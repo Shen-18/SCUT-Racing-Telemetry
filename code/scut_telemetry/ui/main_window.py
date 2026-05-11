@@ -1653,7 +1653,7 @@ class LibraryHome(QWidget):
         self.recursive_check = QCheckBox("包含子文件夹")
         self.recursive_check.hide()
         self.refresh_button = QPushButton("刷新")
-        self.refresh_button.clicked.connect(self.refresh_records)
+        self.refresh_button.clicked.connect(lambda: self.refresh_records(deep=True))
         self.settings_button = QPushButton("设置")
         self.settings_button.clicked.connect(self.settingsRequested.emit)
         self.home_status = QLabel("就绪")
@@ -1776,7 +1776,7 @@ class LibraryHome(QWidget):
         body.setStretchFactor(0, 0)
         body.setStretchFactor(1, 1)
         root.addWidget(body, 1)
-        self.refresh_records()
+        self.refresh_records(deep=True)
 
     def set_display_profile(self, profile: DisplayProfile) -> None:
         self.display_profile = profile
@@ -1785,9 +1785,9 @@ class LibraryHome(QWidget):
     def set_settings(self, settings: AppSettings) -> None:
         self.settings = settings
 
-    def refresh_records(self) -> None:
+    def refresh_records(self, *, deep: bool = False) -> None:
         pruned = self.library.prune_missing_records()
-        repaired = self.library.repair_filename_metadata()
+        repaired = self.library.repair_filename_metadata() if deep else 0
         self.records = self.library.list_records()
         self._rebuild_categories()
         self._fill_table()
@@ -3109,4 +3109,3 @@ def format_value(value: float) -> str:
     if abs(value) >= 10:
         return f"{value:.3f}"
     return f"{value:.4f}"
-
