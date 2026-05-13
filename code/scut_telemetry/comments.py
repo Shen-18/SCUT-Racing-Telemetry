@@ -94,7 +94,7 @@ def update_comment(existing: str, index: int, author: str, text: str) -> str:
     if index < 0 or index >= len(comments):
         return existing
     comments[index] = Comment(
-        author=author.strip() or "鍖垮悕",
+        author=author.strip() or "匿名",
         text=text.strip(),
         time=comments[index].time,
     )

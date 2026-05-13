@@ -107,6 +107,9 @@ class TelemetryLibrary:
                 """
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_datetime ON runs(run_datetime)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_datetime_imported ON runs(run_datetime, imported_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_driver ON runs(driver)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_vehicle ON runs(vehicle)")
             self._ensure_column(conn, "note_title", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(conn, "note_body", "TEXT NOT NULL DEFAULT ''")
             conn.execute(
@@ -127,6 +130,41 @@ class TelemetryLibrary:
     def list_records(self) -> list[RunRecord]:
         with self._connection() as conn:
             rows = conn.execute("SELECT * FROM runs ORDER BY run_datetime DESC, imported_at DESC").fetchall()
+        return [row_to_record(row) for row in rows]
+
+    def count_records(self, driver: str | None = None, vehicle: str | None = None) -> int:
+        where_clauses = []
+        params = []
+        if driver is not None:
+            where_clauses.append("driver = ?")
+            params.append(driver)
+        if vehicle is not None:
+            where_clauses.append("vehicle = ?")
+            params.append(vehicle)
+        where_sql = " AND ".join(where_clauses) if where_clauses else "1"
+        with self._connection() as conn:
+            row = conn.execute(f"SELECT COUNT(*) FROM runs WHERE {where_sql}", params).fetchone()
+        return row[0]
+
+    def list_records_paginated(
+        self, offset: int = 0, limit: int = 100,
+        driver: str | None = None, vehicle: str | None = None,
+    ) -> list[RunRecord]:
+        where_clauses = []
+        params = []
+        if driver is not None:
+            where_clauses.append("driver = ?")
+            params.append(driver)
+        if vehicle is not None:
+            where_clauses.append("vehicle = ?")
+            params.append(vehicle)
+        where_sql = " AND ".join(where_clauses) if where_clauses else "1"
+        with self._connection() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM runs WHERE {where_sql} "
+                "ORDER BY run_datetime DESC, imported_at DESC LIMIT ? OFFSET ?",
+                params + [limit, offset],
+            ).fetchall()
         return [row_to_record(row) for row in rows]
 
     def get_record(self, record_id: str) -> RunRecord | None:

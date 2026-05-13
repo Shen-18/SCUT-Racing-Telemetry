@@ -1335,6 +1335,38 @@ class LibraryImportWorker(QThread):
         self.importCompleted.emit(summary)
 
 
+class _CallableWorker(QThread):
+    """Generic QThread that runs a callable with *args. Emits result or exception."""
+    finishedResult = Signal(object)
+
+    def __init__(self, fn, *args, parent=None):
+        super().__init__(parent)
+        self._fn = fn
+        self._args = args
+
+    def run(self) -> None:
+        try:
+            result = self._fn(*self._args)
+        except Exception as exc:
+            result = exc
+        self.finishedResult.emit(result)
+
+
+class AutoAlignWorker(QThread):
+    finishedResult = Signal(float)
+
+    def __init__(self, dataset_a, dataset_b, channel, window, parent=None):
+        super().__init__(parent)
+        self.dataset_a = dataset_a
+        self.dataset_b = dataset_b
+        self.channel = channel
+        self.window = window
+
+    def run(self) -> None:
+        offset = estimate_offset(self.dataset_a, self.dataset_b, self.channel, self.window)
+        self.finishedResult.emit(offset)
+
+
 class SettingsDialog(QDialog):
     def __init__(self, settings: AppSettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -2004,12 +2036,19 @@ class LibraryHome(QWidget):
         filename, _ = QFileDialog.getSaveFileName(self, "导出 CSV 压缩包", default_name, "ZIP (*.zip)")
         if not filename:
             return
-        try:
-            count = self.library.export_records_zip(records, Path(filename), include_notes=True)
-        except Exception as exc:
-            QMessageBox.critical(self, "导出失败", str(exc))
+        self.home_status.setText("正在后台导出...")
+        self._export_worker = _CallableWorker(self.library.export_records_zip, records, Path(filename), True)
+        self._export_worker.finishedResult.connect(self._on_export_finished)
+        self._export_worker.finished.connect(self._export_worker.deleteLater)
+        self._export_worker.start()
+
+    def _on_export_finished(self, result: object) -> None:
+        if isinstance(result, Exception):
+            QMessageBox.critical(self, "导出失败", str(result))
+            self.home_status.setText("导出失败")
             return
-        self.home_status.setText(f"已导出 {count} 个 CSV 到 {Path(filename).name}")
+        count = result
+        self.home_status.setText(f"已导出 {count} 个 CSV")
 
     def _filtered_records(self) -> list[RunRecord]:
         if self.current_category == "all":
@@ -2157,10 +2196,14 @@ class LibraryHome(QWidget):
 
     def _save_record_note(self, record_id: str, title: str, body: str) -> None:
         self.library.update_note(record_id, title, body)
-        try:
-            self.library.sync_record_comment_to_csv(record_id)
-        except Exception as exc:
-            QMessageBox.warning(self, "同步评论失败", str(exc))
+        self._sync_worker = _CallableWorker(self.library.sync_record_comment_to_csv, record_id)
+        self._sync_worker.finishedResult.connect(lambda r: self._on_sync_done(r, record_id))
+        self._sync_worker.finished.connect(self._sync_worker.deleteLater)
+        self._sync_worker.start()
+
+    def _on_sync_done(self, result: object, record_id: str) -> None:
+        if isinstance(result, Exception):
+            QMessageBox.warning(self, "同步评论失败", str(result))
         self.refresh_records()
         for r in range(self.run_table.rowCount()):
             if self.record_id_at_row(r) == record_id:
@@ -2810,13 +2853,21 @@ class MainWindow(QMainWindow):
     def load_record(self, role: str, record: RunRecord) -> None:
         path = Path(record.stored_path)
         self.status_label.setText(f"正在加载 {record.original_name}...")
-        QApplication.processEvents()
-        try:
-            dataset = load_telemetry(path)
-        except Exception as exc:
-            QMessageBox.critical(self, "加载失败", f"{record.original_name}\n\n{exc}")
+        self._loading_role = role
+        self._loading_record = record
+        self._load_worker = _CallableWorker(load_telemetry, path)
+        self._load_worker.finishedResult.connect(self._on_load_record_done)
+        self._load_worker.finished.connect(self._load_worker.deleteLater)
+        self._load_worker.start()
+
+    def _on_load_record_done(self, dataset_or_error: TelemetryDataset | Exception) -> None:
+        role = self._loading_role
+        record = self._loading_record
+        if isinstance(dataset_or_error, Exception):
+            QMessageBox.critical(self, "加载失败", f"{record.original_name}\n\n{dataset_or_error}")
             self.status_label.setText("加载失败")
             return
+        dataset = dataset_or_error
         dataset.meta.file_path = Path(record.original_name)
         if self.settings.export_notes_to_csv:
             note = record_note_text(record)
@@ -2831,13 +2882,20 @@ class MainWindow(QMainWindow):
     def load_file_path(self, role: str, path: str | Path) -> None:
         path = Path(path)
         self.status_label.setText(f"正在加载 {path.name}...")
-        QApplication.processEvents()
-        try:
-            dataset = load_telemetry(path)
-        except Exception as exc:
-            QMessageBox.critical(self, "加载失败", f"{path.name}\n\n{exc}")
+        self._loading_role = role
+        self._loading_path = path
+        self._load_file_worker = _CallableWorker(load_telemetry, path)
+        self._load_file_worker.finishedResult.connect(self._on_load_file_done)
+        self._load_file_worker.finished.connect(self._load_file_worker.deleteLater)
+        self._load_file_worker.start()
+
+    def _on_load_file_done(self, dataset_or_error: TelemetryDataset | Exception) -> None:
+        role = self._loading_role
+        if isinstance(dataset_or_error, Exception):
+            QMessageBox.critical(self, "加载失败", f"{self._loading_path.name}\n\n{dataset_or_error}")
             self.status_label.setText("加载失败")
             return
+        dataset = dataset_or_error
         if role == "A":
             self.record_a_id = None
         else:
@@ -3055,11 +3113,20 @@ class MainWindow(QMainWindow):
         if not channel:
             QMessageBox.information(self, "自动对齐", "请选择一个在两个文件中都存在的通道。")
             return
-        offset = estimate_offset(self.dataset_a, self.dataset_b, channel, self.current_window)
+        self.auto_align_button.setEnabled(False)
+        self.status_label.setText("正在自动对齐...")
+        self._align_worker = AutoAlignWorker(self.dataset_a, self.dataset_b, channel, self.current_window)
+        self._align_worker.finishedResult.connect(self._on_auto_align_done)
+        self._align_worker.finished.connect(self._align_worker.deleteLater)
+        self._align_worker.start()
+
+    def _on_auto_align_done(self, offset: float) -> None:
+        self.auto_align_button.setEnabled(True)
         limit = self.settings.default_compare_offset_range_seconds
         self.offset_b = max(-limit, min(limit, offset))
         self._set_offset_widgets(self.offset_b)
         self.refresh_all()
+        channel = next((ch for ch in self.channel_list.selected_channels() if ch in self.dataset_b.frame), "")
         self.status_label.setText(f"按 {channel} 自动偏移 {self.offset_b:.3f} 秒")
 
     def export_png(self) -> None:
