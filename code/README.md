@@ -186,12 +186,40 @@
 - `apply_theme()` — 应用 QPalette + 全局 QSS 样式表
 - 所有颜色、尺寸集中定义，易于扩展
 
-### `ui/main_window.py` — 主界面
-完整的 PySide6 界面实现，约 2750+ 行，包含：
-- **主页（LibraryPage）**：文件导入、资料库浏览、跑动记录管理
-- **分析页（AnalysisPage）**：通道选择、图表渲染、双文件对比、统计面板
-- **设置页（SettingsPage）**：主题切换、显示预设、配置编辑
-- **多页导航**：通过 QStackedWidget 切换页面
+### `ui/main_window.py` — 主窗口编排
+约 700 行的协调层，负责：
+- 信号连接与页面导航
+- A/B 文件加载与切换
+- 游标、偏移、窗口状态管理
+- 导出命令触发
+
+### `ui/channel_list.py` — 通道列表
+`ChannelRow` 和 `ChannelList`：左侧通道选择面板，支持搜索过滤、元数据折叠面板、多选。
+
+### `ui/plot_stack.py` — 图表引擎
+`TelemetryPlotStack`、`YAxisZoomItem`：右侧核心图表区域，支持多通道并行折线图、鼠标十字线追踪、Y 轴独立缩放、实时降采样。
+
+### `ui/timeline.py` — 总览时间轴
+`TimelineWidget`：底部概览轴，拖拽选择时间窗口，支持鼠标滚轮缩放。
+
+### `ui/track_panel.py` — 轨迹与统计面板
+`TrackPanel`：GPS 轨迹地图和当前值/统计信息显示面板。
+
+### `ui/library_home.py` — 资料库主页
+`LibraryHome`：文件导入（文件/文件夹/ZIP）、按日期/车手/赛车分类浏览、跑动记录管理、备注编辑、ZIP 批量导出。
+
+### `ui/comments_panel.py` — 评论面板
+`CommentsPanel`：结构化评论的展示、添加、修改、删除 UI。
+
+### `ui/dialogs.py` — 对话框
+`SettingsDialog`：主题、显示预设、资料库位置、元数据字段等设置。
+`LibraryRunDialog`：从资料库选择 B 文件进行对比。
+
+### `ui/workers.py` — 后台任务
+`LibraryImportWorker`、`_CallableWorker`、`AutoAlignWorker`：文件导入、数据加载、自动对齐等耗时操作在 QThread 中执行，不阻塞 UI。
+
+### `ui/formatting.py` — 格式化工具
+纯函数模块：`format_value`、`downsample_true_xy`、`snap_to_sample_time`、`bounded_time_window`，无 Qt 依赖。
 
 ---
 
@@ -335,8 +363,17 @@ SCUTRacing/
 │   │   ├── settings.py           # 配置系统
 │   │   └── ui/
 │   │       ├── __init__.py
-│   │       ├── main_window.py    # 主界面
-│   │       └── theme.py          # 主题系统
+│   │       ├── main_window.py    # 主窗口编排（~700 行）
+│   │       ├── theme.py          # 主题系统
+│   │       ├── formatting.py     # 格式化与降采样辅助函数
+│   │       ├── workers.py        # QThread 后台任务
+│   │       ├── comments_panel.py # 评论面板
+│   │       ├── dialogs.py        # 设置与 B 文件选择对话框
+│   │       ├── channel_list.py   # 通道列表面板
+│   │       ├── timeline.py       # 总览时间轴
+│   │       ├── plot_stack.py     # 图表引擎
+│   │       ├── track_panel.py    # 轨迹与统计面板
+│   │       └── library_home.py   # 资料库主页
 │   ├── scripts/                  # CLI 工具
 │   │   ├── xrk_to_csv.py         # XRK → CSV 转换
 │   │   └── compare_xrk_csv.py    # 解析精度验证
