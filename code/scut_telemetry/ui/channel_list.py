@@ -113,6 +113,7 @@ class ChannelList(QFrame):
         self.items_by_key: dict[str, QListWidgetItem] = {}
         self.rows_by_key: dict[str, ChannelRow] = {}
         self.value_cache: dict[str, str] = {}
+        self.channel_order: list[str] = []
         self._updating = False
         self._metadata_fields: list[str] = [k for k, _ in METADATA_FIELD_LABELS]
         self._metadata_expanded: bool = False
@@ -149,16 +150,45 @@ class ChannelList(QFrame):
         self.meta_panel.setVisible(False)
 
         self.search = QLineEdit()
-        self.search.setPlaceholderText("搜索通道或单位")
+        self.search.setPlaceholderText("搜索未选通道或单位")
+        self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self.apply_filter)
-        self.list_widget = QListWidget()
+        self.selected_list_widget = QListWidget()
+        self.selected_list_widget.setMinimumHeight(0)
+        self.selected_list_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self.available_list_widget = QListWidget()
+        self.available_list_widget.setMinimumHeight(0)
+        self.available_list_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # Backwards-compatible alias for code/tests that refer to the available channel list.
+        self.list_widget = self.available_list_widget
+
+        self.channel_section = QWidget()
+        channel_layout = QVBoxLayout(self.channel_section)
+        channel_layout.setContentsMargins(0, 0, 0, 0)
+        channel_layout.setSpacing(6)
+        self.channel_separator = QFrame()
+        self.channel_separator.setObjectName("ChannelSeparator")
+        self.channel_separator.setFrameShape(QFrame.HLine)
+        self.channel_separator.setFrameShadow(QFrame.Plain)
+        self.channel_separator.setFixedHeight(8)
+        self.channel_separator.setStyleSheet(
+            "QFrame#ChannelSeparator {"
+            "border: none;"
+            "border-top: 2px solid rgba(148, 163, 184, 0.72);"
+            "background: transparent;"
+            "margin: 3px 0;"
+            "}"
+        )
+        channel_layout.addWidget(self.selected_list_widget, 0)
+        channel_layout.addWidget(self.channel_separator)
+        channel_layout.addWidget(self.available_list_widget, 1)
 
         layout.addWidget(title)
         layout.addWidget(self.file_label)
         layout.addWidget(self.meta_toggle)
         layout.addWidget(self.meta_panel)
         layout.addWidget(self.search)
-        layout.addWidget(self.list_widget, 1)
+        layout.addWidget(self.channel_section, 1)
 
     def apply_metadata_settings(self, expanded: bool, fields_csv: str) -> None:
         self._metadata_fields = [f.strip() for f in (fields_csv or "").split(",") if f.strip()]
@@ -247,7 +277,10 @@ class ChannelList(QFrame):
         self.dataset_b = dataset_b
         self.items_by_key.clear()
         self.rows_by_key.clear()
-        self.list_widget.clear()
+        self.channel_order = []
+        self.selected_list_widget.clear()
+        self.available_list_widget.clear()
+        self._update_channel_section_layout(set())
         if not dataset_a:
             self.file_label.setText("未加载文件")
             self._refresh_meta_text()
@@ -260,49 +293,36 @@ class ChannelList(QFrame):
             keys = [key for key in dataset_a.header_order if key != "Time"]
         self._refresh_meta_text()
         for key in keys:
-            meta = dataset_a.channels.get(key) or (dataset_b.channels.get(key) if dataset_b else None)
-            if not meta or meta.dtype == "text":
-                continue
-            item = QListWidgetItem()
-            item.setData(Qt.UserRole, key)
-            item.setFlags(item.flags() | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            row = ChannelRow(key, meta, COLORS[len(self.items_by_key) % len(COLORS)])
-            row.set_checked(key in old_selected, block_signal=True)
-            row.set_value(self.value_cache.get(key, ""))
-            row.toggled.connect(self._row_toggled)
-            item.setSizeHint(row.minimumSizeHint().expandedTo(row.sizeHint()))
-            item.setSizeHint(item.sizeHint().expandedTo(pg.QtCore.QSize(0, 24)))
-            self.list_widget.addItem(item)
-            self.list_widget.setItemWidget(item, row)
-            self.items_by_key[key] = item
-            self.rows_by_key[key] = row
-        if not old_selected:
-            self._select_defaults_without_signal()
+            meta = self._meta_for_key(key)
+            if meta and meta.dtype != "text":
+                self.channel_order.append(key)
+        selected_set = {key for key in self.channel_order if key in old_selected}
+        if not selected_set:
+            selected_set = self._default_selected_keys()
+        self._rebuild_channel_sections(selected_set)
         self.apply_filter()
         self.selectionChanged.emit()
 
-    def _select_defaults_without_signal(self) -> None:
-        """Select default channels without emitting selectionChanged."""
+    def _meta_for_key(self, key: str) -> ChannelMeta | None:
+        meta = self.dataset_a.channels.get(key) if self.dataset_a else None
+        if not meta and self.dataset_b:
+            meta = self.dataset_b.channels.get(key)
+        return meta
+
+    def _default_selected_keys(self) -> set[str]:
         preferred = ["L MOTOR SPEED", "R MOTOR SPEED", "Battery Current", "GPS Speed"]
-        selected = 0
-        self._updating = True
+        selected: list[str] = []
         for key in preferred:
-            row = self.rows_by_key.get(key)
-            if row:
-                row.set_checked(True, block_signal=True)
-                selected += 1
-                if selected >= 3:
+            if key in self.channel_order:
+                selected.append(key)
+                if len(selected) >= 3:
                     break
-        if selected == 0:
-            for idx in range(min(3, self.list_widget.count())):
-                item = self.list_widget.item(idx)
-                row = self.rows_by_key.get(item.data(Qt.UserRole))
-                if row:
-                    row.set_checked(True, block_signal=True)
-        self._updating = False
+        if not selected:
+            selected = self.channel_order[:3]
+        return set(selected)
 
     def selected_channels(self) -> list[str]:
-        return [key for key, row in self.rows_by_key.items() if row.is_checked()]
+        return [key for key in self.channel_order if key in self.rows_by_key and self.rows_by_key[key].is_checked()]
 
     def set_current_values(self, values: dict[str, str]) -> None:
         self.value_cache = values
@@ -311,11 +331,77 @@ class ChannelList(QFrame):
 
     def apply_filter(self) -> None:
         query = self.search.text().strip().lower()
-        for idx in range(self.list_widget.count()):
-            item = self.list_widget.item(idx)
+        for idx in range(self.selected_list_widget.count()):
+            self.selected_list_widget.item(idx).setHidden(False)
+        visible_available = 0
+        for idx in range(self.available_list_widget.count()):
+            item = self.available_list_widget.item(idx)
             row = self.rows_by_key.get(item.data(Qt.UserRole))
-            item.setHidden(bool(query and row and query not in row.search_blob))
+            hidden = bool(query and row and query not in row.search_blob)
+            item.setHidden(hidden)
+            if not hidden:
+                visible_available += 1
+        self._update_channel_section_layout(set(self.selected_channels()), visible_available=visible_available)
 
-    def _row_toggled(self, _key: str, _checked: bool) -> None:
+    def _rebuild_channel_sections(self, selected_set: set[str]) -> None:
+        selected_set = {key for key in self.channel_order if key in selected_set}
+        self.selected_list_widget.setUpdatesEnabled(False)
+        self.available_list_widget.setUpdatesEnabled(False)
+        try:
+            self.items_by_key.clear()
+            self.rows_by_key.clear()
+            self.selected_list_widget.clear()
+            self.available_list_widget.clear()
+            for key in self.channel_order:
+                self._add_channel_row(key, selected=key in selected_set)
+        finally:
+            self.selected_list_widget.setUpdatesEnabled(True)
+            self.available_list_widget.setUpdatesEnabled(True)
+        self._update_channel_section_layout(selected_set)
+
+    def _add_channel_row(self, key: str, *, selected: bool) -> None:
+        meta = self._meta_for_key(key)
+        if not meta:
+            return
+        item = QListWidgetItem()
+        item.setData(Qt.UserRole, key)
+        item.setFlags(item.flags() | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        color_index = self.channel_order.index(key) if key in self.channel_order else len(self.items_by_key)
+        row = ChannelRow(key, meta, COLORS[color_index % len(COLORS)])
+        row.set_checked(selected, block_signal=True)
+        row.set_value(self.value_cache.get(key, ""))
+        row.toggled.connect(self._row_toggled)
+        item.setSizeHint(row.minimumSizeHint().expandedTo(row.sizeHint()))
+        item.setSizeHint(item.sizeHint().expandedTo(pg.QtCore.QSize(0, 24)))
+        target = self.selected_list_widget if selected else self.available_list_widget
+        target.addItem(item)
+        target.setItemWidget(item, row)
+        self.items_by_key[key] = item
+        self.rows_by_key[key] = row
+
+    def _update_channel_section_layout(self, selected_set: set[str], *, visible_available: int | None = None) -> None:
+        selected_count = len(selected_set)
+        has_selected = selected_count > 0
+        self.selected_list_widget.setVisible(has_selected)
+        self.channel_separator.setVisible(has_selected)
+        self.selected_list_widget.setMaximumHeight(self._channel_list_height(selected_count) if has_selected else 0)
+        self.selected_list_widget.updateGeometry()
+        self.channel_section.updateGeometry()
+
+    def _channel_list_height(self, row_count: int, *, max_rows: int = 8) -> int:
+        if row_count <= 0:
+            return 0
+        row_height = 28
+        chrome = max(4, self.selected_list_widget.frameWidth() * 2 + 4)
+        return min(row_count, max_rows) * row_height + chrome
+
+    def _row_toggled(self, key: str, checked: bool) -> None:
         if not self._updating:
+            selected_set = set(self.selected_channels())
+            if checked:
+                selected_set.add(key)
+            else:
+                selected_set.discard(key)
+            self._rebuild_channel_sections(selected_set)
+            self.apply_filter()
             self.selectionChanged.emit()

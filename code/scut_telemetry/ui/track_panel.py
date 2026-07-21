@@ -14,9 +14,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..analyzer import summarize_channel
 from ..models import TelemetryDataset, TimeWindow
-from ..processor import sample_at
 from .formatting import downsample_true_xy, format_value
 
 COLORS = [
@@ -104,6 +102,8 @@ class TrackPanel(QFrame):
         for channel in selected[:6]:
             if channel not in self.dataset_a.frame:
                 continue
+            from ..processor import sample_at
+
             meta = self.dataset_a.channels[channel]
             stats = self._summary_stats(self.dataset_a, channel, window)
             value = sample_at(self.dataset_a, channel, t)
@@ -159,6 +159,8 @@ class TrackPanel(QFrame):
             for channel in selected[:4]:
                 if channel not in self.dataset_b.frame:
                     continue
+                from ..processor import sample_at
+
                 meta = self.dataset_a.channels.get(channel)
                 label = meta.name if meta else channel
                 unit = meta.unit if meta else ""
@@ -204,6 +206,8 @@ class TrackPanel(QFrame):
         key = (dataset.id, channel, self._window_key(window))
         cached = self._summary_cache.get(key)
         if cached is None:
+            from ..analyzer import summarize_channel
+
             cached = summarize_channel(dataset, channel, window)
             self._summary_cache[key] = cached
         return cached
@@ -222,6 +226,8 @@ class TrackPanel(QFrame):
     def _set_marker(self, dataset: TelemetryDataset | None, marker: pg.ScatterPlotItem | None, t: float, offset: float) -> None:
         if not dataset or not marker or "GPS Longitude" not in dataset.frame or "GPS Latitude" not in dataset.frame:
             return
+        from ..processor import sample_at
+
         lon = sample_at(dataset, "GPS Longitude", t, offset)
         lat = sample_at(dataset, "GPS Latitude", t, offset)
         if np.isfinite(lon) and np.isfinite(lat):

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-import pandas as pd
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 ChannelDType = Literal["time", "numeric", "flag", "text"]

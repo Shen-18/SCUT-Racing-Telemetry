@@ -24,37 +24,64 @@ class Theme:
     warning: str
     green: str
     red: str
+    # New Linear-inspired workbench fields
+    surface: str
+    surface_subtle: str
+    surface_active: str
+    border_strong: str
+    text_soft: str
+    accent_hover: str
+    selection: str
+    success: str
 
 
 LIGHT = Theme(
     name="light",
-    background="#F7F8FA",
+    # Linear-inspired light palette
+    background="#F5F6F8",
+    surface="#FFFFFF",
+    surface_subtle="#FAFBFC",
+    surface_active="#F1F3F6",
     panel="#FFFFFF",
-    panel_hover="#F2F4F7",
-    border="#E5E7EB",
-    text="#111827",
-    text_muted="#6B7280",
+    panel_hover="#F1F3F6",
+    border="#E2E6EA",
+    border_strong="#D3D9E0",
+    text="#1F2328",
+    text_muted="#69707D",
+    text_soft="#8B93A1",
     accent="#5E6AD2",
-    grid="#E5E7EB",
+    accent_hover="#4F5BD5",
+    selection="#EEF2FF",
+    grid="#E2E6EA",
     plot_background="#FFFFFF",
     warning="#C2410C",
     green="#16A34A",
+    success="#16A34A",
     red="#DC2626",
 )
 
 DARK = Theme(
     name="dark",
-    background="#0F1115",
-    panel="#171A21",
-    panel_hover="#202532",
-    border="#2A2F3A",
-    text="#F4F4F5",
-    text_muted="#9CA3AF",
-    accent="#8B93FF",
-    grid="#2A2F3A",
-    plot_background="#111318",
+    # Linear-inspired dark palette
+    background="#15181E",
+    surface="#1C1F26",
+    surface_subtle="#202430",
+    surface_active="#272B36",
+    panel="#1C1F26",
+    panel_hover="#272B36",
+    border="#2E3340",
+    border_strong="#3D4352",
+    text="#E8EAED",
+    text_muted="#949BA8",
+    text_soft="#6B7384",
+    accent="#7B87FF",
+    accent_hover="#8B93FF",
+    selection="#252A40",
+    grid="#2E3340",
+    plot_background="#171A21",
     warning="#F59E0B",
     green="#22C55E",
+    success="#22C55E",
     red="#F87171",
 )
 
@@ -64,10 +91,10 @@ def apply_theme(app: QApplication, theme: Theme, profile: DisplayProfile | None 
     palette = QPalette()
     palette.setColor(QPalette.Window, QColor(theme.background))
     palette.setColor(QPalette.WindowText, QColor(theme.text))
-    palette.setColor(QPalette.Base, QColor(theme.panel))
-    palette.setColor(QPalette.AlternateBase, QColor(theme.panel_hover))
+    palette.setColor(QPalette.Base, QColor(theme.surface))
+    palette.setColor(QPalette.AlternateBase, QColor(theme.surface_active))
     palette.setColor(QPalette.Text, QColor(theme.text))
-    palette.setColor(QPalette.Button, QColor(theme.panel))
+    palette.setColor(QPalette.Button, QColor(theme.surface))
     palette.setColor(QPalette.ButtonText, QColor(theme.text))
     palette.setColor(QPalette.Highlight, QColor(theme.accent))
     palette.setColor(QPalette.HighlightedText, QColor("#FFFFFF"))
@@ -86,19 +113,20 @@ QMainWindow, QWidget {{
     font-size: {profile.base_font}px;
 }}
 QFrame#Panel {{
-    background: {theme.panel};
+    background: {theme.surface};
     border: 1px solid {theme.border};
-    border-radius: 8px;
+    border-radius: 6px;
 }}
 QFrame#TopBar {{
-    background: {theme.panel};
+    background: {theme.surface};
     border: 1px solid {theme.border};
-    border-radius: 8px;
+    border-radius: 6px;
+    padding: 4px 6px;
 }}
 QFrame#ToolGroup {{
-    background: {theme.panel_hover};
+    background: {theme.surface_subtle};
     border: 1px solid {theme.border};
-    border-radius: 7px;
+    border-radius: 4px;
 }}
 QLabel#Title {{
     font-size: {profile.title_font}px;
@@ -106,13 +134,15 @@ QLabel#Title {{
 }}
 QLabel#LibraryHeading {{
     font-size: {profile.library_heading_font}px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QLabel#LibrarySection {{
-    color: {theme.text_muted};
+    color: {theme.text_soft};
     font-size: {profile.library_section_font}px;
-    font-weight: 700;
-    padding: 4px 2px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 2px;
 }}
 QLabel#Muted {{
     color: {theme.text_muted};
@@ -125,48 +155,62 @@ QLabel#ChannelUnit, QLabel#ChannelValue {{
     font-size: {profile.channel_font}px;
 }}
 QLabel#TimeBadge {{
-    background: {theme.panel_hover};
-    color: {theme.text};
+    background: {theme.selection};
+    color: {theme.accent};
     border: 1px solid {theme.accent};
-    border-radius: 7px;
-    padding: 5px 12px;
+    border-radius: 6px;
+    padding: 4px 10px;
     font-size: {profile.time_badge_font}px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QPushButton, QToolButton {{
-    background: {theme.panel};
+    background: {theme.surface};
     color: {theme.text};
     border: 1px solid {theme.border};
     border-radius: 6px;
-    padding: 5px 9px;
+    padding: 4px 8px;
 }}
 QPushButton:hover, QToolButton:hover {{
-    background: {theme.panel_hover};
+    background: {theme.surface_active};
+    border-color: {theme.border_strong};
 }}
 QPushButton:pressed, QToolButton:pressed {{
-    border-color: {theme.accent};
+    background: {theme.surface_active};
 }}
 QPushButton#Primary {{
     background: {theme.accent};
     color: #FFFFFF;
-    border-color: {theme.accent};
+    border: 1px solid {theme.accent};
+    border-radius: 6px;
+}}
+QPushButton#Primary:hover {{
+    background: {theme.accent_hover};
 }}
 QPushButton#FlatNav {{
     text-align: left;
     font-size: {profile.library_font}px;
-    font-weight: 700;
-    padding: 7px 9px;
-    background: {theme.panel_hover};
+    font-weight: 600;
+    padding: 6px 8px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+}}
+QPushButton#FlatNav:hover {{
+    background: {theme.surface_active};
+}}
+QPushButton#FlatNav:checked {{
+    background: {theme.surface_active};
+    color: {theme.accent};
 }}
 QLineEdit, QComboBox, QDoubleSpinBox {{
-    background: {theme.panel};
+    background: {theme.surface};
     color: {theme.text};
     border: 1px solid {theme.border};
     border-radius: 6px;
-    padding: 5px 8px;
+    padding: 4px 8px;
 }}
 QListWidget, QTextEdit, QTreeWidget, QTableWidget {{
-    background: {theme.panel};
+    background: {theme.surface};
     color: {theme.text};
     border: 1px solid {theme.border};
     border-radius: 6px;
@@ -175,26 +219,26 @@ QListWidget, QTextEdit, QTreeWidget, QTableWidget {{
 QTreeWidget#LibraryTree, QTableWidget#LibraryTable {{
     font-size: {profile.library_font}px;
     gridline-color: {theme.border};
-    alternate-background-color: {theme.panel_hover};
+    alternate-background-color: {theme.surface_subtle};
 }}
 QTreeWidget#LibraryTree::item, QTableWidget#LibraryTable::item {{
     min-height: {profile.library_item_height}px;
     padding: 2px 7px;
 }}
 QHeaderView::section {{
-    background: {theme.panel};
-    color: {theme.text};
-    border: 0;
-    border-bottom: 1px solid {theme.border};
+    background: {theme.surface};
+    color: {theme.text_muted};
+    border: none;
+    border-bottom: 1px solid {theme.border_strong};
     border-right: 1px solid {theme.border};
-    padding: 5px 8px;
+    padding: 4px 8px;
     font-size: {profile.header_font}px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QTreeWidget#LibraryTree::item:selected, QTableWidget#LibraryTable::item:selected {{
-    background: {theme.panel_hover};
+    background: {theme.selection};
     color: {theme.text};
-    border-left: 3px solid {theme.accent};
+    border-left: 2px solid {theme.accent};
 }}
 QTextEdit#StatsPanel {{
     padding: 8px;
@@ -202,21 +246,21 @@ QTextEdit#StatsPanel {{
 QListWidget::item {{
     min-height: 24px;
     padding: 0 3px;
-    border-bottom: 1px solid {theme.border};
+    border-bottom: none;
 }}
 QListWidget::item:hover {{
-    background: {theme.panel_hover};
+    background: {theme.surface_active};
 }}
 QListWidget::item:selected {{
-    background: {theme.panel_hover};
+    background: {theme.surface_active};
     color: {theme.text};
 }}
 QCheckBox::indicator {{
-    width: 13px;
-    height: 13px;
+    width: 14px;
+    height: 14px;
     border-radius: 3px;
     border: 1px solid {theme.border};
-    background: {theme.panel};
+    background: {theme.surface};
 }}
 QCheckBox::indicator:checked {{
     background: {theme.accent};
@@ -224,6 +268,7 @@ QCheckBox::indicator:checked {{
 }}
 QSplitter::handle {{
     background: {theme.border};
+    width: 1px;
 }}
 QScrollArea {{
     border: none;

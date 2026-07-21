@@ -83,8 +83,8 @@ class LibraryHome(QWidget):
         self.sort_ascending = False
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(4, 4, 4, 4)
-        root.setSpacing(4)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(2)
 
         top = QFrame()
         top.setObjectName("TopBar")
@@ -106,7 +106,7 @@ class LibraryHome(QWidget):
         self.home_status = QLabel("就绪")
         self.home_status.setObjectName("Muted")
         self.import_progress = QProgressBar()
-        self.import_progress.setFixedWidth(180)
+        self.import_progress.setFixedWidth(130)
         self.import_progress.setTextVisible(True)
         self.import_progress.hide()
         top_layout.addWidget(title)
@@ -125,8 +125,8 @@ class LibraryHome(QWidget):
         left_panel = QFrame()
         left_panel.setObjectName("Panel")
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(10, 10, 10, 10)
-        left_layout.setSpacing(8)
+        left_layout.setContentsMargins(8, 8, 8, 8)
+        left_layout.setSpacing(6)
         all_title = QLabel("总览")
         all_title.setObjectName("LibrarySection")
         self.category_tree = QTreeWidget()
@@ -155,18 +155,19 @@ class LibraryHome(QWidget):
         self.category_buttons: dict[str, QPushButton] = {}
         for mode, label in (("date", "按日期"), ("driver", "按车手"), ("vehicle", "按赛车")):
             button = QPushButton(label)
-            button.setCheckable(True)
+            button.setObjectName("FlatNav")
             button.clicked.connect(lambda _checked=False, selected_mode=mode: self._set_category_mode(selected_mode))
             mode_row.addWidget(button)
             self.category_buttons[mode] = button
         left_layout.addLayout(mode_row)
+        left_layout.addSpacing(2)
         left_layout.addWidget(self.category_tree, 1)
 
         right_panel = QFrame()
         right_panel.setObjectName("Panel")
         right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(10, 10, 10, 10)
-        right_layout.setSpacing(8)
+        right_layout.setContentsMargins(8, 8, 8, 8)
+        right_layout.setSpacing(6)
         header_row = QHBoxLayout()
         self.table_title = QLabel("全部记录")
         self.table_title.setObjectName("LibraryHeading")
@@ -209,21 +210,21 @@ class LibraryHome(QWidget):
         self.comments_panel.commentEdited.connect(self._on_comment_edited)
         self.comments_panel.commentDeleted.connect(self._on_comment_deleted)
         right_splitter.addWidget(self.comments_panel)
-        right_splitter.setStretchFactor(0, 3)
+        right_splitter.setStretchFactor(0, 4)
         right_splitter.setStretchFactor(1, 1)
         right_layout.addWidget(right_splitter, 1)
         body.addWidget(left_panel)
         body.addWidget(right_panel)
         body.setSizes(
             [
-                self.settings.library_left_width if self.settings else 390,
-                self.settings.library_right_width if self.settings else 1120,
+                self.settings.library_left_width if self.settings else 320,
+                self.settings.library_right_width if self.settings else 1100,
             ]
         )
         body.setStretchFactor(0, 0)
         body.setStretchFactor(1, 1)
         root.addWidget(body, 1)
-        self.refresh_records(deep=True)
+        self.refresh_records(deep=False)
 
     def set_display_profile(self, profile: DisplayProfile) -> None:
         self.display_profile = profile

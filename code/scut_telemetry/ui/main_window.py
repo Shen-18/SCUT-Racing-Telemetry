@@ -4,7 +4,6 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -33,8 +32,6 @@ from ..library import (
     sha256_file,
 )
 from ..models import TelemetryDataset, TimeWindow
-from ..parser import export_racestudio_like_csv, load_telemetry
-from ..processor import export_selected_csv
 from ..settings import current_display_profile, load_settings, save_settings
 from .channel_list import ChannelList
 from .dialogs import LibraryRunDialog, SettingsDialog
@@ -382,6 +379,8 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"正在加载 {record.original_name}...")
         self._loading_role = role
         self._loading_record = record
+        from ..parser import load_telemetry
+
         self._load_worker = _CallableWorker(load_telemetry, path)
         self._load_worker.finishedResult.connect(self._on_load_record_done)
         self._load_worker.finished.connect(self._load_worker.deleteLater)
@@ -411,6 +410,8 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"正在加载 {path.name}...")
         self._loading_role = role
         self._loading_path = path
+        from ..parser import load_telemetry
+
         self._load_file_worker = _CallableWorker(load_telemetry, path)
         self._load_file_worker.finishedResult.connect(self._on_load_file_done)
         self._load_file_worker.finished.connect(self._load_file_worker.deleteLater)
@@ -569,6 +570,8 @@ class MainWindow(QMainWindow):
         if self.dataset_a:
             time_arr = self.dataset_a.frame["Time"].to_numpy(dtype=float, copy=False)
             if len(time_arr) > 0:
+                import numpy as np
+
                 idx = int(np.searchsorted(time_arr, t))
                 if idx <= 0:
                     t = float(time_arr[0])
@@ -591,6 +594,8 @@ class MainWindow(QMainWindow):
             time_arr = self.dataset_a.frame["Time"].to_numpy(dtype=float, copy=False)
             idx = 0
             if len(time_arr) > 0:
+                import numpy as np
+
                 pos = int(np.searchsorted(time_arr, self.cursor_time))
                 if pos <= 0:
                     idx = 0
@@ -676,6 +681,8 @@ class MainWindow(QMainWindow):
             return
         filename, _ = QFileDialog.getSaveFileName(self, "导出处理后的 CSV", "telemetry_view.csv", "CSV (*.csv)")
         if filename:
+            from ..processor import export_selected_csv
+
             export_selected_csv(self.dataset_a, filename, selected, self.current_window, self.dataset_b, self.offset_b)
             self.status_label.setText(f"已保存 {Path(filename).name}")
 
@@ -689,5 +696,7 @@ class MainWindow(QMainWindow):
             if self.settings.export_notes_to_csv and self.record_a_id:
                 record = self.library.get_record(self.record_a_id)
                 comment_override = record_note_text(record) if record else None
+            from ..parser import export_racestudio_like_csv
+
             export_racestudio_like_csv(self.dataset_a, filename, comment_override=comment_override or None)
             self.status_label.setText(f"已保存 {Path(filename).name}")

@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
 )
 
 from ..models import TelemetryDataset, TimeWindow
-from ..processor import sample_at
 from .formatting import (
     bounded_time_window,
     downsample_true_xy,
@@ -375,6 +374,8 @@ class TelemetryPlotStack(QWidget):
         lines = [f"时间: {t:.3f} s"]
         for channel in self.channels[:8]:
             if channel in self.dataset_a.frame:
+                from ..processor import sample_at
+
                 meta = self.dataset_a.channels[channel]
                 value_a = sample_at(self.dataset_a, channel, t)
                 line = f"A {meta.name}: {format_value(value_a)} {meta.unit}"

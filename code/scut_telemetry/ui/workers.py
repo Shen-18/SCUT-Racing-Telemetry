@@ -4,7 +4,6 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-from ..analyzer import estimate_offset
 from ..library import TelemetryLibrary
 
 
@@ -55,5 +54,7 @@ class AutoAlignWorker(QThread):
         self.window = window
 
     def run(self) -> None:
+        from ..analyzer import estimate_offset
+
         offset = estimate_offset(self.dataset_a, self.dataset_b, self.channel, self.window)
         self.finishedResult.emit(offset)

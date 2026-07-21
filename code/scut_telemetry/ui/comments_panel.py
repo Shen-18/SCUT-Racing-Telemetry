@@ -39,7 +39,7 @@ class CommentsPanel(QFrame):
         self._note_text: str = ""
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
         header = QHBoxLayout()
@@ -54,7 +54,8 @@ class CommentsPanel(QFrame):
 
         self.thread = QListWidget()
         self.thread.setObjectName("CommentsThread")
-        self.thread.setMinimumHeight(220)
+        self.thread.setMinimumHeight(140)
+        self.thread.setAlternatingRowColors(False)
         self.thread.setWordWrap(True)
         self.thread.setSelectionMode(QAbstractItemView.SingleSelection)
         self.thread.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -67,8 +68,9 @@ class CommentsPanel(QFrame):
         self.author_edit.setPlaceholderText("姓名")
         self.text_edit = QTextEdit()
         self.text_edit.setPlaceholderText("评论内容")
-        self.text_edit.setMinimumHeight(86)
+        self.text_edit.setMinimumHeight(68)
         self.send_button = QPushButton("添加评论")
+        self.send_button.setObjectName("Primary")
         self.send_button.clicked.connect(self._on_send)
         form.addWidget(self.author_edit)
         form.addWidget(self.text_edit)

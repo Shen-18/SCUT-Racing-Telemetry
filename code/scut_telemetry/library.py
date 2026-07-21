@@ -12,7 +12,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from .parser import export_racestudio_like_csv, load_telemetry
 from .settings import default_library_root
 
 
@@ -199,6 +198,8 @@ class TelemetryLibrary:
         return self.delete_records(missing)
 
     def repair_filename_metadata(self) -> int:
+        from .parser import load_telemetry
+
         records = self.list_records()
         updates: list[tuple[str, str, str, str]] = []
         for record in records:
@@ -236,6 +237,8 @@ class TelemetryLibrary:
         stored_path = Path(record.stored_path)
         if stored_path.suffix.lower() != ".csv" or not stored_path.exists():
             return False
+        from .parser import export_racestudio_like_csv, load_telemetry
+
         dataset = load_telemetry(stored_path)
         export_racestudio_like_csv(dataset, stored_path, comment_override=record_note_text(record))
         return True
@@ -266,6 +269,8 @@ class TelemetryLibrary:
             )
 
     def export_records_zip(self, records: list[RunRecord], zip_path: Path, *, include_notes: bool = True) -> int:
+        from .parser import export_racestudio_like_csv, load_telemetry
+
         zip_path = Path(zip_path)
         zip_path.parent.mkdir(parents=True, exist_ok=True)
         written = 0
@@ -351,6 +356,8 @@ class TelemetryLibrary:
                 exists = conn.execute("SELECT 1 FROM runs WHERE file_hash = ?", (file_hash,)).fetchone()
             if exists:
                 return False
+
+        from .parser import load_telemetry
 
         dataset = load_telemetry(path)
         suffix = path.suffix.lower()

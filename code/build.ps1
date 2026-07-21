@@ -4,13 +4,36 @@ Set-Location $PSScriptRoot
 
 $distApp = Join-Path $PSScriptRoot "dist\SCUTRacingTelemetry"
 $backupRoot = Join-Path $env:TEMP ("SCUTRacingTelemetry_preserve_" + [guid]::NewGuid().ToString("N"))
+$stablePreserveRoot = Join-Path $PSScriptRoot ".build-preserve"
 $preserveItems = @("library")
 New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $stablePreserveRoot -Force | Out-Null
+
+function Test-PreservedLibraryHasFiles {
+    param([string]$Path)
+    $filesDir = Join-Path $Path "files"
+    if (-not (Test-Path $filesDir)) { return $false }
+    return $null -ne (Get-ChildItem -LiteralPath $filesDir -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
+}
 
 foreach ($item in $preserveItems) {
     $source = Join-Path $distApp $item
+    $backupDestination = Join-Path $backupRoot $item
+    $stableDestination = Join-Path $stablePreserveRoot $item
     if (Test-Path $source) {
-        Copy-Item -LiteralPath $source -Destination (Join-Path $backupRoot $item) -Recurse -Force
+        Copy-Item -LiteralPath $source -Destination $backupDestination -Recurse -Force
+        if ($item -ne "library" -or (Test-PreservedLibraryHasFiles $source)) {
+            if (Test-Path $stableDestination) {
+                Remove-Item -LiteralPath $stableDestination -Recurse -Force
+            }
+            Copy-Item -LiteralPath $source -Destination $stableDestination -Recurse -Force
+        }
+    }
+    if ($item -eq "library" -and -not (Test-PreservedLibraryHasFiles $backupDestination) -and (Test-PreservedLibraryHasFiles $stableDestination)) {
+        if (Test-Path $backupDestination) {
+            Remove-Item -LiteralPath $backupDestination -Recurse -Force
+        }
+        Copy-Item -LiteralPath $stableDestination -Destination $backupDestination -Recurse -Force
     }
 }
 
@@ -52,12 +75,22 @@ python -m PyInstaller @args
 if (Test-Path $distApp) {
     foreach ($item in $preserveItems) {
         $source = Join-Path $backupRoot $item
+        $stableDestination = Join-Path $stablePreserveRoot $item
+        if ($item -eq "library" -and -not (Test-PreservedLibraryHasFiles $source) -and (Test-PreservedLibraryHasFiles $stableDestination)) {
+            $source = $stableDestination
+        }
         if (Test-Path $source) {
             $destination = Join-Path $distApp $item
             if (Test-Path $destination) {
                 Remove-Item -LiteralPath $destination -Recurse -Force
             }
             Copy-Item -LiteralPath $source -Destination $destination -Recurse -Force
+            if ($item -eq "library" -and (Test-PreservedLibraryHasFiles $destination)) {
+                if (Test-Path $stableDestination) {
+                    Remove-Item -LiteralPath $stableDestination -Recurse -Force
+                }
+                Copy-Item -LiteralPath $destination -Destination $stableDestination -Recurse -Force
+            }
         }
     }
 
