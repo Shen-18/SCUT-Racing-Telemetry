@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.4.33213.308
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TestMatLabXRK-2022", "TestMatLabXRK-2022.vcxproj", "{8FEF5C24-50CB-43D0-BFEA-B3617FCB75AA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		DebugAnaTrk|x64 = DebugAnaTrk|x64
+		DebugCfg|x64 = DebugCfg|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8FEF5C24-50CB-43D0-BFEA-B3617FCB75AA}.Debug|x64.ActiveCfg = Debug|x64
+		{8FEF5C24-50CB-43D0-BFEA-B3617FCB75AA}.Debug|x64.Build.0 = Debug|x64
+		{8FEF5C24-50CB-43D0-BFEA-B3617FCB75AA}.DebugAnaTrk|x64.ActiveCfg = DebugAnaTrk|x64
+		{8FEF5C24-50CB-43D0-BFEA-B3617FCB75AA}.DebugAnaTrk|x64.Build.0 = DebugAnaTrk|x64
+		{8FEF5C24-50CB-43D0-BFEA-B3617FCB75AA}.DebugCfg|x64.ActiveCfg = DebugCfg|x64
+		{8FEF5C24-50CB-43D0-BFEA-B3617FCB75AA}.DebugCfg|x64.Build.0 = DebugCfg|x64
+		{8FEF5C24-50CB-43D0-BFEA-B3617FCB75AA}.Release|x64.ActiveCfg = Release|x64
+		{8FEF5C24-50CB-43D0-BFEA-B3617FCB75AA}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {62C99F85-82E8-4772-8858-0CD6E3358D7F}
+	EndGlobalSection
+EndGlobal

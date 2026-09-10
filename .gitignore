@@ -1,0 +1,32 @@
+﻿# Rust build artifacts
+/target
+**/target
+**/*.rs.bk
+*.pdb
+
+# Node / Frontend build artifacts
+node_modules/
+dist/
+dist-ssr/
+*.local
+.pnpm-store
+
+# Tauri artifacts
+src-tauri/target/
+
+# Subagent & Local artifacts
+.agy-staff/
+*.log
+
+# Cache & Temporary files
+cache/
+temp/
+*.tmp
+
+# Operating System & IDE
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
