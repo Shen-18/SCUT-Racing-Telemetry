@@ -1,0 +1,5 @@
+# Keep reference material in the repository without letting it define the
+# GitHub language breakdown for the production application.
+TestMatLabXRK/** linguist-vendored
+tests/tooling/**/*.py linguist-vendored
+design-demos/** linguist-vendored
