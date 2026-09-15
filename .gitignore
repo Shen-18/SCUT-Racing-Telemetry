@@ -1,4 +1,4 @@
-﻿# Rust build artifacts
+# Rust build artifacts
 /target
 **/target
 **/*.rs.bk
@@ -16,7 +16,12 @@ src-tauri/target/
 
 # Subagent & Local artifacts
 .agy-staff/
+.agents/
+.workbuddy/
+.cache/
 *.log
+debug_top.log
+skills-lock.json
 
 # Cache & Temporary files
 cache/
@@ -30,3 +35,23 @@ Thumbs.db
 !.vscode/settings.json
 !.vscode/extensions.json
 .idea/
+
+# Development checks and archived evidence
+__pycache__/
+*.pyc
+.agent/evidence/
+
+# Large/generated development fixtures
+Data/test_large.xrk
+Data/*.csv
+Data/*.jpg
+Data/RS3.png
+
+# Design sources already copied into production assets
+design-demos/*.html
+design-demos/fonts/
+
+# Local review prompts
+.agent/agy-*.md
+
+# TestMatLabXRK is intentionally retained as the complete official example.

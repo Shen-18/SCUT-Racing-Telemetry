@@ -1,0 +1,88 @@
+{
+  "rust": {
+    "serde": "1",
+    "thiserror": "2",
+    "specta": "2.0.0-rc.20",
+    "rusqlite": "0.32",
+    "libloading": "0.8",
+    "memmap2": "0.9",
+    "rayon": "1.10",
+    "fast-float": "0.2",
+    "rustfft": "6",
+    "dashmap": "6",
+    "tauri": "2",
+    "serde_json": "1",
+    "sha2": "0.10",
+    "tauri-build": "2"
+  },
+  "frontend": {
+    "@tauri-apps/api": "^2.11.1",
+    "dockview": "^4.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.0",
+    "uplot": "^1.6.30",
+    "zustand": "^5.0.0",
+    "@eslint/js": "^9.39.5",
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "eslint": "^9.0.0",
+    "postcss": "8.4.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.70.0",
+    "vite": "^6.0.0",
+    "vitest": "^3.2.7"
+  },
+  "members": [
+    "crates/telemetry-core",
+    "crates/cache-core",
+    "crates/aim-ffi",
+    "crates/csv-parser",
+    "crates/telemetry-store",
+    "crates/telemetry-ipc",
+    "src-tauri",
+    "crates/migrate-v1",
+    "tests/golden-tests"
+  ],
+  "edges": {
+    "telemetry-core": [],
+    "cache-core": [
+      "telemetry-core"
+    ],
+    "aim-ffi": [
+      "telemetry-core"
+    ],
+    "csv-parser": [
+      "telemetry-core"
+    ],
+    "telemetry-store": [
+      "telemetry-core",
+      "cache-core"
+    ],
+    "telemetry-ipc": [
+      "telemetry-core",
+      "telemetry-store",
+      "cache-core"
+    ],
+    "scut-racing-telemetry": [
+      "telemetry-core",
+      "cache-core",
+      "aim-ffi",
+      "csv-parser",
+      "telemetry-store",
+      "telemetry-ipc"
+    ],
+    "migrate-v1": [
+      "telemetry-core",
+      "cache-core",
+      "telemetry-store"
+    ],
+    "golden-tests": [
+      "telemetry-core",
+      "csv-parser",
+      "cache-core"
+    ]
+  }
+}

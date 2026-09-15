@@ -1,0 +1,11 @@
+[package]
+name="aim-ffi"
+version="0.1.0"
+edition="2021"
+[dependencies]
+telemetry-core={path="../telemetry-core"}
+libloading={workspace=true}
+[dev-dependencies]
+serde={workspace=true}
+serde_json={workspace=true}
+sha2={workspace=true}

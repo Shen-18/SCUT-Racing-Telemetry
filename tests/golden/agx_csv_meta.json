@@ -1,0 +1,414 @@
+{
+  "source_file": "Data/AGX.csv",
+  "sample_rate_hz": 20.0,
+  "channels": [
+    {
+      "name": "Time",
+      "unit": "s",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS Speed",
+      "unit": "km/h",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS Nsat",
+      "unit": " ",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS LatAcc",
+      "unit": "g",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS LonAcc",
+      "unit": "g",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS Slope",
+      "unit": "deg",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS Heading",
+      "unit": "deg",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS Gyro",
+      "unit": "deg/s",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS Altitude",
+      "unit": "m",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS PosAccuracy",
+      "unit": "mm",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS SpdAccuracy",
+      "unit": "km/h",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS Radius",
+      "unit": "m",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS Latitude",
+      "unit": "deg",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GPS Longitude",
+      "unit": "deg",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "LoggerTemp",
+      "unit": "°C",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "External Voltage",
+      "unit": "V",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Channel01",
+      "unit": "mV",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Channel02",
+      "unit": "mV",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Channel03",
+      "unit": "mV",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Channel04",
+      "unit": "mV",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Channel05",
+      "unit": "mV",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Channel06",
+      "unit": "mV",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Channel07",
+      "unit": "mV",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Channel08",
+      "unit": "mV",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "InlineAcc",
+      "unit": "g",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "LateralAcc",
+      "unit": "g",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "VerticalAcc",
+      "unit": "g",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Luminosity",
+      "unit": "%",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "L MOTOR SPEED",
+      "unit": "rpm",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "R MOTOR SPEED",
+      "unit": "rpm",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "L Motor Torque",
+      "unit": "Nm",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "R Motor Torque",
+      "unit": "Nm",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Battery Volt",
+      "unit": "V",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Battery Current",
+      "unit": "A",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Battery Soc",
+      "unit": "%",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Motor Ineff Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "EBS Ineff Type",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "EBS Error Type",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "AS State Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "R2D Flag dup 1",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Motor Algorithm",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "RES State Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "EBS State Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "AMI Task Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "State Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "EBS Trig Latch",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Drive State Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "HV Flag dup 1",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "EBS Error Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "EBS Ineff Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GC Lost Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "ASB Ready Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Motor Error Info",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Steer Offset Fla",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Steer Motor Pst",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Brake Pst",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Acc-1",
+      "unit": "%",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Acc-2",
+      "unit": "%",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Ave Acc",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Ave Brake",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Ave Steer",
+      "unit": "deg",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Steer Sense",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "EBS Gas",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Brake Gas",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Brake Sense",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "IGBT Temp L",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Motor Temp L",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Motor Temp R",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Inverter Temp L",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Inverter Temp R",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "VehSpd",
+      "unit": "km/h",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "GYRO Z",
+      "unit": "deg/s",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "AGX Finish Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "AGX Speed",
+      "unit": "km/h",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Steer AGX Pst",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "AGX Target dece",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "AGX End Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "AGX Ready Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "AGX Brake Flag",
+      "unit": "#",
+      "sample_rate_hz": 20.0
+    },
+    {
+      "name": "Distance on GPS Speed",
+      "unit": "m",
+      "sample_rate_hz": 20.0
+    }
+  ],
+  "speed_golden": {
+    "channel": "GPS Speed (AiM Interpolated)",
+    "unit": "km/h",
+    "sample_count": 890,
+    "encoding": "little-endian f64 time/value pairs",
+    "sha256": "7212f495e50128356bb964c185ca55c90748821e5f793e572299d84bc2dcd94d",
+    "source": "AiM DLL official GPS interpolated output from Data/AGX.xrk"
+  }
+}

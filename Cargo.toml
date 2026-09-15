@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/telemetry-core","crates/cache-core","crates/aim-ffi","crates/csv-parser","crates/telemetry-store","crates/telemetry-ipc","src-tauri","crates/migrate-v1", "tests/golden-tests"]
+[workspace.dependencies]
+serde = { version="1", features=["derive"] }
+thiserror = "2"
+specta = { version="2.0.0-rc.20", features=["serde"] }
+rusqlite = "0.32"
+libloading = "0.8"
+memmap2 = "0.9"
+rayon = "1.10"
+fast-float = "0.2"
+rustfft = "6"
+dashmap = "6"
+tauri = "2"
+serde_json = "1"
+sha2 = "0.10"
+tauri-build = "2"

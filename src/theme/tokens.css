@@ -1,0 +1,127 @@
+/* ============================================================
+   F1 官方风格设计令牌（手册附录 B.1 rev.5 / DESIGN-SPEC 2 & 9）
+   深色（默认）= F1 红+黑；浅色 = 红+白（黑白互换，红与彩色语义不变）。
+   rev.4 旧 token 以"兼容别名"映射到新体系，供未迁移组件过渡；
+   别名段禁止新增消费，Step 5R R2 起逐步删除。
+   ============================================================ */
+
+:root,
+:root[data-theme="dark"] {
+  /* F1 基础 token */
+  --bg: #15151E;
+  --bg2: #1B1B27;
+  --panel: #202030;
+  --line: #38384A;
+  --red: #E10600;
+  --text: #FFFFFF;
+  --dim: #9B9BAD;
+  --dim2: #6A6A7D;
+
+  /* 语义色（手册 B.1：仅此数种） */
+  --purple: #B14BF4; /* 最快圈 session best */
+  --green: #43B02A;  /* MIN / 就绪 */
+  --orange: #FF8001; /* LAT G / 构建中 */
+
+  /* Shell 尺寸（B.2） */
+  --topbar-height: 54px;
+  --statusbar-height: 24px;
+  --timeline-height: 110px;
+  --left-width-default: 280px;
+  --right-width-default: 310px;
+
+  /* ---- rev.4 兼容别名（过渡期） ---- */
+  --bg-app: var(--bg);
+  --bg-panel: var(--bg2);
+  --bg-subtle: var(--panel);
+  --bg-hover: var(--bg2);
+  --bg-surface-active: var(--panel);
+  --text-primary: var(--text);
+  --text-muted: var(--dim);
+  --text-subtle: var(--dim2);
+  --text-inverse: var(--bg);
+  --border: var(--line);
+  --border-subtle: var(--line);
+  --border-focus: var(--red);
+  --accent: var(--red);
+  --accent-hover: var(--red);
+  --accent-subtle: rgba(225, 6, 0, 0.15);
+  --status-ready: var(--green);
+  --status-warning: var(--orange);
+  --status-error: var(--red);
+  --status-info: var(--dim);
+
+  /* dockview 过渡别名（R2 移除 dockview 后整段删除） */
+  --dv-drag-over-background-color: rgba(225, 6, 0, 0.2);
+  --dv-drag-over-border-color: var(--red);
+  --dv-tabs-and-actions-container-background-color: var(--panel);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--bg2);
+  --dv-activegroup-visiblepanel-tab-color: var(--text);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--panel);
+  --dv-activegroup-hiddenpanel-tab-color: var(--dim);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg2);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--dim);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--panel);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--dim2);
+  --dv-tab-divider-color: var(--line);
+  --dv-separator-border: var(--line);
+}
+
+:root[data-theme="light"] {
+  /* F1 基础 token（红 + 白） */
+  --bg: #FFFFFF;
+  --bg2: #F2F2F6;
+  --panel: #E9E9F0;
+  --line: #D6D6E0;
+  --red: #E10600;
+  --text: #15151E;
+  --dim: #6A6A7D;
+  --dim2: #9B9BAD;
+
+  /* 语义色（白底加深保对比度，DESIGN-SPEC 9.1） */
+  --purple: #8F3BD9;
+  --green: #2E8B1F;
+  --orange: #FF8001;
+
+  /* Shell 尺寸（B.2） */
+  --topbar-height: 54px;
+  --statusbar-height: 24px;
+  --timeline-height: 110px;
+  --left-width-default: 280px;
+  --right-width-default: 310px;
+
+  /* ---- rev.4 兼容别名（过渡期） ---- */
+  --bg-app: var(--bg);
+  --bg-panel: var(--bg2);
+  --bg-subtle: var(--panel);
+  --bg-hover: var(--bg2);
+  --bg-surface-active: var(--panel);
+  --text-primary: var(--text);
+  --text-muted: var(--dim);
+  --text-subtle: var(--dim2);
+  --text-inverse: var(--bg);
+  --border: var(--line);
+  --border-subtle: var(--line);
+  --border-focus: var(--red);
+  --accent: var(--red);
+  --accent-hover: var(--red);
+  --accent-subtle: rgba(225, 6, 0, 0.12);
+  --status-ready: var(--green);
+  --status-warning: var(--orange);
+  --status-error: var(--red);
+  --status-info: var(--dim);
+
+  /* dockview 过渡别名（R2 移除 dockview 后整段删除） */
+  --dv-drag-over-background-color: rgba(225, 6, 0, 0.15);
+  --dv-drag-over-border-color: var(--red);
+  --dv-tabs-and-actions-container-background-color: var(--panel);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--bg);
+  --dv-activegroup-visiblepanel-tab-color: var(--text);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--panel);
+  --dv-activegroup-hiddenpanel-tab-color: var(--dim);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg2);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--dim);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--panel);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--dim2);
+  --dv-tab-divider-color: var(--line);
+  --dv-separator-border: var(--line);
+}

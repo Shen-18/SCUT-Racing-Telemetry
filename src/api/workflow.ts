@@ -1,0 +1,18 @@
+import { decodeFrame, type WindowFrame } from "./frame";
+import type { DatasetMeta, ImportStatus } from "./types";
+import { selectDefaultSpeedChannel } from "./client";
+import { getDatasetDuration } from "./dataset";
+export interface WorkflowApi { startImport(path:string):Promise<number>; importStatus(id:number):Promise<ImportStatus>; openDataset(hash:string):Promise<DatasetMeta>; closeDataset(id:number):Promise<void>; cancelImport(id:number):Promise<void>; prioritizeImport(id:number,channels:string[]):Promise<void>; windowSeries(id:number,channel:string,start:number,end:number,pixels:number,generation:number):Promise<WindowFrame|Uint8Array|number[]> }
+export interface WorkflowSnapshot { jobId:number|null; status:ImportStatus|null; dataset:DatasetMeta|null; frame:WindowFrame|null; plotState:"empty"|"building"|"ready"|"error"; error:string|null }
+export class ImportWorkflow {
+ private timer:number|undefined; private disposed=false; private generation=0; private requestId=0;
+ private state:WorkflowSnapshot={jobId:null,status:null,dataset:null,frame:null,plotState:"empty",error:null};
+ constructor(private readonly api:WorkflowApi, private readonly onChange?:(snapshot:WorkflowSnapshot)=>void){}
+ get snapshot(){return this.state}
+ private set(p:Partial<WorkflowSnapshot>){this.state={...this.state,...p};this.onChange?.(this.state)}
+ async start(path:string){if(!/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(path)){this.set({error:"Please provide an absolute path",plotState:"error"});return} this.set({error:null,plotState:"empty",frame:null,dataset:null});const jobId=await this.api.startImport(path);this.set({jobId});await this.poll()}
+ private schedule(){if(this.disposed||this.timer!==undefined)return;this.timer=globalThis.setTimeout(()=>{this.timer=undefined;void this.poll()},250)}
+ private async poll(){if(this.disposed||this.state.jobId===null)return;try{const status=await this.api.importStatus(this.state.jobId);this.set({status,error:status.error});if(status.stage==="Failed"||status.stage==="Cancelled")return;if(status.meta_ready&&this.state.dataset===null){const dataset=await this.api.openDataset(status.file_hash);this.set({dataset})}if(status.stage==="Ready"){await this.requestWindow(0,getDatasetDuration(this.state.dataset),512);return}this.schedule();if(this.state.dataset!==null&&this.state.frame===null)await this.requestWindow(0,getDatasetDuration(this.state.dataset),512)}catch(error){this.set({error:error instanceof Error?error.message:(error as {message?:string})?.message??String(error),plotState:"error"})}}
+ async requestWindow(start:number,end:number,pixels:number):Promise<WindowFrame>{const dataset=this.state.dataset;if(!dataset)return undefined as never;const request=++this.requestId;const generation=++this.generation;const targetChannel=selectDefaultSpeedChannel(dataset.channels)??dataset.channels[0]?.key??"Speed";try{const result=await this.api.windowSeries(dataset.id,targetChannel,start,end,pixels,generation);const frame=result instanceof ArrayBuffer||result instanceof Uint8Array||Array.isArray(result)?decodeFrame(result,generation):result;if(request!==this.requestId||!frame)return undefined as never;this.set({frame,plotState:"ready",error:null});return frame}catch(error){const code=(error as {code?:string})?.code;if(code==="channel_building"){this.set({plotState:"building"});await this.api.prioritizeImport(this.state.jobId??0,[targetChannel]);return undefined as never}this.set({plotState:"error",error:error instanceof Error?error.message:String(error)});return undefined as never}}
+ dispose(){this.disposed=true;if(this.timer!==undefined)globalThis.clearTimeout(this.timer);this.timer=undefined}
+}

@@ -1,0 +1,44 @@
+/* F1 官方风格字体（手册附录 B.1 rev.5）
+   源文件：design-demos/fonts/ → src/assets/fonts/
+   版权边界（ADR-0008）：Formula1 Display 版权属 FOM，仅限车队内部工具；
+   Titillium 为 OFL 开源，可随软件分发。 */
+
+@font-face {
+  font-family: "F1 Display";
+  src: url("../assets/fonts/Formula1-Display-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "F1 Display";
+  src: url("../assets/fonts/Formula1-Display-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Titillium";
+  src: url("../assets/fonts/Titillium-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Titillium";
+  src: url("../assets/fonts/Titillium-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Titillium";
+  src: url("../assets/fonts/Titillium-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}

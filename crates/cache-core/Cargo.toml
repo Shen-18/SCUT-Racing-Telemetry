@@ -1,0 +1,10 @@
+[package]
+name="cache-core"
+version="0.1.0"
+edition="2021"
+[dependencies]
+telemetry-core={path="../telemetry-core"}
+serde_json.workspace=true
+thiserror.workspace=true
+serde.workspace=true
+sha2.workspace=true

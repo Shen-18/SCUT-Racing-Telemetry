@@ -1,0 +1,10 @@
+[package]
+name="telemetry-ipc"
+version="0.1.0"
+edition="2021"
+[dependencies]
+serde={workspace=true}
+serde_json={workspace=true}
+specta={workspace=true}
+thiserror={workspace=true}
+telemetry-core={path="../telemetry-core"}

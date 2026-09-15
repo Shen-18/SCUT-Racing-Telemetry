@@ -1,0 +1,10 @@
+[package]
+name = "telemetry-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+specta = { workspace = true, features = ["derive"] }
+

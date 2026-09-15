@@ -1,0 +1,17 @@
+[package]
+name="scut-racing-telemetry"
+version="1.0.0"
+edition="2021"
+[build-dependencies]
+tauri-build.workspace=true
+[dependencies]
+tauri.workspace=true
+telemetry-core={path="../crates/telemetry-core"}
+cache-core={path="../crates/cache-core"}
+aim-ffi={path="../crates/aim-ffi"}
+csv-parser={path="../crates/csv-parser"}
+telemetry-store={path="../crates/telemetry-store"}
+telemetry-ipc={path="../crates/telemetry-ipc"}
+
+dashmap.workspace=true
+serde_json.workspace=true

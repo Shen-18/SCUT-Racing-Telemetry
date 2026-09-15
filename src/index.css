@@ -1,0 +1,111 @@
+@import "./theme/tokens.css";
+
+:root {
+  font-family: Titillium, "Microsoft YaHei", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+}
+
+/* F1 Display：仅用于标题及重点区域（比赛名/文件名/详情大数字），手册 B.0 第 3 条 */
+.f1 {
+  font-family: "F1 Display", "Microsoft YaHei", sans-serif;
+}
+
+/* 一切数值 tabular-nums（手册 B.1：表格、图例、详情、状态栏、轴标签） */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+body { background: var(--bg-app); }
+button, input { font: inherit; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+
+.app-shell {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  background: var(--bg-app);
+  isolation: isolate;
+}
+
+.app-shell__topbar,
+.app-shell__error,
+.timeline-bar,
+.app-shell__statusbar {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+}
+
+.app-shell__main {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-shell__dataset,
+.app-shell__import,
+.app-shell__status-file,
+.timeline-bar__metrics {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.app-shell__dataset { flex: 0 1 auto; }
+.app-shell__dataset { max-width: 260px; }
+.app-shell__status-file { max-width: 28vw; }
+.timeline-bar__metrics { flex: 0 1 auto; }
+.timeline-bar__metrics span { white-space: nowrap; }
+
+.dockview-theme-abyss,
+.dv-dockview,
+.dv-grid-view,
+.dv-grid-view > .dv-view-container {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.uplot {
+  max-width: 100%;
+  max-height: 100%;
+  color: var(--text-muted);
+}
+
+@media (max-width: 1100px) {
+  .app-shell__dataset { display: none !important; }
+}
+
+@media (max-width: 1180px) {
+  .app-shell__topbar { gap: 8px !important; padding-inline: 10px !important; }
+  .timeline-bar { gap: 8px !important; padding-inline: 10px !important; }
+  .timeline-bar__metrics span:nth-child(2) { display: none; }
+}
+
+@media (max-width: 900px) {
+  .app-shell__brand span,
+  .app-shell__tools span,
+  .app-shell__status span:last-child,
+  .timeline-bar__metrics span:first-child { display: none; }
+  .app-shell__tools { gap: 6px !important; }
+}
