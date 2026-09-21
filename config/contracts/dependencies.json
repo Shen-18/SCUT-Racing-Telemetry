@@ -13,11 +13,13 @@
     "tauri": "2",
     "serde_json": "1",
     "sha2": "0.10",
-    "tauri-build": "2"
+    "tauri-build": "2",
+    "tauri-plugin-window-state": "2",
+    "zip": "2",
+    "rfd": "0.15"
   },
   "frontend": {
     "@tauri-apps/api": "^2.11.1",
-    "dockview": "^4.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwindcss": "^3.4.0",

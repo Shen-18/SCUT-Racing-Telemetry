@@ -2,12 +2,14 @@ import { create } from "zustand";
 import type { DatasetMeta, ImportStatus, WindowFrame, ImportStage } from "../api/client";
 import * as client from "../api/client";
 import { getDatasetDuration } from "../api/dataset";
+import { clampToSampleRange, clampWindowToSampleRange, type SampleRange } from "../utils/sampleRange";
 
 export interface AppState {
   dataset: DatasetMeta | null;
   checkedChannels: string[];
   channelOrder: string[];
   window: { start: number; end: number };
+  activeRange: SampleRange | null;
   cursorT: number;
   theme: "dark" | "light";
   layoutPreset: string;
@@ -15,10 +17,19 @@ export interface AppState {
   importJobs: Record<number, ImportStatus>;
   currentFrame: WindowFrame | null;
   openingFileHash: string | null;
+  leftWidth: number;
+  rightWidth: number;
+  view: "library" | "analysis";
+  playing: boolean;
 
   openDataset(fileHash: string): Promise<void>;
+  setView(view: "library" | "analysis"): void;
+  setPlaying(playing: boolean): void;
   setWindow(w: { start: number; end: number }): void;
+  setActiveRange(range: SampleRange | null): void;
   setCursor(t: number): void;
+  setLeftWidth(width: number): void;
+  setRightWidth(width: number): void;
   toggleChannel(key: string): void;
   toggleChannelAndPrioritize(key: string): Promise<void>;
   reorderChannels(order: string[]): void;
@@ -28,6 +39,14 @@ export interface AppState {
   prioritizeImport(jobId: number, channels: string[]): Promise<void>;
   applyFrame(frame: WindowFrame): boolean;
   updateImportStatus(status: ImportStatus): void;
+}
+
+export const LEFT_WIDTH_RANGE = { min: 220, max: 420, default: 280 } as const;
+export const RIGHT_WIDTH_RANGE = { min: 240, max: 480, default: 310 } as const;
+
+export function clampColumnWidth(width: number, range: { min: number; max: number }): number {
+  if (!Number.isFinite(width)) return range.min;
+  return Math.max(range.min, Math.min(range.max, Math.round(width)));
 }
 
 export function isNonTerminalImportStage(stage: ImportStage): boolean {
@@ -44,6 +63,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   checkedChannels: [],
   channelOrder: [],
   window: { start: 0, end: 1 },
+  activeRange: null,
   cursorT: 0,
   theme: "dark",
   layoutPreset: "default",
@@ -51,6 +71,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   importJobs: {},
   currentFrame: null,
   openingFileHash: null,
+  playing: false,
+  leftWidth: LEFT_WIDTH_RANGE.default,
+  rightWidth: RIGHT_WIDTH_RANGE.default,
+  view: "library",
 
   bumpGeneration() {
     set((state) => ({ generation: state.generation + 1 }));
@@ -58,13 +82,45 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setWindow(w: { start: number; end: number }) {
     set((state) => ({
-      window: w,
+      window: clampWindowToSampleRange(w, state.activeRange),
       generation: state.generation + 1,
     }));
   },
 
+  setView(view: "library" | "analysis") {
+    // 切视图即暂停播放，避免离开分析页后游标继续跑
+    set({ view, playing: false });
+  },
+
+  setPlaying(playing: boolean) {
+    set({ playing });
+  },
+
+  setLeftWidth(width: number) {
+    set({ leftWidth: clampColumnWidth(width, LEFT_WIDTH_RANGE) });
+  },
+
+  setRightWidth(width: number) {
+    set({ rightWidth: clampColumnWidth(width, RIGHT_WIDTH_RANGE) });
+  },
+
+  setActiveRange(range: SampleRange | null) {
+    set((state) => {
+      const nextWindow = clampWindowToSampleRange(state.window, range);
+      const sameRange = state.activeRange?.start === range?.start && state.activeRange?.end === range?.end;
+      const sameWindow = state.window.start === nextWindow.start && state.window.end === nextWindow.end;
+      if (sameRange && sameWindow) return state;
+      return {
+        activeRange: range,
+        window: nextWindow,
+        cursorT: clampToSampleRange(state.cursorT, range),
+        generation: sameWindow ? state.generation : state.generation + 1,
+      };
+    });
+  },
+
   setCursor(t: number) {
-    set({ cursorT: t });
+    set((state) => ({ cursorT: clampToSampleRange(t, state.activeRange) }));
   },
 
   toggleChannel(key: string) {
@@ -127,9 +183,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       checkedChannels: initialChecked,
       channelOrder: channelKeys,
       window: { start: 0, end: duration },
+      activeRange: null,
       generation: state.generation + 1,
       currentFrame: null,
       openingFileHash: null,
+      view: "analysis",
     }));
   },
 

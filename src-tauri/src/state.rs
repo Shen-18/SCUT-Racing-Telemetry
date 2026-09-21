@@ -3,7 +3,7 @@ use crate::jobs::ImportJob;
 use cache_core::{CacheError, CacheRoot, DatasetCache};
 use dashmap::DashMap;
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -19,6 +19,8 @@ pub struct AppState {
     pub datasets: DashMap<u64, Arc<DatasetCache>>,
     pub jobs: DashMap<u64, ImportJob>,
     pub(crate) imports: std::sync::Mutex<std::collections::HashMap<String, u64>>,
+    /// zip 解包临时目录 → 未完成内部文件引用计数；归零即删除目录。
+    pub(crate) temp_dirs: std::sync::Mutex<std::collections::HashMap<PathBuf, usize>>,
     next_id: AtomicU64,
 }
 
@@ -44,6 +46,7 @@ impl AppState {
     pub fn new(cache_path: &Path, dll_path: &Path) -> CommandResult<Self> {
         Ok(Self {
             cache: CacheRoot::open(cache_path).map_err(cache_error)?,
+            temp_dirs: std::sync::Mutex::new(std::collections::HashMap::new()),
             aim: aim_ffi::AimActor::spawn(dll_path).map_err(|e| command_error("dll_error", e))?,
             datasets: DashMap::new(),
             jobs: DashMap::new(),
@@ -92,6 +95,64 @@ impl AppState {
             .remove(&id)
             .map(|_| ())
             .ok_or_else(|| command_error("dataset_not_found", id))
+    }
+
+    /// Deletes one dataset's cache directory (library-home record deletion).
+    /// Closes any open handle first; the source file is never touched (D10).
+    pub fn purge_hash(&self, hash: &str) -> CommandResult<u64> {
+        // The hash becomes a directory name; only a plain 64-char hex digest is valid.
+        if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(command_error("invalid_hash", hash));
+        }
+        let mut purged = 0u64;
+        let stale: Vec<u64> = self
+            .datasets
+            .iter()
+            .filter(|entry| entry.value().manifest().identity.hash == hash)
+            .map(|entry| *entry.key())
+            .collect();
+        for id in stale {
+            if self.datasets.remove(&id).is_some() {
+                purged += 1;
+            }
+        }
+        let dir = self.cache.path().join("datasets").join(hash);
+        match std::fs::remove_dir_all(&dir) {
+            Ok(()) => Ok(purged + 1),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(purged),
+            Err(e) => Err(command_error("io_error", e)),
+        }
+    }
+
+    /// 登记一个 zip 解包目录及其内部待导入文件数。
+    pub fn register_temp_dir(&self, dir: &Path, files: usize) {
+        self.temp_dirs
+            .lock()
+            .expect("temp_dirs mutex poisoned")
+            .insert(dir.to_path_buf(), files);
+    }
+
+    /// 内部文件导入终态后归还引用；归零删除整个解包目录。
+    pub fn release_temp_dir(&self, dir: &Path) {
+        let mut remove = false;
+        if let Ok(mut map) = self.temp_dirs.lock() {
+            if let Some(count) = map.get_mut(dir) {
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    map.remove(dir);
+                    remove = true;
+                }
+            }
+        }
+        if remove {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// 找到路径所属的已登记临时目录（zip 内部文件归属）。
+    pub fn temp_dir_owner(&self, path: &Path) -> Option<PathBuf> {
+        let map = self.temp_dirs.lock().ok()?;
+        map.keys().find(|dir| path.starts_with(dir)).cloned()
     }
 
     pub fn dataset(&self, id: u64) -> CommandResult<Arc<DatasetCache>> {

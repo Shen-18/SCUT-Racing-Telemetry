@@ -7,6 +7,7 @@ describe("Frontend vertical slice acceptance pipeline", () => {
   const agxMeta: client.DatasetMeta = {
     id: 1,
     file_hash: "sha256_agx_sample",
+    file_size: 626_948,
     meta: {
       file_path: "D:\\Data\\test_session.agx",
       file_type: "agx",

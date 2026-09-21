@@ -9,6 +9,7 @@ export const STAGE_LABELS: Record<ImportStage, string> = {
   Ready: "就绪",
   Failed: "导入失败",
   Cancelled: "已取消",
+  Duplicate: "重复记录（跳过）",
 };
 
 export interface ImportProgressBarProps {

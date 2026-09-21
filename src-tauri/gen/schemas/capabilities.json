@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"应用默认能力：核心事件监听（拖放事件等）","local":true,"windows":["main"],"permissions":["core:default"]}}

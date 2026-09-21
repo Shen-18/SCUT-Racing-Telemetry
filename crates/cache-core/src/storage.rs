@@ -214,3 +214,31 @@ pub(crate) fn upper_bound(
     }
     Ok(lo)
 }
+
+/// Return the first sample whose timestamp is greater than or equal to `t`.
+///
+/// Window reads use this lower bound so a frame never contains a synthetic
+/// point just before the requested range.  Cursor reads intentionally keep
+/// their step-hold semantics and continue to use `upper_bound`.
+pub(crate) fn lower_bound(
+    reader: &mut BlobReader,
+    offset: u64,
+    stride: u64,
+    count: u64,
+    t: f64,
+) -> Result<u64> {
+    let (mut lo, mut hi) = (0, count);
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        let value = reader.f64(offset + mid * stride)?;
+        if !value.is_finite() {
+            return Err(invalid("non-finite timestamp"));
+        }
+        if value < t {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    Ok(lo)
+}

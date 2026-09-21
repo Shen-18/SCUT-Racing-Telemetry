@@ -5,9 +5,13 @@ import type {
   ImportStatus,
   FrameHeader,
   WindowFrame,
+  RecordSummary,
+  QueuedImport,
   ChannelMeta as BaseChannelMeta,
   DatasetMeta as BaseDatasetMeta,
 } from "./types";
+
+export type { RecordSummary, QueuedImport };
 
 export type ChannelMeta = BaseChannelMeta & { ready?: boolean };
 export type DatasetChannel = ChannelMeta;
@@ -45,14 +49,6 @@ export interface ChannelStats {
   max: number;
   mean: number;
   std_dev: number;
-  [key: string]: unknown;
-}
-
-export interface Record_ {
-  id: number;
-  file_hash: string;
-  file_name?: string;
-  session?: string;
   [key: string]: unknown;
 }
 
@@ -148,8 +144,56 @@ export function getStats(
   return invoke<Record<string, ChannelStats>>("stats", { id, channels, start, end });
 }
 
-export function listRecords(query = ""): Promise<Record_[]> {
-  return invoke<Record_[]>("list_records", { query });
+export function importFiles(paths: string[]): Promise<QueuedImport[]> {
+  return invoke<QueuedImport[]>("import_files", { paths });
+}
+
+export function pickImportFiles(): Promise<string[]> {
+  return invoke<string[]>("pick_import_files");
+}
+
+/** 单条导出结果（export_records 返回值）。 */
+export interface ExportOutcome {
+  file_hash: string;
+  file_name: string;
+  status: "exported" | "missing" | "failed" | string;
+  message?: string | null;
+}
+
+/**
+ * 订阅 Tauri 原生拖放事件（WebView2 会拦截 HTML5 拖放）。
+ * IPC 只允许经过本模块，故对外只暴露语义化回调。
+ */
+export function onFileDrop(handlers: {
+  onEnter(): void;
+  onLeave(): void;
+  onDrop(paths: string[]): void;
+}): Promise<() => void> {
+  return import("@tauri-apps/api/webview").then(({ getCurrentWebview }) =>
+    getCurrentWebview().onDragDropEvent((event) => {
+      const payload = event.payload as { type: string; paths?: string[] };
+      if (payload.type === "enter" || payload.type === "over") handlers.onEnter();
+      else if (payload.type === "drop") handlers.onDrop(payload.paths ?? []);
+      else handlers.onLeave();
+    })
+  );
+}
+
+/** 保存单个 CSV 的文件对话框（分析页"导出选中通道"）。 */
+export function pickExportFile(suggestedName: string): Promise<string | null> {
+  return invoke<string | null>("pick_export_file", { suggestedName });
+}
+
+export function pickExportFolder(): Promise<string | null> {
+  return invoke<string | null>("pick_export_folder");
+}
+
+export function exportRecords(hashes: string[], dir: string): Promise<ExportOutcome[]> {
+  return invoke<ExportOutcome[]>("export_records", { hashes, dir });
+}
+
+export function listRecords(query = ""): Promise<RecordSummary[]> {
+  return invoke<RecordSummary[]>("list_records", { query });
 }
 
 export function deleteRecord(recordId: number): Promise<void> {

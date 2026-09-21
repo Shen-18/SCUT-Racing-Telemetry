@@ -14,6 +14,7 @@ fn dataset_metadata_exposes_handle_identity_session_and_ordered_channels_without
     let dataset = DatasetMeta {
         id: 42,
         file_hash: "sha256:abc".into(),
+        file_size: 626_948,
         meta: SessionMeta {
             session: "测试".into(),
             duration: 12.5,
@@ -26,12 +27,13 @@ fn dataset_metadata_exposes_handle_identity_session_and_ordered_channels_without
     let decoded: DatasetMeta = decode_json(&bytes).unwrap();
     assert_eq!(decoded.id, 42);
     assert_eq!(decoded.file_hash, "sha256:abc");
+    assert_eq!(decoded.file_size, 626_948);
     assert_eq!(decoded.meta.session, "测试");
     assert_eq!(decoded.meta.duration, 12.5);
     assert_eq!(decoded.meta.sample_rate_hz, 100.0);
     assert_eq!(decoded.channels.len(), 1);
     let value = serde_json::to_value(&decoded).unwrap();
-    assert_eq!(value.as_object().unwrap().len(), 4);
+    assert_eq!(value.as_object().unwrap().len(), 5);
     assert_eq!(
         value["channels"][0],
         serde_json::json!({

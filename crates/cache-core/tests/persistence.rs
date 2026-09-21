@@ -195,6 +195,35 @@ fn precomputed_frames_survive_reopen_without_raw_or_source_and_echo_generation()
 }
 
 #[test]
+fn window_frame_contains_only_samples_inside_requested_range() {
+    let disk = Disk::new();
+    let identity = disk.source();
+    let root = CacheRoot::open(&disk.0.join("cache")).unwrap();
+    let mut cache = root
+        .publish_metadata(
+            identity.clone(),
+            SessionMeta::default(),
+            vec![channel("Speed")],
+            vec![],
+        )
+        .unwrap();
+    cache
+        .write_raw(
+            "Speed",
+            &telemetry_core::ChannelSeries {
+                times: vec![0., 1., 2., 3., 4.],
+                values: vec![4., 9., -3., 7., 2.],
+            },
+        )
+        .unwrap();
+    cache.build_pyramid("Speed").unwrap();
+
+    let (_, times, _, _) = decode(&cache.read_window_frame("Speed", 1.5, 3.5, 100, 1).unwrap());
+    assert!(!times.is_empty());
+    assert!(times.iter().all(|time| *time >= 1.5 && *time <= 3.5));
+}
+
+#[test]
 fn overview_and_failed_job_leave_published_channels_usable_and_resume() {
     let disk = Disk::new();
     let identity = disk.source();

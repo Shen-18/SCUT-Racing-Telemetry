@@ -58,8 +58,9 @@ describe("buildChannelColorMap", () => {
   });
 
   it("cycles the pool when it is exhausted", () => {
-    const map = buildChannelColorMap(["X1", "X2", "X3", "X4"]);
-    expect(map["X4"]).toBe("#3A9BFF");
+    // 池 6 色：第 7 个未匹配通道回到池首色
+    const map = buildChannelColorMap(["X1", "X2", "X3", "X4", "X5", "X6", "X7"]);
+    expect(map["X7"]).toBe("#3A9BFF");
   });
 
   it("keeps first occurrence when duplicate names appear", () => {

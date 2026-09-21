@@ -24,6 +24,7 @@ describe("appStore", () => {
       checkedChannels: [],
       channelOrder: [],
       window: { start: 0, end: 1 },
+      activeRange: null,
       cursorT: 0,
       theme: "dark",
       layoutPreset: "default",
@@ -40,6 +41,7 @@ describe("appStore", () => {
     expect(state.checkedChannels).toEqual([]);
     expect(state.channelOrder).toEqual([]);
     expect(state.window).toEqual({ start: 0, end: 1 });
+    expect(state.activeRange).toBeNull();
     expect(state.cursorT).toBe(0);
     expect(state.theme).toBe("dark");
     expect(state.layoutPreset).toBe("default");
@@ -60,6 +62,15 @@ describe("appStore", () => {
     const state = useAppStore.getState();
     expect(state.window).toEqual({ start: 10, end: 25 });
     expect(state.generation).toBe(1);
+  });
+
+  it("clamps viewport and cursor to the real sample range", () => {
+    useAppStore.getState().setActiveRange({ start: 7.79, end: 47.89 });
+    useAppStore.getState().setWindow({ start: 0, end: 999 });
+    useAppStore.getState().setCursor(999);
+    const state = useAppStore.getState();
+    expect(state.window).toEqual({ start: 7.79, end: 47.89 });
+    expect(state.cursorT).toBe(47.89);
   });
 
   it("discards expired frames when generation does not match current state", () => {

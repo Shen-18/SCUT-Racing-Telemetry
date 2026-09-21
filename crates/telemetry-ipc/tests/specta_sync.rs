@@ -3,7 +3,7 @@ use std::fs;
 use specta::TypeCollection;
 use telemetry_ipc::{
     CacheRootStatus, ChannelMeta, CmdError, DatasetMeta, FrameHeader, ImportStage, ImportStatus,
-    Request,
+    RecordSummary, Request,
 };
 
 #[test]
@@ -17,7 +17,8 @@ fn rust_specta_contract_and_checked_typescript_surface_stay_in_sync() {
         .register::<CmdError>()
         .register::<FrameHeader>()
         .register::<ChannelMeta>()
-        .register::<DatasetMeta>();
+        .register::<DatasetMeta>()
+        .register::<RecordSummary>();
 
     let rust_contract = format!("{collection:?}");
     for name in [
@@ -29,6 +30,7 @@ fn rust_specta_contract_and_checked_typescript_surface_stay_in_sync() {
         "FrameHeader",
         "ChannelMeta",
         "DatasetMeta",
+        "RecordSummary",
     ] {
         assert!(
             rust_contract.contains(name),
@@ -45,6 +47,7 @@ fn rust_specta_contract_and_checked_typescript_surface_stay_in_sync() {
         "export interface FrameHeader",
         "export interface ChannelMeta",
         "export interface DatasetMeta",
+        "export interface RecordSummary",
         "export interface WindowFrame",
     ] {
         assert!(
@@ -56,6 +59,8 @@ fn rust_specta_contract_and_checked_typescript_surface_stay_in_sync() {
         "generation:number",
         "job_id:number",
         "file_hash:string",
+        "file_size:number",
+        "file_name:string",
         "channels:ChannelMeta[]",
     ] {
         assert!(

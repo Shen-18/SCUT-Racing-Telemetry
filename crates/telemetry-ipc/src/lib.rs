@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 mod types;
-pub use types::{ChannelMeta, DatasetMeta, FrameHeader};
+pub use types::{
+    ChannelMeta, ChannelStatsDto, DatasetMeta, ExportOutcome, FrameHeader, RecordSummary,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type, PartialEq)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
@@ -109,11 +111,16 @@ pub enum ImportStage {
     Ready,
     Failed,
     Cancelled,
+    /// 重复记录：库内已存在同 CSV 内容 hash 的 Ready 缓存（D17 去重），终态。
+    Duplicate,
 }
 
 impl ImportStage {
     pub fn is_terminal(self) -> bool {
-        matches!(self, Self::Ready | Self::Failed | Self::Cancelled)
+        matches!(
+            self,
+            Self::Ready | Self::Failed | Self::Cancelled | Self::Duplicate
+        )
     }
 
     pub fn can_transition_to(self, next: Self) -> bool {
@@ -124,16 +131,16 @@ impl ImportStage {
             (self, next),
             (
                 Self::ReadingMetadata,
-                Self::ReadingChannels | Self::Failed | Self::Cancelled
+                Self::ReadingChannels | Self::Duplicate | Self::Failed | Self::Cancelled
             ) | (
                 Self::ReadingChannels,
-                Self::BuildingRawCache | Self::Failed | Self::Cancelled
+                Self::BuildingRawCache | Self::Duplicate | Self::Failed | Self::Cancelled
             ) | (
                 Self::BuildingRawCache,
-                Self::BuildingPyramid | Self::Failed | Self::Cancelled
+                Self::BuildingPyramid | Self::Duplicate | Self::Failed | Self::Cancelled
             ) | (
                 Self::BuildingPyramid,
-                Self::Ready | Self::Failed | Self::Cancelled
+                Self::Ready | Self::Duplicate | Self::Failed | Self::Cancelled
             )
         )
     }
@@ -148,6 +155,16 @@ impl ImportStage {
             })
         }
     }
+}
+
+/// import_files 的单文件结果（queued = 已建 job 轮询；duplicate/failed 无 job）。
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+pub struct QueuedImport {
+    pub job_id: Option<u64>,
+    pub file_name: String,
+    /// "queued" | "duplicate" | "failed"
+    pub status: String,
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type, PartialEq)]

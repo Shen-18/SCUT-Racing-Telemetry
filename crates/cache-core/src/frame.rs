@@ -80,7 +80,7 @@ pub(crate) fn window(
     start: f64,
     end: f64,
 ) -> Result<(u64, u64)> {
-    let left = storage::upper_bound(reader, l.offset, 16, l.count, start)?.saturating_sub(1);
+    let left = storage::lower_bound(reader, l.offset, 16, l.count, start)?;
     let right = storage::upper_bound(reader, l.offset, 16, l.count, end)?;
     Ok((left.min(right), right))
 }

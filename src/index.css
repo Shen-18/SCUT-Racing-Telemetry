@@ -76,20 +76,95 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--border-focu
 .timeline-bar__metrics { flex: 0 1 auto; }
 .timeline-bar__metrics span { white-space: nowrap; }
 
-.dockview-theme-abyss,
-.dv-dockview,
-.dv-grid-view,
-.dv-grid-view > .dv-view-container {
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-}
-
 .uplot {
   max-width: 100%;
   max-height: 100%;
   color: var(--text-muted);
+}
+
+/* ghost 按钮（B.3）：透明底 1px --line 边框，hover 边框变 --red（文字不变色） */
+.ghost-button {
+  transition: border-color 100ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.ghost-button:hover:not(:disabled) {
+  border-color: var(--red) !important;
+}
+
+.ghost-button:disabled {
+  cursor: not-allowed;
+  color: var(--dim2) !important;
+}
+
+/* 资料库导航 tab（P8 顶栏）：激活 = 白字 + 2px 红下划线 */
+/* 一级栏导航 tab（9.5）：红底白字，激活态白色下划线（F1 转播栏样式） */
+.nav-tab {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.75);
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: color 100ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.nav-tab:hover:not(.nav-tab--disabled) {
+  color: #ffffff;
+}
+
+.nav-tab--active {
+  color: #ffffff;
+  border-bottom-color: #ffffff;
+}
+
+.nav-tab--disabled {
+  color: rgba(255, 255, 255, 0.42);
+  cursor: not-allowed;
+}
+
+/* 骨架屏（B.3）：--panel 色块 250ms 呼吸，禁 spinner */
+.skeleton {
+  background: var(--panel);
+  animation: skeleton-breath 250ms ease-in-out infinite alternate;
+}
+
+@keyframes skeleton-breath {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+/* 资料库行 hover（P8） */
+.library-row:hover {
+  background: var(--bg2);
+}
+
+/* 三栏拖宽分割条（附录 B.2 rev.5）：1px --line、命中区 6px、hover/拖拽变 --red */
+.column-splitter {
+  width: 6px;
+  flex: none;
+  cursor: col-resize;
+  position: relative;
+  user-select: none;
+}
+
+.column-splitter__line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--line);
+  transition: background 100ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.column-splitter:hover .column-splitter__line,
+.column-splitter--drag .column-splitter__line {
+  background: var(--red);
 }
 
 @media (max-width: 1100px) {
@@ -103,9 +178,42 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--border-focu
 }
 
 @media (max-width: 900px) {
-  .app-shell__brand span,
   .app-shell__tools span,
   .app-shell__status span:last-child,
   .timeline-bar__metrics span:first-child { display: none; }
   .app-shell__tools { gap: 6px !important; }
+}
+
+/* 图表游标（B.11 走查）：实线、稍粗；不画横向线 */
+.uplot .u-cursor-x {
+  border-right: 2px solid var(--text) !important;
+  opacity: 0.75;
+}
+
+.uplot .u-cursor-y {
+  display: none !important;
+}
+
+/* uPlot 图例已关闭（单线渲染，走查项）；兜底隐藏残留图例 */
+.uplot .u-legend {
+  display: none !important;
+}
+
+/* 细滑条（负责人走查）：6px、灰色圆角 thumb，去掉方块感 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--dim2);
 }

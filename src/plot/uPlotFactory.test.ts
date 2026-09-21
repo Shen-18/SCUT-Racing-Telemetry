@@ -8,6 +8,7 @@ import {
   requiresPlotRebuild,
   resizePlot,
   scutSync,
+  zoomWindowAt,
 } from "./uPlotFactory";
 import type uPlot from "uplot";
 
@@ -122,5 +123,10 @@ describe("uPlotFactory", () => {
     } as unknown as uPlot;
     resizePlot(mockPlot, 1024, 400);
     expect(mockPlot.setSize).toHaveBeenCalledWith({ width: 1024, height: 400 });
+  });
+
+  it("zooms around the cursor anchor in both directions", () => {
+    expect(zoomWindowAt({ start: 0, end: 10 }, 5, -1)).toEqual({ start: 1, end: 9 });
+    expect(zoomWindowAt({ start: 0, end: 10 }, 5, 1)).toEqual({ start: -1.25, end: 11.25 });
   });
 });

@@ -10,6 +10,7 @@ describe("ChannelTree priority dispatch logic", () => {
       dataset: {
         id: 1,
         file_hash: "hash123",
+        file_size: 123456,
         meta: {
           file_path: "D:\\Data\\test.xrk", file_type: "xrk", session: "Test",
           vehicle: "SCUT", racer: "Driver", championship: "FSAE", comment: "",
