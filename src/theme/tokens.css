@@ -23,7 +23,7 @@
   --orange: #FF8001; /* LAT G / 构建中 */
 
   /* Shell 尺寸（B.2） */
-  --topbar-height: 54px;
+  --topbar-height: 46px;
   --statusbar-height: 24px;
   --timeline-height: 110px;
   --left-width-default: 280px;
@@ -83,7 +83,7 @@
   --orange: #FF8001;
 
   /* Shell 尺寸（B.2） */
-  --topbar-height: 54px;
+  --topbar-height: 46px;
   --statusbar-height: 24px;
   --timeline-height: 110px;
   --left-width-default: 280px;

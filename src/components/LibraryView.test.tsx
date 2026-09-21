@@ -72,7 +72,7 @@ describe("cacheStateLabel", () => {
 });
 
 describe("LibraryHomeView", () => {
-  it("renders group headers, record fields and cache chips", () => {
+  it("renders the compact detail columns without filename or cache state", () => {
     const html = renderToStaticMarkup(
       <LibraryHomeView
         records={records}
@@ -96,10 +96,15 @@ describe("LibraryHomeView", () => {
     );
     expect(html).toContain("按日期");
     expect(html).toContain("2026-09-14");
-    expect(html).toContain("AGX.xrk");
     expect(html).toContain("10:00:00");
+    expect(html).toContain("开始时间");
+    expect(html).toContain("车手");
+    expect(html).toContain("车辆");
+    expect(html).toContain("时长");
+    expect(html).toContain("操作");
     expect(html).toContain("1:29.0");
-    expect(html).toContain("就绪");
+    expect(html).not.toContain("缓存");
+    expect(html).not.toContain(">就绪<");
     expect(html).toContain("3 条记录");
   });
 

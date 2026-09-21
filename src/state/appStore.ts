@@ -36,6 +36,7 @@ export interface AppState {
   setTheme(t: "dark" | "light"): void;
   bumpGeneration(): void;
   startImport(path: string): Promise<number>;
+  trackImport(jobId: number): void;
   prioritizeImport(jobId: number, channels: string[]): Promise<void>;
   applyFrame(frame: WindowFrame): boolean;
   updateImportStatus(status: ImportStatus): void;
@@ -207,6 +208,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     }));
     return jobId;
+  },
+
+  trackImport(jobId: number): void {
+    set((state) => {
+      if (state.importJobs[jobId]) return state;
+      return {
+        importJobs: {
+          ...state.importJobs,
+          [jobId]: {
+            job_id: jobId,
+            stage: "ReadingMetadata",
+            progress: 0,
+            file_hash: "",
+            meta_ready: false,
+            error: null,
+          },
+        },
+      };
+    });
   },
 
   async prioritizeImport(jobId: number, channels: string[]): Promise<void> {

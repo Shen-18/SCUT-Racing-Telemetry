@@ -100,10 +100,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--border-focu
 /* 一级栏导航 tab（9.5）：红底白字，激活态白色下划线（F1 转播栏样式） */
 .nav-tab {
   display: flex;
-  align-items: center;
-  padding: 0 14px;
+  align-items: flex-end;
+  padding: 0 16px 6px;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 15px;
   letter-spacing: 2px;
   color: rgba(255, 255, 255, 0.75);
   border-bottom: 3px solid transparent;

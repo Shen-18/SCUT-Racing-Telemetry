@@ -21,7 +21,7 @@ const GHOST_BUTTON_STYLE: React.CSSProperties = {
   color: "var(--text)",
   fontFamily: "inherit",
   fontWeight: 700,
-  fontSize: "12px",
+  fontSize: "14px",
   letterSpacing: "1.5px",
   padding: "7px 16px",
   cursor: "pointer",
@@ -236,9 +236,9 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
       <header
         className="app-shell__topbar"
         style={{
-          height: "var(--topbar-height, 54px)",
-          minHeight: "var(--topbar-height, 54px)",
-          maxHeight: "var(--topbar-height, 54px)",
+          height: "var(--topbar-height, 46px)",
+          minHeight: "var(--topbar-height, 46px)",
+          maxHeight: "var(--topbar-height, 46px)",
           display: "flex",
           alignItems: "center",
           gap: "16px",
@@ -259,7 +259,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
         {isLibrary ? (
           <nav
             data-testid="library-nav"
-            style={{ display: "flex", alignItems: "stretch", height: "100%", marginLeft: "24px" }}
+            style={{ display: "flex", alignItems: "stretch", height: "100%", marginLeft: "16px" }}
           >
             <span className="nav-tab nav-tab--active" data-testid="nav-database">
               DATABASE
@@ -270,7 +270,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
             >
               TELEMETRY VIDEO
             </span>
-            <span className="nav-tab nav-tab--disabled" title="WiFi 设备下载于 Step 13 启用">
+            <span className="nav-tab nav-tab--disabled" title="WiFi 设备下载于后续版本提供">
               WIFI DOWNLOAD
             </span>
           </nav>
@@ -280,8 +280,10 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
             style={{
               color: "#FFFFFF",
               fontWeight: 700,
-              fontSize: "12px",
+              fontSize: "15px",
               letterSpacing: "2px",
+              alignSelf: "flex-end",
+              paddingBottom: "6px",
               whiteSpace: "nowrap",
             }}
           >
