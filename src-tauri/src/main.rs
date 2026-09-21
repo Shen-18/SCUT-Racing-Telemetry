@@ -91,14 +91,29 @@ fn prioritize_import(
 ) -> Result<(), CmdError> {
     state.prioritize_import(job_id, &channels)
 }
+fn authoritative_duration(
+    dataset: &cache_core::DatasetCache,
+    fallback: f64,
+) -> Result<f64, CmdError> {
+    // The source file's declared duration can be rounded or include a tail
+    // after the final real sample.  Analysis metadata must use the raw span.
+    Ok(dataset
+        .sample_range(&[])
+        .map_err(state::cache_error)?
+        .map(|(_, end)| end)
+        .unwrap_or(fallback))
+}
+
 fn dataset_meta_inner(id: u64, state: &AppState) -> Result<DatasetMeta, CmdError> {
     let dataset = state.dataset(id)?;
     let manifest = dataset.manifest();
+    let mut meta = manifest.meta.clone();
+    meta.duration = authoritative_duration(&dataset, meta.duration)?;
     Ok(DatasetMeta {
         id,
         file_hash: manifest.identity.hash.clone(),
         file_size: manifest.identity.size,
-        meta: manifest.meta.clone(),
+        meta,
         channels: manifest
             .channels
             .iter()
@@ -509,4 +524,52 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("failed");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::authoritative_duration;
+    use cache_core::{CacheRoot, SourceIdentity};
+    use telemetry_core::{ChannelDType, ChannelMeta, ChannelSeries, ChannelSource, SessionMeta};
+
+    #[test]
+    fn duration_uses_last_raw_sample_instead_of_rounded_metadata() {
+        let root_path = std::env::temp_dir().join(format!("scut-duration-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root_path);
+        let root = CacheRoot::open(&root_path).unwrap();
+        let hash = "a".repeat(64);
+        root.publish_metadata(
+            SourceIdentity {
+                hash: hash.clone(),
+                mtime: 1,
+                size: 1,
+            },
+            SessionMeta {
+                duration: 59.9,
+                ..Default::default()
+            },
+            vec![ChannelMeta {
+                dtype: ChannelDType::Numeric,
+                key: "Speed".into(),
+                name: "Speed".into(),
+                unit: "km/h".into(),
+                source: ChannelSource::Csv,
+                sample_rate_hz: 100.0,
+            }],
+            vec![],
+        )
+        .unwrap();
+        root.publish_raw(
+            &hash,
+            "Speed",
+            &ChannelSeries {
+                times: vec![0.0, 59.817],
+                values: vec![1.0, 2.0],
+            },
+        )
+        .unwrap();
+        let dataset = root.dataset(&hash).unwrap();
+        assert_eq!(authoritative_duration(&dataset, 59.9).unwrap(), 59.817);
+        let _ = std::fs::remove_dir_all(root_path);
+    }
 }
