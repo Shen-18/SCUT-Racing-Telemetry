@@ -362,8 +362,11 @@ impl AppState {
                     )
                 })
                 .collect();
-            let grid =
-                csv_io::gridify(meta.duration, &refs).map_err(|e| command_error("csv_error", e))?;
+            let grid = csv_io::gridify(0.0, &refs).map_err(|e| command_error("csv_error", e))?;
+            let mut meta = meta;
+            if let Some(end) = grid.times.last().copied().filter(|t| t.is_finite()) {
+                meta.duration = end;
+            }
             let staging_dir = root.path().join("temp");
             std::fs::create_dir_all(&staging_dir).map_err(io_err)?;
             let nanos = std::time::SystemTime::now()

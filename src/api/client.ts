@@ -9,6 +9,7 @@ import type {
   QueuedImport,
   ChannelMeta as BaseChannelMeta,
   DatasetMeta as BaseDatasetMeta,
+  SampleRange,
 } from "./types";
 
 export type { RecordSummary, QueuedImport };
@@ -102,6 +103,10 @@ export function closeDataset(id: number): Promise<void> {
 
 export function datasetMeta(id: number): Promise<DatasetMeta> {
   return invoke<DatasetMeta>("dataset_meta", { id });
+}
+
+export function sampleRange(id: number, channels: string[] = []): Promise<SampleRange | null> {
+  return invoke<SampleRange | null>("sample_range", { id, channels });
 }
 
 export async function windowSeries(

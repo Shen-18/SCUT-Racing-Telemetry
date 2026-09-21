@@ -190,6 +190,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       openingFileHash: null,
       view: "analysis",
     }));
+    try {
+      const range = await client.sampleRange(meta.id, channelKeys);
+      if (range && useAppStore.getState().dataset?.id === meta.id) {
+        useAppStore.getState().setActiveRange(range);
+      }
+    } catch {
+      // Metadata duration remains a fallback for older caches.
+    }
   },
 
   async startImport(path: string): Promise<number> {

@@ -31,9 +31,11 @@ interface ChannelStats {
 
 export const StatsPanel: React.FC = () => {
   const dataset = useAppStore((s) => s.dataset);
+  const activeRange = useAppStore((s) => s.activeRange);
   const checkedChannels = useAppStore((s) => s.checkedChannels);
   const cursorT = useAppStore((s) => s.cursorT);
-  const duration = dataset ? getDatasetDuration(dataset) : 0;
+  const rangeStart = activeRange?.start ?? 0;
+  const duration = activeRange?.end ?? (dataset ? getDatasetDuration(dataset) : 0);
 
   const [stats, setStats] = useState<Record<string, ChannelStats>>({});
   const [statsError, setStatsError] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export const StatsPanel: React.FC = () => {
     const stateRef = { cancelled: false, timer: 0 };
     stateRef.timer = globalThis.setTimeout(() => {
       client
-        .getStats(dataset.id, [...ordered], 0, duration)
+        .getStats(dataset.id, [...ordered], rangeStart, duration)
         .then((result) => {
           if (!stateRef.cancelled) {
             setStats(result);
@@ -81,7 +83,7 @@ export const StatsPanel: React.FC = () => {
       stateRef.cancelled = true;
       globalThis.clearTimeout(stateRef.timer);
     };
-  }, [dataset?.id, signature]);
+  }, [dataset?.id, signature, rangeStart, duration]);
 
   if (!dataset) {
     return (

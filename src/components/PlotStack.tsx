@@ -257,9 +257,10 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
 
 export const PlotStack: React.FC = () => {
   const dataset = useAppStore((s) => s.dataset);
+  const activeRange = useAppStore((s) => s.activeRange);
   const checkedChannels = useAppStore((s) => s.checkedChannels);
   const cursorT = useAppStore((s) => s.cursorT);
-  const duration = dataset ? getDatasetDuration(dataset) : 0;
+  const duration = activeRange?.end ?? (dataset ? getDatasetDuration(dataset) : 0);
 
   const colorMap = useMemo(
     () => buildChannelColorMap(dataset?.channels.map((c) => c.name) ?? []),

@@ -70,6 +70,37 @@ pub(crate) fn open_raw(path: &std::path::Path, entry: &ChannelEntry) -> Result<B
     Ok(reader)
 }
 impl DatasetCache {
+    /// Exact timestamp span covered by the requested raw channels.
+    pub fn sample_range(&self, keys: &[String]) -> Result<Option<(f64, f64)>> {
+        let requested: Vec<&str> = if keys.is_empty() {
+            self.manifest
+                .channels
+                .iter()
+                .map(|c| c.meta.key.as_str())
+                .collect()
+        } else {
+            keys.iter().map(String::as_str).collect()
+        };
+        let mut start = f64::INFINITY;
+        let mut end = f64::NEG_INFINITY;
+        for key in requested {
+            let entry = self.entry(key)?;
+            if entry.full_count == 0 {
+                continue;
+            }
+            let mut reader = open_raw(&self.path, entry)?;
+            let first = reader.f64(16)?;
+            let last = entry.last_time.unwrap_or(first);
+            if first.is_finite() {
+                start = start.min(first);
+            }
+            if last.is_finite() {
+                end = end.max(last);
+            }
+        }
+        Ok((start.is_finite() && end.is_finite() && start <= end).then_some((start, end)))
+    }
+
     pub(crate) fn root(&self) -> CacheRoot {
         CacheRoot {
             path: self.path.parent().unwrap().parent().unwrap().to_owned(),

@@ -62,10 +62,13 @@ pub fn gridify(
         .filter(|rate| rate.is_finite())
         .fold(0.0, f64::max);
     let grid_hz = ((max_rate * 1000.0).round() / 1000.0).clamp(MIN_GRID_HZ, MAX_GRID_HZ);
-    let t_end = channels
+    let sample_end = channels
         .iter()
         .filter_map(|(_, s)| s.times.iter().rev().find(|t| t.is_finite()).copied())
-        .fold(duration_hint.max(0.0), f64::max);
+        .reduce(f64::max);
+    // Metadata duration must never create synthetic samples after the last
+    // timestamp that actually exists in the source channels.
+    let t_end = sample_end.unwrap_or_else(|| duration_hint.max(0.0));
     if t_end <= 0.0 {
         return Err(TelemetryError::Parse(
             "cannot build CSV grid: no samples or non-positive duration".into(),
@@ -347,7 +350,8 @@ pub fn read_aim_csv(text: &str) -> Result<AimCsv, TelemetryError> {
 
 #[cfg(test)]
 mod tests {
-    use super::read_aim_csv;
+    use super::{gridify, read_aim_csv};
+    use crate::{ChannelDType, ChannelMeta, ChannelSeries, ChannelSource};
 
     #[test]
     fn sorts_and_dedupes_non_increasing_timestamps_keeping_last() {
@@ -383,5 +387,23 @@ mod tests {
         let csv = "\u{feff}Format,AiM CSV File\nSession,S\nTime,10:00:00\nSample Rate,10\nDuration,1\n\nTime,Speed\ns,km/h\n0.0,1\n0.1,2\n";
         let parsed = read_aim_csv(csv).expect("parse");
         assert_eq!(parsed.times, vec![0.0, 0.1]);
+    }
+
+    #[test]
+    fn gridify_never_extends_past_real_samples_for_metadata_duration() {
+        let meta = ChannelMeta {
+            key: "Speed".into(),
+            name: "Speed".into(),
+            unit: "km/h".into(),
+            source: ChannelSource::Csv,
+            dtype: ChannelDType::Numeric,
+            sample_rate_hz: 0.0,
+        };
+        let series = ChannelSeries {
+            times: vec![0.0, 0.5, 1.0],
+            values: vec![1.0, 2.0, 3.0],
+        };
+        let grid = gridify(10.0, &[(&meta, &series)]).unwrap();
+        assert_eq!(grid.times.last().copied(), Some(1.0));
     }
 }

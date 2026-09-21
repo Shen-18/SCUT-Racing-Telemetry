@@ -44,6 +44,12 @@ pub struct DatasetMeta {
     pub channels: Vec<ChannelMeta>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, Type, PartialEq)]
+pub struct SampleRange {
+    pub start: f64,
+    pub end: f64,
+}
+
 /// One library-home row: a cached dataset summarized from its manifest.
 /// No DB row yet (Step 9A moves this to telemetry.db); the cache manifest
 /// is the source of truth so the interface can stay stable.

@@ -4,6 +4,7 @@ use specta::Type;
 mod types;
 pub use types::{
     ChannelMeta, ChannelStatsDto, DatasetMeta, ExportOutcome, FrameHeader, RecordSummary,
+    SampleRange,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type, PartialEq)]

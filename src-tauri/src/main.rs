@@ -8,7 +8,7 @@ use scut_racing_telemetry::{
 use std::{path::Path, path::PathBuf, sync::Arc};
 use telemetry_ipc::{
     ChannelMeta, ChannelStatsDto, CmdError, DatasetMeta, ExportOutcome, ImportStatus, QueuedImport,
-    RecordSummary,
+    RecordSummary, SampleRange,
 };
 fn project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -120,6 +120,19 @@ fn open_dataset(
 ) -> Result<DatasetMeta, CmdError> {
     let id = state.open_handle(&file_hash)?;
     dataset_meta_inner(id, &state)
+}
+
+#[tauri::command]
+fn sample_range(
+    id: u64,
+    channels: Vec<String>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Option<SampleRange>, CmdError> {
+    state
+        .dataset(id)?
+        .sample_range(&channels)
+        .map(|range| range.map(|(start, end)| SampleRange { start, end }))
+        .map_err(state::cache_error)
 }
 #[tauri::command]
 fn dataset_meta(id: u64, state: tauri::State<'_, Arc<AppState>>) -> Result<DatasetMeta, CmdError> {
@@ -473,6 +486,7 @@ fn main() {
             open_dataset,
             close_dataset,
             dataset_meta,
+            sample_range,
             window_series,
             cursor_values,
             laps,

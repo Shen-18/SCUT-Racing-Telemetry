@@ -75,6 +75,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
   const checkedChannels = useAppStore((s) => s.checkedChannels);
   const window = useAppStore((s) => s.window);
   const cursorT = useAppStore((s) => s.cursorT);
+  const activeRange = useAppStore((s) => s.activeRange);
   const setCursor = useAppStore((s) => s.setCursor);
   const generation = useAppStore((s) => s.generation);
   const theme = useAppStore((s) => s.theme);
@@ -211,8 +212,9 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
     try {
       const outPath = await client.pickExportFile(`${datasetFileName.replace(/\.[^.]+$/, "")}_selected.csv`);
       if (!outPath) return;
-      const duration = dataset.meta.duration > 0 ? dataset.meta.duration : 1e9;
-      await client.exportCsv(dataset.id, checkedChannels, 0, duration, outPath);
+      const duration = activeRange?.end ?? (dataset.meta.duration > 0 ? dataset.meta.duration : 1e9);
+      const start = activeRange?.start ?? 0;
+      await client.exportCsv(dataset.id, checkedChannels, start, duration, outPath);
       setError(`已导出 ${checkedChannels.length} 个通道`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

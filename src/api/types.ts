@@ -18,6 +18,7 @@ export interface SessionMeta {
   duration:number;
 }
 export interface DatasetMeta { id:number; file_hash:string; file_size?:number; meta:SessionMeta; channels:ChannelMeta[] }
+export interface SampleRange { start:number; end:number }
 export interface QueuedImport { job_id:number|null; file_name:string; status:"queued"|"duplicate"|"failed"; message:string|null }
 export interface RecordSummary {
   file_hash:string;
