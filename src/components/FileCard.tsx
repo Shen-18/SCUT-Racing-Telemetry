@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useAppStore } from "../state/appStore";
 import * as client from "../api/client";
 import { getDatasetDuration, getDatasetFileName } from "../api/dataset";
-import { formatDurationShort } from "../utils/time";
+import { formatClockTime } from "../utils/time";
 
 // 文件卡片（手册附录 B.4-P1 上半 / DESIGN-SPEC 4.3）
 // 文件名 F1 Display 700 13px；chips = RATE/LAPS/SIZE；元数据表右对齐。
@@ -93,7 +93,7 @@ export const FileCardView: React.FC<FileCardViewProps> = ({ dataset, laps = null
   const rows: Array<{ label: string; value: React.ReactNode }> = [
     { label: "车手 Driver", value: meta.racer || "—" },
     { label: "赛车 Car", value: meta.vehicle || "—" },
-    { label: "时长 Duration", value: formatDurationShort(getDatasetDuration(dataset)) },
+    { label: "时长 Duration", value: formatClockTime(getDatasetDuration(dataset), 3) },
   ];
 
   return (

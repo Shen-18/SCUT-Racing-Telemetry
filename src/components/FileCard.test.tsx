@@ -95,7 +95,7 @@ describe("FileCard", () => {
     expect(html).toContain("82.4MB");
     expect(html).toContain("车手 Driver");
     expect(html).toContain("LIN");
-    expect(html).toContain("19:56.3");
+    expect(html).toContain("19:56.300");
     expect(html).not.toContain("最快圈");
   });
 
