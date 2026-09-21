@@ -57,8 +57,8 @@ describe("groupRecords", () => {
 
   it("falls back to placeholder keys for blank fields", () => {
     const blank = [record({ file_hash: "x", record_date: "  ", vehicle: "" })];
-    expect(groupRecords(blank, "time")[0].key).toBe("未知日期");
-    expect(groupRecords(blank, "vehicle")[0].key).toBe("未知赛车");
+    expect(groupRecords(blank, "time")[0].key).toBe("UNKNOWN DATE");
+    expect(groupRecords(blank, "vehicle")[0].key).toBe("UNKNOWN CAR");
   });
 });
 
@@ -94,18 +94,18 @@ describe("LibraryHomeView", () => {
         onExportDay={() => {}}
       />
     );
-    expect(html).toContain("按日期");
+    expect(html).toContain("BY DATE");
     expect(html).toContain("2026-09-14");
     expect(html).toContain("10:00:00");
-    expect(html).toContain("开始时间");
-    expect(html).toContain("车手");
-    expect(html).toContain("车辆");
-    expect(html).toContain("时长");
-    expect(html).toContain("操作");
+    expect(html).toContain("START TIME");
+    expect(html).toContain("DRIVER");
+    expect(html).toContain("CAR");
+    expect(html).toContain("DURATION");
+    expect(html).toContain("ACTIONS");
     expect(html).toContain("1:29.0");
     expect(html).not.toContain("缓存");
     expect(html).not.toContain(">就绪<");
-    expect(html).toContain("3 条记录");
+    expect(html).toContain("3 RECORDS");
   });
 
   it("renders the empty-library guide", () => {
@@ -130,8 +130,8 @@ describe("LibraryHomeView", () => {
         onExportDay={() => {}}
       />
     );
-    expect(html).toContain("导入遥测文件开始分析");
-    expect(html).toContain("选择文件导入");
+    expect(html).toContain("IMPORT TELEMETRY TO START ANALYSIS");
+    expect(html).toContain("IMPORT FILES");
   });
 
   it("renders skeleton while loading and error banner with retry", () => {
@@ -180,7 +180,7 @@ describe("LibraryHomeView", () => {
       />
     );
     expect(failed).toContain("invoke failed");
-    expect(failed).toContain("重试");
+    expect(failed).toContain("RETRY");
   });
 
   it("shows no-match hint when the query filters everything out", () => {
@@ -205,6 +205,59 @@ describe("LibraryHomeView", () => {
         onExportDay={() => {}}
       />
     );
-    expect(html).toContain("无匹配记录");
+    expect(html).toContain("NO MATCHING RECORDS");
+  });
+
+  it("renders bulk selection bar and toggle select all / deselect all buttons", () => {
+    // 1 of 3 selected: bulk bar visible, toggle shows SELECT ALL
+    const partialHtml = renderToStaticMarkup(
+      <LibraryHomeView
+        records={records}
+        error={null}
+        query=""
+        category="time"
+        selectedGroup={null}
+        selected={new Set(["a"])}
+        onQueryChange={() => {}}
+        onCategoryChange={() => {}}
+        onGroupChange={() => {}}
+        onOpen={() => {}}
+        onDelete={() => {}}
+        onRetry={() => {}}
+        onPickFiles={() => {}}
+        onToggleSelect={() => {}}
+        onExportOne={() => {}}
+        onExportSelected={() => {}}
+        onExportDay={() => {}}
+      />
+    );
+    expect(partialHtml).toContain("bulk-bar");
+    expect(partialHtml).toContain("1 SELECTED");
+    expect(partialHtml).toContain("SELECT ALL");
+
+    // All 3 selected: bulk bar toggle shows DESELECT ALL
+    const allHtml = renderToStaticMarkup(
+      <LibraryHomeView
+        records={records}
+        error={null}
+        query=""
+        category="time"
+        selectedGroup={null}
+        selected={new Set(["a", "b", "c"])}
+        onQueryChange={() => {}}
+        onCategoryChange={() => {}}
+        onGroupChange={() => {}}
+        onOpen={() => {}}
+        onDelete={() => {}}
+        onRetry={() => {}}
+        onPickFiles={() => {}}
+        onToggleSelect={() => {}}
+        onExportOne={() => {}}
+        onExportSelected={() => {}}
+        onExportDay={() => {}}
+      />
+    );
+    expect(allHtml).toContain("3 SELECTED");
+    expect(allHtml).toContain("DESELECT ALL");
   });
 });

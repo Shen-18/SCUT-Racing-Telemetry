@@ -101,9 +101,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--border-focu
 .nav-tab {
   display: flex;
   align-items: flex-end;
-  padding: 0 16px 6px;
+  padding: 0 16px 9px;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 14px;
   letter-spacing: 2px;
   color: rgba(255, 255, 255, 0.75);
   border-bottom: 3px solid transparent;
@@ -145,6 +145,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--border-focu
 /* 三栏拖宽分割条（附录 B.2 rev.5）：1px --line、命中区 6px、hover/拖拽变 --red */
 .column-splitter {
   width: 6px;
+  height: 100%;
+  align-self: stretch;
   flex: none;
   cursor: col-resize;
   position: relative;

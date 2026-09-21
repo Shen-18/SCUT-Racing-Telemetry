@@ -282,10 +282,10 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
             style={{
               color: "#FFFFFF",
               fontWeight: 700,
-              fontSize: "15px",
+              fontSize: "14px",
               letterSpacing: "2px",
               alignSelf: "flex-end",
-              paddingBottom: "6px",
+              paddingBottom: "9px",
               whiteSpace: "nowrap",
             }}
           >
@@ -356,7 +356,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
       )}
 
       {/* 主区：资料库主页（P8）或 固定三栏分析布局（B.2） */}
-      <main className="app-shell__main" style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "hidden" }}>
+      <main className="app-shell__main" style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
         {isLibrary ? (
           <LibraryView />
         ) : (

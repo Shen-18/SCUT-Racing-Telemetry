@@ -16,8 +16,8 @@ describe("foundation shell (B.2 rev.5)", () => {
     expect(html).toContain("WIFI DOWNLOAD");
     expect(html).not.toContain("library-secondary-bar");
     expect(html).toContain("pick-files");
-    expect(html).toContain("按日期");
-    expect(html).toContain("按赛车");
+    expect(html).toContain("BY DATE");
+    expect(html).toContain("BY CAR");
     expect(html).not.toContain("canvas");
   });
 
