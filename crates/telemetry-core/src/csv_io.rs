@@ -139,7 +139,7 @@ pub fn write_aim_csv<W: std::io::Write>(
         w,
         "{},{}",
         csv_field("Duration"),
-        csv_field(&format!("{:.3}", grid.times.last().copied().unwrap_or(0.0)))
+        csv_field(&format!("{:.2}", grid.times.last().copied().unwrap_or(0.0)))
     )?;
     writeln!(w, "{},{}", csv_field("Segment"), csv_field("Session"))?;
     writeln!(
@@ -159,7 +159,10 @@ pub fn write_aim_csv<W: std::io::Write>(
     writeln!(w, "{}", names.join(","))?;
     writeln!(w, "{}", units.join(","))?;
     for (index, time) in grid.times.iter().enumerate() {
-        let mut row = vec![csv_field(&format!("{time:.3}"))];
+        // Exported telemetry is sampled at the grid rate (normally 100 Hz),
+        // so hundredths of a second are the truthful precision of this table.
+        // Channel values retain their full numeric precision below.
+        let mut row = vec![csv_field(&format!("{time:.2}"))];
         row.extend(
             grid.channels
                 .iter()
@@ -350,8 +353,8 @@ pub fn read_aim_csv(text: &str) -> Result<AimCsv, TelemetryError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{gridify, read_aim_csv};
-    use crate::{ChannelDType, ChannelMeta, ChannelSeries, ChannelSource};
+    use super::{gridify, read_aim_csv, write_aim_csv, Gridded, GriddedChannel};
+    use crate::{ChannelDType, ChannelMeta, ChannelSeries, ChannelSource, SessionMeta};
 
     #[test]
     fn sorts_and_dedupes_non_increasing_timestamps_keeping_last() {
@@ -405,5 +408,25 @@ mod tests {
         };
         let grid = gridify(10.0, &[(&meta, &series)]).unwrap();
         assert_eq!(grid.times.last().copied(), Some(1.0));
+    }
+
+    #[test]
+    fn writes_time_and_duration_to_hundredths_without_extending_end() {
+        let grid = Gridded {
+            grid_hz: 100.0,
+            times: vec![0.0, 59.861],
+            channels: vec![GriddedChannel {
+                name: "Speed".into(),
+                unit: "km/h".into(),
+                values: vec![1.0, 2.0],
+            }],
+        };
+        let mut output = Vec::new();
+        write_aim_csv(&mut output, &SessionMeta::default(), &grid, 0).unwrap();
+        let csv = String::from_utf8(output).unwrap();
+        assert!(csv.contains("\"Duration\",\"59.86\""));
+        assert!(csv.contains("\"59.86\""));
+        assert!(csv.contains("2.000000000"));
+        assert!(!csv.contains("59.9"));
     }
 }
