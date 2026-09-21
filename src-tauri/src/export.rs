@@ -1,13 +1,11 @@
 //! 导出四件套（2026-09-16 负责人需求）：
-//! 1. 单条导出 / 2. 多选导出 / 3. 当日导出 —— 库页，本质是把库内 `source.csv`
-//!    复制到用户目录（D17 后库内记录即规范 CSV，零转换）；
-//! 4. 选中通道导出 —— 分析页，从 source.csv 抽取勾选通道列重新生成规范 CSV。
-//!
-//! 旧版（D17 之前）导入的记录没有 source.csv，导出返回 missing 并提示重新导入。
+//! 1. 单条导出 / 2. 多选导出 / 3. 当日导出 —— 库页，从 raw 缓存重建规范 CSV；
+//! 4. 选中通道导出 —— 分析页，从 raw 缓存抽取勾选通道列重新生成规范 CSV。
 
 use crate::state::{command_error, CommandResult};
 use cache_core::CacheRoot;
 use std::path::{Path, PathBuf};
+use telemetry_core::ChannelSeries;
 use telemetry_ipc::ExportOutcome;
 
 fn io_err(error: std::io::Error) -> telemetry_ipc::CmdError {
@@ -31,6 +29,88 @@ fn record_source_name(file_path: &std::path::Path) -> String {
         .to_string()
 }
 
+fn infer_grid_hz(times: &[f64]) -> f64 {
+    let mut diffs: Vec<f64> = times
+        .windows(2)
+        .filter_map(|pair| {
+            let diff = pair[1] - pair[0];
+            (diff.is_finite() && diff > 0.0).then_some(diff)
+        })
+        .collect();
+    if diffs.is_empty() {
+        return 1.0;
+    }
+    diffs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    (1.0 / diffs[diffs.len() / 2]).clamp(1.0, 500.0)
+}
+
+/// Reconstructs a CSV grid from exact raw samples without resampling.
+fn raw_grid(
+    dataset: &cache_core::DatasetCache,
+    channels: &[String],
+    start: f64,
+    end: f64,
+) -> CommandResult<telemetry_core::csv_io::Gridded> {
+    if channels.is_empty() {
+        return Err(command_error("no_channels_selected", "记录没有可导出的数值通道"));
+    }
+    let mut selected: Vec<(&cache_core::CachedChannelMeta, ChannelSeries)> = Vec::new();
+    for key in channels {
+        let entry = dataset
+            .manifest()
+            .channels
+            .iter()
+            .find(|entry| entry.meta.key == *key)
+            .ok_or_else(|| command_error("channel_not_found", key))?;
+        let series = dataset
+            .read_raw(key)
+            .map_err(|error| command_error("raw_missing", error))?;
+        selected.push((&entry.meta, series));
+    }
+    let reference_times = selected[0].1.times.clone();
+    if reference_times.is_empty() {
+        return Err(command_error("empty_range", "记录没有真实数据点"));
+    }
+    if selected
+        .iter()
+        .any(|(_, series)| series.times != reference_times)
+    {
+        return Err(command_error(
+            "raw_grid_mismatch",
+            "通道 raw 时间轴不一致，拒绝静默重采样",
+        ));
+    }
+    let mut kept_indices = Vec::new();
+    for (index, time) in reference_times.iter().enumerate() {
+        if *time >= start - 1e-9 && *time <= end + 1e-9 {
+            kept_indices.push(index);
+        }
+    }
+    if kept_indices.is_empty() {
+        return Err(command_error("empty_range", "所选时间范围内没有真实数据点"));
+    }
+    let times = kept_indices
+        .iter()
+        .map(|index| reference_times[*index])
+        .collect::<Vec<_>>();
+    let gridded_channels = selected
+        .iter()
+        .map(|(meta, series)| telemetry_core::csv_io::GriddedChannel {
+            name: meta.name.clone(),
+            unit: meta.unit.clone(),
+            values: kept_indices
+                .iter()
+                .map(|index| series.values[*index])
+                .collect(),
+        })
+        .collect();
+    Ok(telemetry_core::csv_io::Gridded {
+        grid_hz: infer_grid_hz(&reference_times),
+        times,
+        channels: gridded_channels,
+    })
+}
+
 /// 同批重名时追加纳秒十六进制防撞。
 fn pick_destination(
     dir: &Path,
@@ -49,7 +129,7 @@ fn pick_destination(
     dir.join(format!("{candidate}.csv"))
 }
 
-/// 批量导出记录的库内 source.csv 到目标目录（单条/多选/当日共用）。
+/// 批量导出记录的 raw 缓存到目标目录（单条/多选/当日共用）。
 pub fn export_records(
     cache: &CacheRoot,
     hashes: &[String],
@@ -89,20 +169,26 @@ pub fn export_records(
             }
         };
         let file_name = record_source_name(&dataset.manifest().meta.file_path);
-        let source = cache.path().join("datasets").join(hash).join("source.csv");
-        if !source.exists() {
-            outcomes.push(ExportOutcome {
-                file_hash: hash.clone(),
-                file_name,
-                status: "missing".into(),
-                path: None,
-                message: Some("该记录为旧版导入（无库内 CSV），请重新导入后再导出".into()),
-            });
-            continue;
-        }
         let dest = pick_destination(out_dir, &base_name(&file_name), &mut taken);
-        match std::fs::copy(&source, &dest) {
-            Ok(_) => outcomes.push(ExportOutcome {
+        let channels: Vec<String> = dataset
+            .manifest()
+            .channels
+            .iter()
+            .map(|entry| entry.meta.key.clone())
+            .collect();
+        match raw_grid(&dataset, &channels, f64::NEG_INFINITY, f64::INFINITY)
+            .and_then(|grid| {
+                let mut buffer = Vec::new();
+                telemetry_core::csv_io::write_aim_csv(
+                    &mut buffer,
+                    &dataset.manifest().meta,
+                    &grid,
+                    dataset.manifest().laps.len(),
+                )
+                .map_err(|error| command_error("csv_error", error))?;
+                std::fs::write(&dest, buffer).map_err(io_err)
+            }) {
+            Ok(()) => outcomes.push(ExportOutcome {
                 file_hash: hash.clone(),
                 file_name,
                 status: "exported".into(),
@@ -112,17 +198,17 @@ pub fn export_records(
             Err(error) => outcomes.push(ExportOutcome {
                 file_hash: hash.clone(),
                 file_name,
-                status: "failed".into(),
+                status: "missing".into(),
                 path: None,
-                message: Some(format!("复制失败: {error}")),
+                message: Some(format!("无法从 raw 缓存导出，请重新导入：{}", error.message)),
             }),
         }
     }
     Ok(outcomes)
 }
 
-/// 选中通道导出：从库内 source.csv 抽取勾选通道（时间范围 [start,end]），
-/// 按用户勾选顺序重新生成规范 CSV。数据保持库内统一网格，不重采样。
+/// 选中通道导出：从 raw 缓存抽取勾选通道（时间范围 [start,end]），
+/// 按用户勾选顺序重新生成规范 CSV，不重采样。
 pub fn export_channels(
     cache: &CacheRoot,
     hash: &str,
@@ -140,74 +226,22 @@ pub fn export_channels(
             "请先勾选要导出的通道",
         ));
     }
-    let source = cache.path().join("datasets").join(hash).join("source.csv");
-    if !source.exists() {
-        return Err(command_error(
-            "source_missing",
-            "该记录为旧版导入（无库内 CSV），请重新导入后再导出",
-        ));
-    }
-    let parsed = csv_parser::parse_csv(&source).map_err(|e| command_error("csv_error", e))?;
-    let mut selected: Vec<(&telemetry_core::ChannelMeta, &telemetry_core::ChannelSeries)> =
-        Vec::with_capacity(channels.len());
-    let mut missing: Vec<String> = Vec::new();
-    for wanted in channels {
-        match parsed.channels.iter().find(|c| &c.key == wanted) {
-            Some(meta) => {
-                let series = parsed
-                    .series
-                    .get(&meta.key)
-                    .expect("csv_parser builds a series for every channel");
-                selected.push((meta, series));
-            }
-            None => missing.push(wanted.clone()),
-        }
-    }
-    if selected.is_empty() {
+    let dataset = cache.dataset(hash).map_err(|error| command_error("dataset_missing", error))?;
+    let known: std::collections::HashSet<&str> = dataset
+        .manifest()
+        .channels
+        .iter()
+        .map(|entry| entry.meta.key.as_str())
+        .collect();
+    if channels.iter().all(|key| !known.contains(key.as_str())) {
         return Err(command_error(
             "no_channels_selected",
-            format!("勾选的通道在记录中不存在: {}", missing.join("、")),
+            format!("勾选的通道在记录中不存在: {}", channels.join("、")),
         ));
     }
-    // 全部列共享同一网格时间轴（csv_parser 的构造保证）
-    let times: Vec<f64> = selected[0].1.times.clone();
-    let grid_hz = if parsed.meta.sample_rate_hz > 0.0 {
-        parsed.meta.sample_rate_hz as f64
-    } else {
-        1.0
-    };
-    let mut kept_times: Vec<f64> = Vec::new();
-    let mut kept_values: Vec<Vec<f32>> = vec![Vec::new(); selected.len()];
-    for (row_index, t) in times.iter().enumerate() {
-        let t = *t;
-        if t < start - 1e-9 || t > end + 1e-9 {
-            continue;
-        }
-        kept_times.push(t);
-        for (position, (_, series)) in selected.iter().enumerate() {
-            kept_values[position].push(series.values.get(row_index).copied().unwrap_or(f32::NAN));
-        }
-    }
-    if kept_times.is_empty() {
-        return Err(command_error("empty_range", "所选时间范围内没有数据行"));
-    }
-    let grid = telemetry_core::csv_io::Gridded {
-        grid_hz,
-        times: kept_times,
-        channels: selected
-            .iter()
-            .enumerate()
-            .map(
-                |(position, (meta, _))| telemetry_core::csv_io::GriddedChannel {
-                    name: meta.name.clone(),
-                    unit: meta.unit.clone(),
-                    values: std::mem::take(&mut kept_values[position]),
-                },
-            )
-            .collect(),
-    };
+    let grid = raw_grid(&dataset, channels, start, end)?;
     let mut buffer = Vec::new();
-    telemetry_core::csv_io::write_aim_csv(&mut buffer, &parsed.meta, &grid, 0)
+    telemetry_core::csv_io::write_aim_csv(&mut buffer, &dataset.manifest().meta, &grid, 0)
         .map_err(|e| command_error("csv_error", e))?;
     if let Some(parent) = out_path.parent() {
         std::fs::create_dir_all(parent).map_err(io_err)?;
@@ -227,7 +261,7 @@ mod tests {
     fn write_record(root: &Path, hash: &str, original_name: &str) {
         let dataset_dir = root.join("datasets").join(hash);
         std::fs::create_dir_all(&dataset_dir).unwrap();
-        use telemetry_core::{ChannelDType, ChannelMeta, ChannelSource};
+        use telemetry_core::{ChannelDType, ChannelMeta, ChannelSource, SessionMeta};
         let make_channel = |key: &str, name: &str, unit: &str| ChannelMeta {
             key: key.into(),
             name: name.into(),
@@ -239,25 +273,9 @@ mod tests {
         let speed = make_channel("Speed", "Speed", "km/h");
         let rpm = make_channel("RPM", "RPM", "rpm");
         let times = vec![0.0, 0.5, 1.0, 1.5, 2.0];
-        let grid = telemetry_core::csv_io::Gridded {
-            grid_hz: 2.0,
-            times: times.clone(),
-            channels: vec![
-                telemetry_core::csv_io::GriddedChannel {
-                    name: "Speed".into(),
-                    unit: "km/h".into(),
-                    values: vec![10.0, 20.0, 30.0, 40.0, 50.0],
-                },
-                telemetry_core::csv_io::GriddedChannel {
-                    name: "RPM".into(),
-                    unit: "rpm".into(),
-                    values: vec![1000.0, 2000.0, 3000.0, 4000.0, 5000.0],
-                },
-            ],
-        };
-        let meta = telemetry_core::SessionMeta {
+        let session = SessionMeta {
             file_path: std::path::PathBuf::from(format!("D:\\Data\\{original_name}")),
-            file_type: "csv".into(),
+            file_type: "xrk".into(),
             session: "FP2".into(),
             vehicle: "SCUT-24".into(),
             racer: "LIN".into(),
@@ -268,14 +286,39 @@ mod tests {
             sample_rate_hz: 2.0,
             duration: 2.0,
         };
-        let mut buffer = Vec::new();
-        telemetry_core::csv_io::write_aim_csv(&mut buffer, &meta, &grid, 1).unwrap();
-        std::fs::write(dataset_dir.join("source.csv"), buffer).unwrap();
-        let json = format!(
-            r#"{{"version":1,"identity":{{"hash":"{hash}","mtime":100,"size":1}},"meta":{{"file_path":"D:\\Data\\{original_name}","file_type":"csv","session":"FP2","vehicle":"SCUT-24","racer":"LIN","championship":"","comment":"","date":"2026-09-15","start_time":"14:00:00","sample_rate_hz":2.0,"duration":2.0}},"channels":[],"laps":[],"state":"Ready","error":null}}"#
-        );
-        std::fs::write(dataset_dir.join("manifest.json"), json).unwrap();
-        let _ = (speed, rpm, times);
+        let cache = cache_core::CacheRoot::open(root).unwrap();
+        cache
+            .publish_metadata(
+                cache_core::SourceIdentity {
+                    hash: hash.into(),
+                    mtime: 100,
+                    size: 1,
+                },
+                session,
+                vec![speed, rpm],
+                Vec::new(),
+            )
+            .unwrap();
+        cache
+            .publish_raw(
+                hash,
+                "Speed",
+                &telemetry_core::ChannelSeries {
+                    times: times.clone(),
+                    values: vec![10.0, 20.0, 30.0, 40.0, 50.0],
+                },
+            )
+            .unwrap();
+        cache
+            .publish_raw(
+                hash,
+                "RPM",
+                &telemetry_core::ChannelSeries {
+                    times,
+                    values: vec![1000.0, 2000.0, 3000.0, 4000.0, 5000.0],
+                },
+            )
+            .unwrap();
     }
 
     /// 旧版（D17 之前）导入记录：有 manifest、无 source.csv → 导出应判 missing。

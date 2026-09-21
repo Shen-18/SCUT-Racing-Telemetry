@@ -101,7 +101,7 @@ fn unzip_import_archive(path: &Path) -> Result<(PathBuf, Vec<PathBuf>), CmdError
 
 impl AppState {
     /// 统一多文件导入入口（拖入 / 文件对话框 / 路径输入）。
-    /// zip 解包后逐文件入队；库内已存在同 CSV 内容 hash 的 Ready 缓存即判重复跳过（D17）。
+    /// zip 解包后逐文件入队；库内已存在相同内容 hash 的 Ready 缓存即判重复跳过。
     pub async fn import_files(
         self: &Arc<Self>,
         paths: Vec<PathBuf>,
@@ -208,12 +208,11 @@ impl AppState {
             }
         }
 
-        // csv 文件内容 hash 即库内 identity：Ready 即重复，无需建 job
-        if ext == "csv"
-            && self
-                .cache
-                .dataset(&identity.hash)
-                .is_ok_and(|dataset| dataset.manifest().state == CacheState::Ready)
+        // 内容 hash 是库内 identity：任何格式的 Ready 记录都不重复导入。
+        if self
+            .cache
+            .dataset(&identity.hash)
+            .is_ok_and(|dataset| dataset.manifest().state == CacheState::Ready)
         {
             if let Some(dir) = owning_temp_dir.clone() {
                 self.release_temp_dir(&dir);
@@ -233,7 +232,7 @@ impl AppState {
         tauri::async_runtime::spawn(async move {
             let result = match ext.as_str() {
                 "csv" => state.run_import_csv(id, path, identity).await,
-                _ => state.run_import_xrk(id, path).await,
+                _ => state.run_import_xrk(id, path, identity).await,
             };
             if let Err(error) = result {
                 fail_job(&state, id, &error.message);
@@ -264,8 +263,13 @@ impl AppState {
         }
     }
 
-    /// xrk/xrz：DLL 解析 → 全通道样本 → 网格化生成规范 CSV → 以 CSV 内容 hash 发布缓存。
-    async fn run_import_xrk(&self, id: u64, path: PathBuf) -> CommandResult<()> {
+    /// xrk/xrz：DLL 解析 → 全通道样本 → 网格化生成 raw/pyramid 缓存，并保留原始文件。
+    async fn run_import_xrk(
+        &self,
+        id: u64,
+        path: PathBuf,
+        identity: SourceIdentity,
+    ) -> CommandResult<()> {
         let metadata = self
             .aim
             .metadata(path.clone())
@@ -350,6 +354,12 @@ impl AppState {
             job.transition(ImportStage::BuildingRawCache)?;
         }
         let root = self.cache.clone();
+        let original_path = path.clone();
+        let original_ext = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("xrk")
+            .to_ascii_lowercase();
         let build = tauri::async_runtime::spawn_blocking(move || -> Result<String, CmdError> {
             let refs: Vec<(&telemetry_core::ChannelMeta, &ChannelSeries)> = channels
                 .iter()
@@ -367,26 +377,12 @@ impl AppState {
             if let Some(end) = grid.times.last().copied().filter(|t| t.is_finite()) {
                 meta.duration = end;
             }
-            let staging_dir = root.path().join("temp");
-            std::fs::create_dir_all(&staging_dir).map_err(io_err)?;
-            let nanos = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0);
-            let staging_file = staging_dir.join(format!("import-{id}-{nanos}.csv"));
-            {
-                let mut file = std::fs::File::create(&staging_file).map_err(io_err)?;
-                csv_io::write_aim_csv(&mut file, &meta, &grid, laps.len())
-                    .map_err(|e| command_error("csv_error", e))?;
-            }
-            let identity = SourceIdentity::from_path(&staging_file).map_err(cache_error)?;
             let channel_keys: Vec<String> =
                 channels.iter().map(|channel| channel.key.clone()).collect();
             if root
                 .dataset(&identity.hash)
                 .is_ok_and(|dataset| dataset.manifest().state == CacheState::Ready)
             {
-                let _ = std::fs::remove_file(&staging_file);
                 return Err(command_error(
                     "duplicate_import",
                     "库内已存在相同数据的记录，未重复导入",
@@ -396,7 +392,11 @@ impl AppState {
                 .publish_metadata(identity.clone(), meta, channels, laps)
                 .map_err(cache_error)?;
             let dataset_dir = root.path().join("datasets").join(&identity.hash);
-            std::fs::copy(&staging_file, dataset_dir.join("source.csv")).map_err(io_err)?;
+            std::fs::copy(
+                &original_path,
+                dataset_dir.join(format!("source.{original_ext}")),
+            )
+            .map_err(io_err)?;
             let mut gridded: HashMap<String, ChannelSeries> = HashMap::new();
             for (index, channel) in grid.channels.iter().enumerate() {
                 gridded.insert(
@@ -407,7 +407,6 @@ impl AppState {
                     },
                 );
             }
-            let _ = std::fs::remove_file(&staging_file);
             let channel_keys: Vec<String> = cache
                 .manifest()
                 .channels
@@ -606,7 +605,7 @@ mod integration_tests {
     }
 
     #[test]
-    fn real_xrk_import_becomes_csv_record_and_window_frame_works() {
+    fn real_xrk_import_preserves_original_and_window_frame_works() {
         let _guard = lock();
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -621,18 +620,18 @@ mod integration_tests {
         let status = wait_ready(&state, job_id);
         assert_eq!(status.stage, telemetry_ipc::ImportStage::Ready);
         assert!(status.meta_ready);
-        // D17：库内 identity 是 CSV 内容 hash，而不是原始 xrk hash
+        // 原始 XRK 内容 hash 是库内 identity。
         let original = SourceIdentity::from_path(&source).unwrap();
-        assert_ne!(status.file_hash, original.hash);
-        let source_csv = state
+        assert_eq!(status.file_hash, original.hash);
+        let source_xrk = state
             .cache
             .path()
             .join("datasets")
             .join(&status.file_hash)
-            .join("source.csv");
+            .join("source.xrk");
         assert!(
-            source_csv.exists(),
-            "source.csv must be stored inside the library"
+            source_xrk.exists(),
+            "source.xrk must be stored inside the library"
         );
         let handle = state.open_handle(&status.file_hash).unwrap();
         let frame = state
