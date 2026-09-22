@@ -340,6 +340,8 @@ export function createStackedOptions({
       sync: { key: SCUT_SYNC_KEY },
       drag: { x: false, y: false, setScale: false },
       points: { show: false },
+      x: false,
+      y: false,
     },
   };
 }

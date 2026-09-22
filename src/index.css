@@ -186,13 +186,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--border-focu
   .app-shell__tools { gap: 6px !important; }
 }
 
-/* 图表游标（B.11 走查）：实线、稍粗；不画横向线 */
-.uplot .u-cursor-x {
-  border-right: 2px solid var(--text) !important;
-  opacity: 0.75;
-}
-
-.uplot .u-cursor-y {
+/* 禁用跟随鼠标的 hover 游标线与圆点（鼠标悬停时不出现跟随线） */
+.uplot .u-cursor-x,
+.uplot .u-cursor-y,
+.uplot .u-cursor-pt {
   display: none !important;
 }
 

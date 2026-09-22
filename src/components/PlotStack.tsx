@@ -219,6 +219,9 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
           display: "flex",
           alignItems: "center",
           gap: "6px",
+          background: "var(--bg2, rgba(15,15,15,0.75))",
+          padding: "1px 6px",
+          borderRadius: "3px",
         }}
       >
         <span style={{ width: "3px", height: "11px", background: color, display: "inline-block", flex: "none" }} />
@@ -235,16 +238,17 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
         {building && <span style={{ fontSize: "9px", color: "var(--orange)", fontWeight: 700 }}>构建中…</span>}
         {error && <span style={{ fontSize: "9px", color: "var(--red)", fontWeight: 700 }}>{error}</span>}
       </div>
-      {/* 数据游标线（B.11：仅窗内绘制，虚线 --text 55%） */}
+      {/* 数据游标线：红色实线 */}
       {frac !== null && (
         <div
+          data-testid="cursor-line"
           style={{
             position: "absolute",
-            top: "26px",
-            bottom: "14px",
+            top: 0,
+            bottom: 0,
             left: `calc(${(frac * 100).toFixed(3)}%)`,
             width: 0,
-            borderLeft: "1px dashed rgba(127,127,127,0.9)",
+            borderLeft: "2px solid var(--red, #E10600)",
             pointerEvents: "none",
             zIndex: 1,
           }}
