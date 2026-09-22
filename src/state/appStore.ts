@@ -65,6 +65,19 @@ function sameChannelSelection(a: string[], b: string[]): boolean {
   return a.every((key) => expected.has(key));
 }
 
+async function selectedSampleRange(id: number, channels: string[]): Promise<SampleRange | null> {
+  if (channels.length === 0) return null;
+  const ranges = await Promise.all(channels.map((channel) => client.sampleRange(id, [channel])));
+  let start = Number.POSITIVE_INFINITY;
+  let end = Number.NEGATIVE_INFINITY;
+  for (const range of ranges) {
+    if (!range) continue;
+    start = Math.min(start, range.start);
+    end = Math.max(end, range.end);
+  }
+  return Number.isFinite(start) && Number.isFinite(end) && start <= end ? { start, end } : null;
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   dataset: null,
   checkedChannels: [],
@@ -143,7 +156,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const selected = get().checkedChannels;
     get().setActiveRange(null);
     if (selected.length === 0) return;
-    void client.sampleOverlap(dataset.id, selected).then((range) => {
+    void selectedSampleRange(dataset.id, selected).then((range) => {
       const state = get();
       if (state.dataset?.id !== dataset.id || !sameChannelSelection(state.checkedChannels, selected)) {
         return;
@@ -199,19 +212,24 @@ export const useAppStore = create<AppState>((set, get) => ({
         ? [channelKeys[0]]
         : [];
     const duration = getDatasetDuration(meta);
+    let initialRange: SampleRange | null = null;
+    try {
+      initialRange = await selectedSampleRange(meta.id, initialChecked);
+    } catch {
+      // Partially-built caches may not expose a range yet.
+    }
 
     set((state) => ({
       dataset: meta,
       checkedChannels: initialChecked,
       channelOrder: channelKeys,
-      window: { start: 0, end: duration },
-      activeRange: null,
+      window: clampWindowToSampleRange({ start: 0, end: duration }, initialRange),
+      activeRange: initialRange,
       generation: state.generation + 1,
       currentFrame: null,
       openingFileHash: null,
       view: "analysis",
     }));
-    // Window is initialized to the complete dataset duration [0, duration].
   },
 
   async startImport(path: string): Promise<number> {

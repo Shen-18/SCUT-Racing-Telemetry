@@ -63,7 +63,10 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
   const [loading, setLoading] = useState(false);
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [, setPlotLayoutVersion] = useState(0);
   const draggingRef = useRef(false);
+
+  const plotOverRect = (): DOMRect | null => plotRef.current?.over.getBoundingClientRect() ?? null;
 
   // 数据请求：每通道独立，generation 过期丢弃
   useEffect(() => {
@@ -130,6 +133,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
     }
     container.querySelector(".uplot")?.remove();
     plotRef.current = new uPlot(options, frameToSingleLine(frame), container);
+    setPlotLayoutVersion((version) => version + 1);
     return () => {
       plotRef.current?.destroy();
       plotRef.current = null;
@@ -149,6 +153,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
       const rect = container.getBoundingClientRect();
       if (rect.width > 20 && rect.height > 20) {
         resizePlot(plotRef.current!, Math.floor(rect.width), Math.floor(rect.height));
+        setPlotLayoutVersion((version) => version + 1);
       }
     });
     observer.observe(container);
@@ -157,18 +162,21 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
 
   // B.11 手势：拖动 = 游标；滚轮 = 焦点缩放
   const fractionFromEvent = (clientX: number): number => {
-    const rect = containerRef.current!.getBoundingClientRect();
+    const rect = plotOverRect();
+    if (!rect || rect.width <= 0 || clientX < rect.left || clientX > rect.right) return -1;
     return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
-    draggingRef.current = true;
     const f = fractionFromEvent(e.clientX);
+    if (f < 0) return;
+    draggingRef.current = true;
     setCursor(window.start + f * (window.end - window.start));
     const onMove = (ev: MouseEvent) => {
       if (!draggingRef.current) return;
       const frac = fractionFromEvent(ev.clientX);
+      if (frac < 0) return;
       setCursor(window.start + frac * (window.end - window.start));
     };
     const onUp = () => {
@@ -186,6 +194,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const f = fractionFromEvent(e.clientX);
+    if (f < 0) return;
     const next = zoomAtViewport(window, duration, f, e.deltaY > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR);
     setWindow(next);
   };
@@ -246,7 +255,13 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
             position: "absolute",
             top: 0,
             bottom: 0,
-            left: `calc(${(frac * 100).toFixed(3)}%)`,
+            left: (() => {
+              const outer = containerRef.current?.getBoundingClientRect();
+              const over = plotOverRect();
+              return outer && over
+                ? `${over.left - outer.left + frac * over.width}px`
+                : `${(frac * 100).toFixed(3)}%`;
+            })(),
             width: 0,
             borderLeft: "2px solid var(--red, #E10600)",
             pointerEvents: "none",
@@ -264,7 +279,7 @@ export const PlotStack: React.FC = () => {
   const activeRange = useAppStore((s) => s.activeRange);
   const checkedChannels = useAppStore((s) => s.checkedChannels);
   const cursorT = useAppStore((s) => s.cursorT);
-  const duration = dataset ? getDatasetDuration(dataset) : 0;
+  const duration = activeRange?.end ?? (dataset ? getDatasetDuration(dataset) : 0);
 
   const colorMap = useMemo(
     () => buildChannelColorMap(dataset?.channels.map((c) => c.name) ?? []),

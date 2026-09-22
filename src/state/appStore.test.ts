@@ -121,7 +121,7 @@ describe("appStore", () => {
       },
       window: { start: 0, end: 641.9 },
     });
-    vi.spyOn(client, "sampleOverlap").mockResolvedValueOnce({ start: 4.672, end: 641.397 });
+    vi.spyOn(client, "sampleRange").mockResolvedValueOnce({ start: 4.672, end: 641.397 });
 
     useAppStore.getState().toggleChannel("Brake");
 
@@ -129,7 +129,7 @@ describe("appStore", () => {
       expect(useAppStore.getState().activeRange).toEqual({ start: 4.672, end: 641.397 });
     });
     expect(useAppStore.getState().window).toEqual({ start: 4.672, end: 641.397 });
-    expect(client.sampleOverlap).toHaveBeenCalledWith(7, ["Brake"]);
+    expect(client.sampleRange).toHaveBeenCalledWith(7, ["Brake"]);
   });
 
   it("setTheme and setCursor update respective properties", () => {

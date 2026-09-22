@@ -1,5 +1,6 @@
 use crate::{
     pyramid::open_pyramid,
+    raw::open_raw,
     storage::{self, BlobReader},
     CacheError, DatasetCache, LevelIndex, Result,
 };
@@ -60,6 +61,16 @@ impl DatasetCache {
                 times.push(f64::from_le_bytes(b[..8].try_into().unwrap()));
                 mins.push(f32::from_le_bytes(b[8..12].try_into().unwrap()));
                 maxs.push(f32::from_le_bytes(b[12..].try_into().unwrap()));
+            }
+            if let Some(last_time) = entry.last_time {
+                let needs_endpoint = times.last().is_none_or(|t| *t < last_time - 1e-9);
+                if needs_endpoint && last_time >= start - 1e-9 && last_time <= end + 1e-9 {
+                    let mut raw = open_raw(&self.path, entry)?;
+                    let value = raw.f32(16 + entry.full_count * 8 + (entry.full_count - 1) * 4)?;
+                    times.push(last_time);
+                    mins.push(value);
+                    maxs.push(value);
+                }
             }
         }
         let header = FrameHeader {

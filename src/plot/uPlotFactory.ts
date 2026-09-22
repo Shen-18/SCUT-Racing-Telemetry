@@ -321,11 +321,12 @@ export function createStackedOptions({
     axes: [
       {
         scale: "x",
-        show: xAxisVisible,
+        show: true,
+        size: xAxisVisible ? undefined : 0,
         stroke: theme.textMuted,
         grid: { stroke: theme.borderSubtle, width: 1 },
-        ticks: { stroke: theme.border, width: 1 },
-        values: (_u, vals) => formatAxisValues(vals, "s"),
+        ticks: { show: xAxisVisible, stroke: theme.border, width: 1 },
+        values: (_u, vals) => (xAxisVisible ? formatAxisValues(vals, "s") : vals.map(() => "")),
       },
       {
         scale: "y",

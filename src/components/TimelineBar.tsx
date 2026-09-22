@@ -56,8 +56,8 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
   const windowRange = props.window ?? storeWindow;
   const cursorT = props.cursorT ?? storeCursorT;
   const domain: SampleRange = {
-    start: 0,
-    end: props.duration ?? (storeDataset ? getDatasetDuration(storeDataset) : Math.max(1, windowRange.end)),
+    start: activeRange?.start ?? 0,
+    end: activeRange?.end ?? props.duration ?? (storeDataset ? getDatasetDuration(storeDataset) : Math.max(1, windowRange.end)),
   };
   const duration = Math.max(0.001, domain.end - domain.start);
 
@@ -70,6 +70,8 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
     clientX: 0,
     origWindow: { start: 0, end: 1 },
   });
+  const didDragRef = useRef(false);
+  const suppressClickRef = useRef(false);
 
 
   const resetZoom = () => {
@@ -84,6 +86,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
       clientX: e.clientX,
       origWindow: { ...windowRange },
     };
+    didDragRef.current = false;
   }, [windowRange]);
 
   useEffect(() => {
@@ -115,6 +118,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
       if (!track) return;
       const rect = track.getBoundingClientRect();
       const deltaX = e.clientX - dragStartRef.current.clientX;
+      if (Math.abs(deltaX) >= 3) didDragRef.current = true;
       const nextWindow = calculateTimelinePan(
         deltaX,
         rect.width,
@@ -137,6 +141,11 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
         setWindow(pending);
       }
       setIsDragging(false);
+      suppressClickRef.current = didDragRef.current;
+      globalThis.setTimeout(() => {
+        suppressClickRef.current = false;
+        didDragRef.current = false;
+      }, 0);
     };
 
     globalThis.addEventListener("mousemove", handleMouseMove);
@@ -154,7 +163,11 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
   // Click on track outside slider to jump / center viewport
   const handleTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const track = trackRef.current;
-    if (!track || isDragging) return;
+    if (!track || isDragging || suppressClickRef.current || didDragRef.current) {
+      suppressClickRef.current = false;
+      didDragRef.current = false;
+      return;
+    }
     const rect = track.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const clickT = domain.start + (clickX / rect.width) * duration;

@@ -267,7 +267,8 @@ fn overview_and_failed_job_leave_published_channels_usable_and_resume() {
     assert_eq!(cache.manifest().state, CacheState::Failed);
     assert_eq!(cache.manifest().error.as_deref(), Some("actor stopped"));
     let (_, times, _, maxs) = decode(&cache.read_window_frame("Speed", 0., 2050., 256, 1).unwrap());
-    assert_eq!(times.len(), 257);
+    assert_eq!(times.len(), 258);
+    assert_eq!(times.last().copied(), Some(2050.));
     assert_eq!(maxs[128], 9999.);
     cache.build_pyramid("Speed").unwrap();
     cache.mark_ready().unwrap();
