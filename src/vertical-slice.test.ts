@@ -22,8 +22,7 @@ describe("Frontend vertical slice acceptance pipeline", () => {
       duration: 65.5,
     },
     channels: [
-      { key: "GPS Speed (AiM Interpolated)", name: "GPS Speed (AiM Interpolated)", unit: "km/h", source: "Gps", dtype: "Numeric", sample_rate_hz: 50, ready: true },
-      { key: "GPS Speed", name: "GPS Speed", unit: "km/h", source: "DerivedGps", dtype: "Numeric", sample_rate_hz: 50, ready: false },
+      { key: "GPS Speed", name: "GPS Speed", unit: "km/h", source: "DerivedGps", dtype: "Numeric", sample_rate_hz: 50, ready: true },
       { key: "RPM", name: "RPM", unit: "rpm", source: "AiM", dtype: "Numeric", sample_rate_hz: 50, ready: false },
       { key: "Steering", name: "Steering", unit: "deg", source: "AiM", dtype: "Numeric", sample_rate_hz: 50, ready: false },
     ],
@@ -79,10 +78,10 @@ describe("Frontend vertical slice acceptance pipeline", () => {
     const storeAfterMeta = useAppStore.getState();
     expect(openDatasetSpy).toHaveBeenCalledWith("sha256_agx_sample");
     expect(storeAfterMeta.dataset).toEqual(agxMeta);
-    expect(storeAfterMeta.dataset?.channels.length).toBe(4);
+    expect(storeAfterMeta.dataset?.channels.length).toBe(3);
     expect(storeAfterMeta.window).toEqual({ start: 0, end: 65.5 });
     // Real AGX default speed channel is selected, not hardcoded "Speed"
-    expect(storeAfterMeta.checkedChannels).toContain("GPS Speed (AiM Interpolated)");
+    expect(storeAfterMeta.checkedChannels).toContain("GPS Speed");
     expect(storeAfterMeta.checkedChannels).not.toContain("Speed");
 
     // 4. Click to prioritize during active import
@@ -101,7 +100,7 @@ describe("Frontend vertical slice acceptance pipeline", () => {
     });
 
     const activeSpeedChannel = client.selectDefaultSpeedChannel(agxMeta.channels)!;
-    expect(activeSpeedChannel).toBe("GPS Speed (AiM Interpolated)");
+    expect(activeSpeedChannel).toBe("GPS Speed");
 
     const initialGen = useAppStore.getState().generation;
     const initialFrame = await client.windowSeries(
@@ -114,7 +113,7 @@ describe("Frontend vertical slice acceptance pipeline", () => {
     );
     const appliedInitial = useAppStore.getState().applyFrame(initialFrame);
     expect(appliedInitial).toBe(true);
-    expect(useAppStore.getState().currentFrame?.header.channel).toBe("GPS Speed (AiM Interpolated)");
+    expect(useAppStore.getState().currentFrame?.header.channel).toBe("GPS Speed");
     expect(useAppStore.getState().currentFrame?.header.generation).toBe(initialGen);
 
     // 6. User zooms or pans viewport -> bumps generation to initialGen + 1
@@ -141,7 +140,7 @@ describe("Frontend vertical slice acceptance pipeline", () => {
     const appliedFresh = useAppStore.getState().applyFrame(freshFrame);
     expect(appliedFresh).toBe(true);
     expect(useAppStore.getState().currentFrame?.header.generation).toBe(bumpedGen);
-    expect(useAppStore.getState().currentFrame?.header.channel).toBe("GPS Speed (AiM Interpolated)");
+    expect(useAppStore.getState().currentFrame?.header.channel).toBe("GPS Speed");
     expect(windowSeriesSpy).toHaveBeenCalled();
   });
 });

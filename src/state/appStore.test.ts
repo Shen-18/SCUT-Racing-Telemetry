@@ -195,7 +195,7 @@ describe("appStore", () => {
     expect(useAppStore.getState().window).toEqual({ start: 0, end: 127.375 });
   });
 
-  it("openDataset prioritizes official 'GPS Speed (AiM Interpolated)' for real AGX dataset", async () => {
+  it("openDataset prioritizes real 'GPS Speed' over AiM Interpolated for real AGX dataset", async () => {
     const agxMeta: client.DatasetMeta = {
       id: 2,
       file_hash: "hash_agx",
@@ -211,7 +211,7 @@ describe("appStore", () => {
 
     await useAppStore.getState().openDataset("hash_agx");
     const state = useAppStore.getState();
-    expect(state.checkedChannels).toEqual(["GPS Speed (AiM Interpolated)"]);
+    expect(state.checkedChannels).toEqual(["GPS Speed"]);
   });
 
   it("openDataset selects raw 'GPS Speed' when official interpolated GPS channel is absent", async () => {

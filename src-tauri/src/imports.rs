@@ -287,9 +287,13 @@ impl AppState {
             duration: metadata.meta.duration,
             ..Default::default()
         };
+        // Filter out AiM's synthetic interpolated GPS channels entirely.
+        // Only real physical sensors (Standard), raw GPS (GpsRaw), and
+        // physically-derived GPS (DerivedGps, DerivedCalc) are imported.
         let mut channels: Vec<telemetry_core::ChannelMeta> = metadata
             .channels
             .iter()
+            .filter(|c| c.source != telemetry_core::ChannelSource::Gps)
             .cloned()
             .map(|c| telemetry_core::ChannelMeta {
                 key: c.key,
@@ -311,6 +315,7 @@ impl AppState {
                 return Ok(());
             }
             job.transition(ImportStage::ReadingChannels)?;
+            job.enqueue(keys.clone());
         }
         if self
             .jobs
@@ -324,7 +329,7 @@ impl AppState {
             .read_channels(path.clone(), keys.clone())
             .await
             .map_err(|e| command_error("dll_error", e))?;
-        let mut samples: HashMap<String, ChannelSeries> = loaded.series;
+        let samples: HashMap<String, ChannelSeries> = loaded.series;
         for key in &keys {
             if !samples.contains_key(key) {
                 return Err(command_error("channel_not_found", key));
@@ -360,36 +365,8 @@ impl AppState {
             .to_ascii_lowercase();
         let build = tauri::async_runtime::spawn_blocking(move || -> Result<String, CmdError> {
             let mut meta = meta;
-            let physical_end = samples
-                .iter()
-                .filter(|(key, _)| {
-                    channels
-                        .iter()
-                        .find(|c| &c.key == *key)
-                        .is_some_and(|c| c.source != telemetry_core::ChannelSource::Gps)
-                })
-                .filter_map(|(_, series)| series.times.last().copied())
-                .filter(|time| time.is_finite())
-                .reduce(f64::max);
-
-            if let Some(end) = physical_end {
-                for (key, series) in &mut samples {
-                    let is_interpolated = channels
-                        .iter()
-                        .find(|c| &c.key == key)
-                        .is_some_and(|c| c.source == telemetry_core::ChannelSource::Gps);
-                    if is_interpolated {
-                        let keep = series
-                            .times
-                            .iter()
-                            .position(|&t| t > end + 1e-9)
-                            .unwrap_or(series.times.len());
-                        series.times.truncate(keep);
-                        series.values.truncate(keep);
-                    }
-                }
-                meta.duration = end;
-            } else if let Some(end) = samples
+            // All channels are real (Gps filtered at import); duration = max end.
+            if let Some(end) = samples
                 .values()
                 .filter_map(|series| series.times.last().copied())
                 .filter(|time| time.is_finite())
@@ -666,7 +643,7 @@ mod integration_tests {
         assert_eq!(cached.manifest().meta.duration, max_end);
         let handle = state.open_handle(&status.file_hash).unwrap();
         let frame = state
-            .window_series(handle, "GPS Speed (AiM Interpolated)", 0., 10., 128, 37)
+            .window_series(handle, "GPS Speed", 0., 10., 128, 37)
             .unwrap();
         let (_, times, mins, maxs) = telemetry_ipc::decode_frame(&frame).unwrap();
         assert!(!times.is_empty());
@@ -704,7 +681,7 @@ mod integration_tests {
                 panic!("timed out waiting for import queue");
             }
         }
-        let target_channel = "GPS Speed (AiM Interpolated)".to_string();
+        let target_channel = "GPS Speed".to_string();
         state
             .prioritize_import(job_id, std::slice::from_ref(&target_channel))
             .expect("prioritize_import succeeds");
@@ -796,6 +773,10 @@ mod integration_tests {
         assert!(
             (duration - 641.406).abs() < 0.001,
             "expected physical sensor duration 641.406, got {duration}"
+        );
+        assert!(
+            !cached.manifest().channels.iter().any(|c| c.meta.source == telemetry_core::ChannelSource::Gps),
+            "AiM interpolated GPS channels should not be imported"
         );
         let _ = std::fs::remove_dir_all(cache_dir);
     }

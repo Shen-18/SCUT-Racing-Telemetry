@@ -160,11 +160,9 @@ export const FileCardView: React.FC<FileCardViewProps> = ({ dataset, laps = null
     </div>
   );
 };
-
 /** 接 store 的容器：拉取圈数据后交给 FileCardView。 */
 export const FileCard: React.FC = () => {
   const dataset = useAppStore((s) => s.dataset);
-  const activeRange = useAppStore((s) => s.activeRange);
   const [laps, setLaps] = useState<client.LapInfo[] | null>(null);
 
   useEffect(() => {
@@ -187,5 +185,5 @@ export const FileCard: React.FC = () => {
     };
   }, [dataset]);
 
-  return <FileCardView dataset={dataset} laps={laps} durationOverride={activeRange?.end} />;
+  return <FileCardView dataset={dataset} laps={laps} />;
 };

@@ -260,7 +260,7 @@ export const PlotStack: React.FC = () => {
   const activeRange = useAppStore((s) => s.activeRange);
   const checkedChannels = useAppStore((s) => s.checkedChannels);
   const cursorT = useAppStore((s) => s.cursorT);
-  const duration = activeRange?.end ?? (dataset ? getDatasetDuration(dataset) : 0);
+  const duration = dataset ? getDatasetDuration(dataset) : 0;
 
   const colorMap = useMemo(
     () => buildChannelColorMap(dataset?.channels.map((c) => c.name) ?? []),

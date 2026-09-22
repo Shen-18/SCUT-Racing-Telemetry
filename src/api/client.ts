@@ -259,9 +259,9 @@ export function cacheRootStatus(): Promise<CacheRootStatus> {
 
 /**
  * Selects the default speed channel from a list of channel metadata.
- * Prioritizes official speed channels (e.g. "GPS Speed (AiM Interpolated)"),
- * falls back to raw GPS speed (e.g. "GPS Speed"), then other channels containing "speed",
- * and finally falls back to the first channel if no speed channel exists.
+ * Prioritizes real physical speed channels (e.g. "VehSpd", "Speed"),
+ * then real GPS speed (DerivedGps), then other standard speed channels,
+ * and deprioritizes AiM Interpolated synthetic channels.
  */
 export function selectDefaultSpeedChannel(
   channels?: Array<{ key: string; name?: string; source?: string }> | null
@@ -270,7 +270,7 @@ export function selectDefaultSpeedChannel(
     return undefined;
   }
 
-  const containsSpeed = (s?: string) => Boolean(s && /speed/i.test(s));
+  const containsSpeed = (s?: string) => Boolean(s && /(?:speed|spd)/i.test(s));
   const isDistance = (s?: string) => Boolean(s && /distance/i.test(s));
 
   const speedCandidates = channels.filter((c) => {
@@ -288,24 +288,26 @@ export function selectDefaultSpeedChannel(
     const name = c.name || "";
     const source = (c.source || "").toLowerCase();
 
-    // 1. Official AiM interpolated GPS Speed or exact Speed channel
+    // AiM Interpolated channels are deprioritized (synthetic, 10Hz quantized).
+    if (name.includes("(AiM Interpolated)") || key.includes("(AiM Interpolated)")) {
+      return 90;
+    }
+
+    // 1. Physical vehicle speed (Standard CAN bus speed channels)
     if (
-      name.includes("(AiM Interpolated)") ||
-      key.includes("(AiM Interpolated)") ||
-      ((source === "gps" || source === "aim" || source === "standard") &&
-        (name.toLowerCase() === "gps speed (aim interpolated)" ||
-          name.toLowerCase() === "speed" ||
-          key.toLowerCase() === "speed"))
+      (source === "standard" || source === "aim") &&
+      (name.toLowerCase() === "speed" || key.toLowerCase() === "speed" ||
+       name.toLowerCase() === "vehspd" || key.toLowerCase() === "vehspd")
     ) {
       return 1;
     }
 
-    // 2. Official standard or GPS channels with speed
-    if (source === "gps" || source === "standard" || source === "aim") {
+    // 2. Other standard/AiM speed channels (e.g. "AGX Speed")
+    if (source === "standard" || source === "aim") {
       return 10;
     }
 
-    // 3. Raw GPS Speed (derived GPS)
+    // 3. Real GPS Speed (derived from hardware ECEF)
     if (
       source === "derivedgps" ||
       name.toLowerCase() === "gps speed" ||

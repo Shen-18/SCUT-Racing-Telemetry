@@ -211,14 +211,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       openingFileHash: null,
       view: "analysis",
     }));
-    try {
-      const range = await client.sampleOverlap(meta.id, initialChecked);
-      if (range && useAppStore.getState().dataset?.id === meta.id) {
-        useAppStore.getState().setActiveRange(range);
-      }
-    } catch {
-      // Metadata duration remains a fallback for older caches.
-    }
+    // Window is initialized to the complete dataset duration [0, duration].
   },
 
   async startImport(path: string): Promise<number> {

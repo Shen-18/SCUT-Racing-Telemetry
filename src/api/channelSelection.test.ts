@@ -2,15 +2,16 @@ import { describe, expect, it } from "vitest";
 import { selectActiveChannel, selectDefaultSpeedChannel } from "./client";
 
 describe("selectDefaultSpeedChannel", () => {
-  it("prioritizes official 'GPS Speed (AiM Interpolated)' over raw 'GPS Speed' and other channels", () => {
+  it("prioritizes real physical speed over AiM Interpolated and raw GPS Speed", () => {
     const channels = [
       { key: "Battery_V", name: "Battery_V", source: "Standard" },
       { key: "Distance on GPS Speed", name: "Distance on GPS Speed", source: "DerivedCalc" },
       { key: "GPS Speed", name: "GPS Speed", source: "DerivedGps" },
       { key: "GPS Speed (AiM Interpolated)", name: "GPS Speed (AiM Interpolated)", source: "Gps" },
+      { key: "VehSpd", name: "VehSpd", source: "Standard" },
       { key: "Engine_RPM", name: "Engine_RPM", source: "Standard" },
     ];
-    expect(selectDefaultSpeedChannel(channels)).toBe("GPS Speed (AiM Interpolated)");
+    expect(selectDefaultSpeedChannel(channels)).toBe("VehSpd");
   });
 
   it("falls back to raw 'GPS Speed' when official interpolated speed is absent", () => {

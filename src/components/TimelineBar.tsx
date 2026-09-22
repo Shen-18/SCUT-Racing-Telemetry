@@ -55,7 +55,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
 
   const windowRange = props.window ?? storeWindow;
   const cursorT = props.cursorT ?? storeCursorT;
-  const domain: SampleRange = activeRange ?? {
+  const domain: SampleRange = {
     start: 0,
     end: props.duration ?? (storeDataset ? getDatasetDuration(storeDataset) : Math.max(1, windowRange.end)),
   };
