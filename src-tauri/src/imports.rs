@@ -287,7 +287,7 @@ impl AppState {
             duration: metadata.meta.duration,
             ..Default::default()
         };
-        let channels: Vec<telemetry_core::ChannelMeta> = metadata
+        let mut channels: Vec<telemetry_core::ChannelMeta> = metadata
             .channels
             .iter()
             .cloned()
@@ -311,37 +311,35 @@ impl AppState {
                 return Ok(());
             }
             job.transition(ImportStage::ReadingChannels)?;
-            job.enqueue(keys.clone());
         }
-        let total = keys.len().max(1);
-        let mut samples: HashMap<String, ChannelSeries> = HashMap::new();
-        for index in 0..keys.len() {
-            if self
-                .jobs
-                .get(&id)
-                .is_some_and(|job| job.status.stage == ImportStage::Cancelled)
-            {
+        if self
+            .jobs
+            .get(&id)
+            .is_some_and(|job| job.status.stage == ImportStage::Cancelled)
+        {
+            return Ok(());
+        }
+        let loaded = self
+            .aim
+            .read_channels(path.clone(), keys.clone())
+            .await
+            .map_err(|e| command_error("dll_error", e))?;
+        let mut samples: HashMap<String, ChannelSeries> = loaded.series;
+        for key in &keys {
+            if !samples.contains_key(key) {
+                return Err(command_error("channel_not_found", key));
+            }
+        }
+        for loaded_channel in loaded.channels {
+            if let Some(channel) = channels.iter_mut().find(|channel| channel.key == loaded_channel.key) {
+                channel.sample_rate_hz = loaded_channel.sample_rate_hz;
+            }
+        }
+        if let Some(mut job) = self.jobs.get_mut(&id) {
+            if job.status.stage.is_terminal() {
                 return Ok(());
             }
-            let key = self
-                .jobs
-                .get_mut(&id)
-                .and_then(|mut job| job.claim_next())
-                .ok_or_else(|| command_error("import_queue_empty", id))?;
-            let dataset = self
-                .aim
-                .read_channels(path.clone(), vec![key.clone()])
-                .await
-                .map_err(|e| command_error("dll_error", e))?;
-            let series = dataset
-                .series
-                .get(&key)
-                .ok_or_else(|| command_error("channel_not_found", &key))?
-                .clone();
-            samples.insert(key, series);
-            if let Some(mut job) = self.jobs.get_mut(&id) {
-                job.status.progress = (index + 1) as f32 / total as f32;
-            }
+            job.status.progress = 1.0;
         }
         {
             let mut job = self
@@ -362,7 +360,36 @@ impl AppState {
             .to_ascii_lowercase();
         let build = tauri::async_runtime::spawn_blocking(move || -> Result<String, CmdError> {
             let mut meta = meta;
-            if let Some(end) = samples
+            let physical_end = samples
+                .iter()
+                .filter(|(key, _)| {
+                    channels
+                        .iter()
+                        .find(|c| &c.key == *key)
+                        .is_some_and(|c| c.source != telemetry_core::ChannelSource::Gps)
+                })
+                .filter_map(|(_, series)| series.times.last().copied())
+                .filter(|time| time.is_finite())
+                .reduce(f64::max);
+
+            if let Some(end) = physical_end {
+                for (key, series) in &mut samples {
+                    let is_interpolated = channels
+                        .iter()
+                        .find(|c| &c.key == key)
+                        .is_some_and(|c| c.source == telemetry_core::ChannelSource::Gps);
+                    if is_interpolated {
+                        let keep = series
+                            .times
+                            .iter()
+                            .position(|&t| t > end + 1e-9)
+                            .unwrap_or(series.times.len());
+                        series.times.truncate(keep);
+                        series.values.truncate(keep);
+                    }
+                }
+                meta.duration = end;
+            } else if let Some(end) = samples
                 .values()
                 .filter_map(|series| series.times.last().copied())
                 .filter(|time| time.is_finite())
@@ -631,6 +658,12 @@ mod integration_tests {
             max_end - min_end > 0.1,
             "raw channels must retain their native end times, got {min_end}..{max_end}"
         );
+        assert!(
+            cached.manifest().meta.duration < 88.7,
+            "duration must not be extended by synthetic GPS tail, got {}",
+            cached.manifest().meta.duration
+        );
+        assert_eq!(cached.manifest().meta.duration, max_end);
         let handle = state.open_handle(&status.file_hash).unwrap();
         let frame = state
             .window_series(handle, "GPS Speed (AiM Interpolated)", 0., 10., 128, 37)
@@ -741,5 +774,29 @@ mod integration_tests {
         assert_eq!(datasets.read_dir().unwrap().count(), 1);
         let _ = std::fs::remove_dir_all(cache_dir);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn guangke_xrk_file_duration_bounds_to_physical_sensors() {
+        let _guard = lock();
+        let target = PathBuf::from(
+            r"D:\Desktop\A04_AF26 有无人跑动 广科 2026-09-13\Jiaxuan Lin_A04_AF26_Guangke_a_3330.xrk",
+        );
+        if !target.exists() {
+            return;
+        }
+        let (state, cache_dir) = test_state("guangke-test");
+        let outcomes = block_on(state.import_files(vec![target.clone()])).unwrap();
+        assert_eq!(outcomes.len(), 1);
+        let job_id = outcomes[0].job_id.unwrap();
+        let status = wait_ready(&state, job_id);
+        assert_eq!(status.stage, telemetry_ipc::ImportStage::Ready);
+        let cached = state.cache.dataset(&status.file_hash).unwrap();
+        let duration = cached.manifest().meta.duration;
+        assert!(
+            (duration - 641.406).abs() < 0.001,
+            "expected physical sensor duration 641.406, got {duration}"
+        );
+        let _ = std::fs::remove_dir_all(cache_dir);
     }
 }
