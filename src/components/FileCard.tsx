@@ -80,10 +80,11 @@ export function pickBestLap(laps: client.LapInfo[]): client.LapInfo | null {
 export interface FileCardViewProps {
   dataset: client.DatasetMeta | null;
   laps?: client.LapInfo[] | null;
+  durationOverride?: number;
 }
 
 /** 纯展示层：测试直接渲染，不依赖 zustand 初始状态。 */
-export const FileCardView: React.FC<FileCardViewProps> = ({ dataset, laps = null }) => {
+export const FileCardView: React.FC<FileCardViewProps> = ({ dataset, laps = null, durationOverride }) => {
   if (!dataset) return null;
 
   const meta = dataset.meta;
@@ -93,7 +94,13 @@ export const FileCardView: React.FC<FileCardViewProps> = ({ dataset, laps = null
   const rows: Array<{ label: string; value: React.ReactNode }> = [
     { label: "车手 Driver", value: meta.racer || "—" },
     { label: "赛车 Car", value: meta.vehicle || "—" },
-    { label: "时长 Duration", value: formatClockTime(getDatasetDuration(dataset), 3) },
+    {
+      label: "时长 Duration",
+      value: formatClockTime(
+        Number.isFinite(durationOverride) ? durationOverride! : getDatasetDuration(dataset),
+        3
+      ),
+    },
   ];
 
   return (
@@ -157,6 +164,7 @@ export const FileCardView: React.FC<FileCardViewProps> = ({ dataset, laps = null
 /** 接 store 的容器：拉取圈数据后交给 FileCardView。 */
 export const FileCard: React.FC = () => {
   const dataset = useAppStore((s) => s.dataset);
+  const activeRange = useAppStore((s) => s.activeRange);
   const [laps, setLaps] = useState<client.LapInfo[] | null>(null);
 
   useEffect(() => {
@@ -179,5 +187,5 @@ export const FileCard: React.FC = () => {
     };
   }, [dataset]);
 
-  return <FileCardView dataset={dataset} laps={laps} />;
+  return <FileCardView dataset={dataset} laps={laps} durationOverride={activeRange?.end} />;
 };
