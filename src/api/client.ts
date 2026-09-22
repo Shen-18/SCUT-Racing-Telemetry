@@ -109,6 +109,10 @@ export function sampleRange(id: number, channels: string[] = []): Promise<Sample
   return invoke<SampleRange | null>("sample_range", { id, channels });
 }
 
+export function sampleOverlap(id: number, channels: string[] = []): Promise<SampleRange | null> {
+  return invoke<SampleRange | null>("sample_overlap", { id, channels });
+}
+
 export async function windowSeries(
   id: number,
   channel: string,

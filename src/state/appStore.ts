@@ -59,6 +59,12 @@ export function isNonTerminalImportStage(stage: ImportStage): boolean {
   );
 }
 
+function sameChannelSelection(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const expected = new Set(b);
+  return a.every((key) => expected.has(key));
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   dataset: null,
   checkedChannels: [],
@@ -132,6 +138,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         : [...state.checkedChannels, key];
       return { checkedChannels };
     });
+    const dataset = get().dataset;
+    if (!dataset) return;
+    const selected = get().checkedChannels;
+    get().setActiveRange(null);
+    if (selected.length === 0) return;
+    void client.sampleOverlap(dataset.id, selected).then((range) => {
+      const state = get();
+      if (state.dataset?.id !== dataset.id || !sameChannelSelection(state.checkedChannels, selected)) {
+        return;
+      }
+      state.setActiveRange(range);
+    }).catch(() => {
+      // A channel can still be building during an import. Keep the metadata
+      // duration as a temporary fallback until the next selection/open.
+    });
   },
 
   async toggleChannelAndPrioritize(key: string): Promise<void> {
@@ -191,7 +212,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       view: "analysis",
     }));
     try {
-      const range = await client.sampleRange(meta.id, channelKeys);
+      const range = await client.sampleOverlap(meta.id, initialChecked);
       if (range && useAppStore.getState().dataset?.id === meta.id) {
         useAppStore.getState().setActiveRange(range);
       }

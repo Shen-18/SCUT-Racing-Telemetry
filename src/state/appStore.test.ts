@@ -19,6 +19,7 @@ const sessionMeta = (duration: number, filePath = "D:\\Data\\test.xrk"): client.
 
 describe("appStore", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     useAppStore.setState({
       dataset: null,
       checkedChannels: [],
@@ -106,6 +107,29 @@ describe("appStore", () => {
 
     useAppStore.getState().reorderChannels(["Speed", "RPM", "Steering"]);
     expect(useAppStore.getState().channelOrder).toEqual(["Speed", "RPM", "Steering"]);
+  });
+
+  it("uses the common real range of the currently selected channels", async () => {
+    useAppStore.setState({
+      dataset: {
+        id: 7,
+        file_hash: "range-hash",
+        meta: sessionMeta(641.9),
+        channels: [
+          { key: "Brake", name: "Brake", unit: "#", dtype: "Numeric", source: "Standard", sample_rate_hz: 100 },
+        ],
+      },
+      window: { start: 0, end: 641.9 },
+    });
+    vi.spyOn(client, "sampleOverlap").mockResolvedValueOnce({ start: 4.672, end: 641.397 });
+
+    useAppStore.getState().toggleChannel("Brake");
+
+    await vi.waitFor(() => {
+      expect(useAppStore.getState().activeRange).toEqual({ start: 4.672, end: 641.397 });
+    });
+    expect(useAppStore.getState().window).toEqual({ start: 4.672, end: 641.397 });
+    expect(client.sampleOverlap).toHaveBeenCalledWith(7, ["Brake"]);
   });
 
   it("setTheme and setCursor update respective properties", () => {

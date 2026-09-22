@@ -101,6 +101,42 @@ impl DatasetCache {
         Ok((start.is_finite() && end.is_finite() && start <= end).then_some((start, end)))
     }
 
+    /// Common interval covered by every requested raw channel.
+    ///
+    /// This is deliberately different from `sample_range`, which returns the
+    /// union of the channels' ranges.  A shared chart cursor must not enter a
+    /// tail where one of the selected channels has no real sample.
+    pub fn sample_overlap(&self, keys: &[String]) -> Result<Option<(f64, f64)>> {
+        let requested: Vec<&str> = if keys.is_empty() {
+            self.manifest
+                .channels
+                .iter()
+                .map(|c| c.meta.key.as_str())
+                .collect()
+        } else {
+            keys.iter().map(String::as_str).collect()
+        };
+        let mut start = f64::NEG_INFINITY;
+        let mut end = f64::INFINITY;
+        let mut found = false;
+        for key in requested {
+            let entry = self.entry(key)?;
+            if entry.full_count == 0 {
+                continue;
+            }
+            let mut reader = open_raw(&self.path, entry)?;
+            let first = reader.f64(16)?;
+            let last = entry.last_time.unwrap_or(first);
+            if !first.is_finite() || !last.is_finite() {
+                continue;
+            }
+            found = true;
+            start = start.max(first);
+            end = end.min(last);
+        }
+        Ok((found && start.is_finite() && end.is_finite() && start <= end).then_some((start, end)))
+    }
+
     pub(crate) fn root(&self) -> CacheRoot {
         CacheRoot {
             path: self.path.parent().unwrap().parent().unwrap().to_owned(),

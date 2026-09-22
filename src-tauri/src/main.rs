@@ -150,6 +150,18 @@ fn sample_range(
         .map_err(state::cache_error)
 }
 #[tauri::command]
+fn sample_overlap(
+    id: u64,
+    channels: Vec<String>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Option<SampleRange>, CmdError> {
+    state
+        .dataset(id)?
+        .sample_overlap(&channels)
+        .map(|range| range.map(|(start, end)| SampleRange { start, end }))
+        .map_err(state::cache_error)
+}
+#[tauri::command]
 fn dataset_meta(id: u64, state: tauri::State<'_, Arc<AppState>>) -> Result<DatasetMeta, CmdError> {
     dataset_meta_inner(id, &state)
 }
@@ -450,7 +462,8 @@ fn main() {
             open_dataset,
             close_dataset,
             dataset_meta,
-            sample_range,
+        sample_range,
+        sample_overlap,
             window_series,
             cursor_values,
             laps,
@@ -519,6 +532,52 @@ mod tests {
         .unwrap();
         let dataset = root.dataset(&hash).unwrap();
         assert_eq!(authoritative_duration(&dataset, 59.9).unwrap(), 59.817);
+        let _ = std::fs::remove_dir_all(root_path);
+    }
+
+    #[test]
+    fn selected_channel_overlap_stops_at_the_shortest_real_tail() {
+        let root_path =
+            std::env::temp_dir().join(format!("scut-overlap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root_path);
+        let root = CacheRoot::open(&root_path).unwrap();
+        let hash = "b".repeat(64);
+        let channel = |key: &str| ChannelMeta {
+            dtype: ChannelDType::Numeric,
+            key: key.into(),
+            name: key.into(),
+            unit: "#".into(),
+            source: ChannelSource::Standard,
+            sample_rate_hz: 100.0,
+        };
+        root.publish_metadata(
+            SourceIdentity { hash: hash.clone(), mtime: 1, size: 1 },
+            SessionMeta::default(),
+            vec![channel("Brake"), channel("GPS")],
+            vec![],
+        )
+        .unwrap();
+        root.publish_raw(
+            &hash,
+            "Brake",
+            &ChannelSeries { times: vec![0.1, 1.4], values: vec![1.0, 2.0] },
+        )
+        .unwrap();
+        root.publish_raw(
+            &hash,
+            "GPS",
+            &ChannelSeries { times: vec![0.0, 1.9], values: vec![3.0, 4.0] },
+        )
+        .unwrap();
+        let dataset = root.dataset(&hash).unwrap();
+        assert_eq!(
+            dataset.sample_overlap(&["Brake".into(), "GPS".into()]).unwrap(),
+            Some((0.1, 1.4))
+        );
+        assert_eq!(
+            dataset.sample_range(&["Brake".into(), "GPS".into()]).unwrap(),
+            Some((0.0, 1.9))
+        );
         let _ = std::fs::remove_dir_all(root_path);
     }
 }
