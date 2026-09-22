@@ -33,9 +33,10 @@ fn median_positive_diff(times: &[f64]) -> Option<f64> {
 }
 
 fn channel_grid_values(times: &[f64], values: &[f32], grid: &[f64]) -> Vec<f32> {
-    let Some(baseline) = values.iter().copied().find(|v| v.is_finite()) else {
+    let Some(first_time) = times.first().copied() else {
         return vec![f32::NAN; grid.len()];
     };
+    let last_time = times.last().copied().unwrap_or(first_time);
     let mut out = Vec::with_capacity(grid.len());
     let mut cursor = 0usize;
     let mut current = None;
@@ -46,7 +47,11 @@ fn channel_grid_values(times: &[f64], values: &[f32], grid: &[f64]) -> Vec<f32> 
             }
             cursor += 1;
         }
-        out.push(current.unwrap_or(baseline));
+        if t < first_time - 1e-9 || t > last_time + 1e-9 {
+            out.push(f32::NAN);
+        } else {
+            out.push(current.unwrap_or(f32::NAN));
+        }
     }
     out
 }
@@ -428,5 +433,19 @@ mod tests {
         assert!(csv.contains("\"59.86\""));
         assert!(csv.contains("2.000000000"));
         assert!(!csv.contains("59.9"));
+    }
+
+    #[test]
+    fn channel_grid_values_fills_nan_outside_native_range() {
+        let times = vec![1.0, 2.0];
+        let values = vec![10.0, 20.0];
+        let grid = vec![0.0, 0.5, 1.0, 1.5, 2.0, 2.5];
+        let out = super::channel_grid_values(&times, &values, &grid);
+        assert!(out[0].is_nan());
+        assert!(out[1].is_nan());
+        assert_eq!(out[2], 10.0);
+        assert_eq!(out[3], 10.0);
+        assert_eq!(out[4], 20.0);
+        assert!(out[5].is_nan());
     }
 }

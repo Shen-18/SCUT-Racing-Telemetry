@@ -93,6 +93,8 @@ fn raw_publication_survives_cancellation_and_can_resume_in_a_new_root() {
         cache.read_cursor_values(&["Speed".into()], 2.5).unwrap(),
         vec![-3.]
     );
+    assert!(cache.read_cursor_values(&["Speed".into()], -0.5).unwrap()[0].is_nan());
+    assert!(cache.read_cursor_values(&["Speed".into()], 4.5).unwrap()[0].is_nan());
     assert!(matches!(
         cache.read_cursor_values(&["RPM".into()], 2.),
         Err(cache_core::CacheError::ChannelBuilding(_))

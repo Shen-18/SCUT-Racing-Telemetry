@@ -26,7 +26,10 @@ function findChannelKey(
   channels: Array<{ key: string; name: string }>,
   pattern: RegExp
 ): string | null {
-  return channels.find((c) => pattern.test(c.name))?.key ?? null;
+  const matches = channels.filter((c) => pattern.test(c.name));
+  if (matches.length === 0) return null;
+  const real = matches.find((c) => !c.name.includes("(AiM Interpolated)"));
+  return (real ?? matches[0]).key;
 }
 
 function fitCanvas(cv: HTMLCanvasElement): [CanvasRenderingContext2D, number, number] {

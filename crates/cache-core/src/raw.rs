@@ -178,7 +178,7 @@ impl DatasetCache {
         validate_series(&series)?;
         Ok(series)
     }
-    /// Step-hold cursor lookup, clamped at both ends; empty channels return NaN.
+    /// Step-hold cursor lookup bounded to native sample range; empty or out-of-range returns NaN.
     pub fn read_cursor_values(&self, keys: &[String], t: f64) -> Result<Vec<f32>> {
         if !t.is_finite() {
             return Err(CacheError::InvalidRequest("non-finite cursor".into()));
@@ -188,6 +188,11 @@ impl DatasetCache {
                 let entry = self.entry(key)?;
                 let mut reader = open_raw(&self.path, entry)?;
                 if entry.full_count == 0 {
+                    return Ok(f32::NAN);
+                }
+                let first = reader.f64(16)?;
+                let last = entry.last_time.unwrap_or(first);
+                if t < first - 1e-9 || t > last + 1e-9 {
                     return Ok(f32::NAN);
                 }
                 let index = storage::upper_bound(&mut reader, 16, 8, entry.full_count, t)?
