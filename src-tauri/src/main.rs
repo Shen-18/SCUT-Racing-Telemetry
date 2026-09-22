@@ -305,34 +305,11 @@ fn export_csv(
     } else {
         channels
     };
-    let mut selected = Vec::new();
-    for key in wanted {
-        let entry = dataset
-            .manifest()
-            .channels
-            .iter()
-            .find(|channel| channel.meta.key == key)
-            .ok_or_else(|| command_error("channel_not_found", key.clone()))?;
-        let raw = dataset.read_raw(&key).map_err(state::cache_error)?;
-        if raw.is_empty() {
-            continue;
-        }
-        selected.push((entry, raw));
-    }
-    if selected.is_empty() {
-        return Err(command_error(
-            "invalid_request",
-            "no raw samples available for export",
-        ));
-    }
-    let global_start = selected
-        .iter()
-        .filter_map(|(_, series)| series.times.first().copied())
-        .fold(f64::INFINITY, f64::min);
-    let global_end = selected
-        .iter()
-        .filter_map(|(_, series)| series.times.last().copied())
-        .fold(f64::NEG_INFINITY, f64::max);
+    let sample_range = dataset
+        .sample_range(&wanted)
+        .map_err(state::cache_error)?
+        .ok_or_else(|| command_error("invalid_request", "no raw samples available for export"))?;
+    let (global_start, global_end) = sample_range;
     let requested_start = if start.is_finite() {
         start
     } else {
@@ -348,39 +325,11 @@ fn export_csv(
         ));
     }
     let mut metadata = dataset.manifest().meta.clone();
-    metadata.duration = export_end - export_start;
-    let mut owned_meta = Vec::with_capacity(selected.len());
-    let mut owned_series = Vec::with_capacity(selected.len());
-    for (entry, series) in selected {
-        let mut clipped = telemetry_core::ChannelSeries::default();
-        for (time, value) in series
-            .times
-            .iter()
-            .copied()
-            .zip(series.values.iter().copied())
-        {
-            if (export_start..=export_end).contains(&time) {
-                clipped.times.push(time - export_start);
-                clipped.values.push(value);
-            }
-        }
-        if clipped.is_empty() {
-            continue;
-        }
-        owned_meta.push(telemetry_core::ChannelMeta {
-            dtype: entry.meta.dtype.clone(),
-            key: entry.meta.key.clone(),
-            name: entry.meta.name.clone(),
-            unit: entry.meta.unit.clone(),
-            source: entry.meta.source,
-            sample_rate_hz: entry.meta.sample_rate_hz,
-        });
-        owned_series.push(clipped);
+    let mut grid = export::raw_grid(&dataset, &wanted, export_start, export_end)?;
+    for time in &mut grid.times {
+        *time -= export_start;
     }
-    let refs: Vec<(&telemetry_core::ChannelMeta, &telemetry_core::ChannelSeries)> =
-        owned_meta.iter().zip(owned_series.iter()).collect();
-    let grid = telemetry_core::csv_io::gridify(metadata.duration, &refs)
-        .map_err(|error| command_error("csv_error", error))?;
+    metadata.duration = grid.times.last().copied().unwrap_or(0.0);
     let file =
         std::fs::File::create(&out_path).map_err(|error| command_error("export_io", error))?;
     let mut writer = std::io::BufWriter::new(file);

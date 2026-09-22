@@ -45,7 +45,7 @@ fn infer_grid_hz(times: &[f64]) -> f64 {
 }
 
 /// Reconstructs a CSV grid from exact raw samples without resampling.
-fn raw_grid(
+pub fn raw_grid(
     dataset: &cache_core::DatasetCache,
     channels: &[String],
     start: f64,
@@ -67,45 +67,46 @@ fn raw_grid(
             .map_err(|error| command_error("raw_missing", error))?;
         selected.push((&entry.meta, series));
     }
-    let reference_times = selected[0].1.times.clone();
-    if reference_times.is_empty() {
-        return Err(command_error("empty_range", "记录没有真实数据点"));
-    }
-    if selected
-        .iter()
-        .any(|(_, series)| series.times != reference_times)
-    {
-        return Err(command_error(
-            "raw_grid_mismatch",
-            "通道 raw 时间轴不一致，拒绝静默重采样",
-        ));
-    }
-    let mut kept_indices = Vec::new();
-    for (index, time) in reference_times.iter().enumerate() {
-        if *time >= start - 1e-9 && *time <= end + 1e-9 {
-            kept_indices.push(index);
+    let mut events: Vec<(f64, usize, f32)> = Vec::new();
+    for (channel_index, (_, series)) in selected.iter().enumerate() {
+        for (&time, &value) in series.times.iter().zip(&series.values) {
+            if time.is_finite() && time >= start - 1e-9 && time <= end + 1e-9 {
+                events.push((time, channel_index, value));
+            }
         }
     }
-    if kept_indices.is_empty() {
+    if events.is_empty() {
         return Err(command_error("empty_range", "所选时间范围内没有真实数据点"));
     }
-    let times = kept_indices
-        .iter()
-        .map(|index| reference_times[*index])
-        .collect::<Vec<_>>();
+    events.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let mut times = Vec::new();
+    let mut values = vec![Vec::new(); selected.len()];
+    let mut index = 0usize;
+    while index < events.len() {
+        let time = events[index].0;
+        let row_start = index;
+        while index < events.len() && (events[index].0 - time).abs() <= 1e-9 {
+            index += 1;
+        }
+        times.push(time);
+        for channel in &mut values {
+            channel.push(f32::NAN);
+        }
+        for (_, channel_index, value) in &events[row_start..index] {
+            values[*channel_index].last_mut().map(|slot| *slot = *value);
+        }
+    }
     let gridded_channels = selected
         .iter()
-        .map(|(meta, series)| telemetry_core::csv_io::GriddedChannel {
+        .enumerate()
+        .map(|(channel_index, (meta, _))| telemetry_core::csv_io::GriddedChannel {
             name: meta.name.clone(),
             unit: meta.unit.clone(),
-            values: kept_indices
-                .iter()
-                .map(|index| series.values[*index])
-                .collect(),
+            values: std::mem::take(&mut values[channel_index]),
         })
         .collect();
     Ok(telemetry_core::csv_io::Gridded {
-        grid_hz: infer_grid_hz(&reference_times),
+        grid_hz: infer_grid_hz(&times),
         times,
         channels: gridded_channels,
     })
@@ -384,6 +385,68 @@ mod tests {
         assert_eq!(rpm.values, vec![2000.0, 3000.0, 4000.0]);
         let speed = parsed.series.get("Speed").unwrap();
         assert_eq!(speed.values, vec![20.0, 30.0, 40.0]);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn raw_grid_does_not_hold_shorter_channels_after_their_last_sample() {
+        let (cache, root) = fixture("native-end");
+        use telemetry_core::{ChannelDType, ChannelMeta, ChannelSource, SessionMeta};
+        let hash = "d".repeat(64);
+        cache
+            .publish_metadata(
+                cache_core::SourceIdentity {
+                    hash: hash.clone(),
+                    mtime: 1,
+                    size: 1,
+                },
+                SessionMeta::default(),
+                vec![
+                    ChannelMeta {
+                        dtype: ChannelDType::Numeric,
+                        key: "Speed".into(),
+                        name: "Speed".into(),
+                        unit: "km/h".into(),
+                        source: ChannelSource::Csv,
+                        sample_rate_hz: 2.0,
+                    },
+                    ChannelMeta {
+                        dtype: ChannelDType::Numeric,
+                        key: "GPS".into(),
+                        name: "GPS".into(),
+                        unit: "m".into(),
+                        source: ChannelSource::Gps,
+                        sample_rate_hz: 2.0,
+                    },
+                ],
+                vec![],
+            )
+            .unwrap();
+        cache
+            .publish_raw(
+                &hash,
+                "Speed",
+                &telemetry_core::ChannelSeries {
+                    times: vec![0.0, 0.5, 1.0],
+                    values: vec![1.0, 2.0, 3.0],
+                },
+            )
+            .unwrap();
+        cache
+            .publish_raw(
+                &hash,
+                "GPS",
+                &telemetry_core::ChannelSeries {
+                    times: vec![0.0, 0.5, 1.0, 1.5],
+                    values: vec![10.0, 20.0, 30.0, 40.0],
+                },
+            )
+            .unwrap();
+        let dataset = cache.dataset(&hash).unwrap();
+        let grid = raw_grid(&dataset, &["Speed".into(), "GPS".into()], 0.0, 2.0).unwrap();
+        assert_eq!(grid.times, vec![0.0, 0.5, 1.0, 1.5]);
+        assert_eq!(grid.channels[0].values[..3], [1.0, 2.0, 3.0]);
+        assert!(grid.channels[0].values[3].is_nan());
         std::fs::remove_dir_all(&root).ok();
     }
 

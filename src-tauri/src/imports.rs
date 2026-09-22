@@ -8,7 +8,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use telemetry_core::{csv_io, ChannelSeries, SessionMeta};
+use telemetry_core::{ChannelSeries, SessionMeta};
 use telemetry_ipc::{CmdError, ImportStage, QueuedImport};
 
 fn file_name_of(path: &Path) -> String {
@@ -361,24 +361,15 @@ impl AppState {
             .unwrap_or("xrk")
             .to_ascii_lowercase();
         let build = tauri::async_runtime::spawn_blocking(move || -> Result<String, CmdError> {
-            let refs: Vec<(&telemetry_core::ChannelMeta, &ChannelSeries)> = channels
-                .iter()
-                .map(|meta| {
-                    (
-                        meta,
-                        samples
-                            .get(&meta.key)
-                            .expect("sample was read for every queued key"),
-                    )
-                })
-                .collect();
-            let grid = csv_io::gridify(0.0, &refs).map_err(|e| command_error("csv_error", e))?;
             let mut meta = meta;
-            if let Some(end) = grid.times.last().copied().filter(|t| t.is_finite()) {
+            if let Some(end) = samples
+                .values()
+                .filter_map(|series| series.times.last().copied())
+                .filter(|time| time.is_finite())
+                .reduce(f64::max)
+            {
                 meta.duration = end;
             }
-            let channel_keys: Vec<String> =
-                channels.iter().map(|channel| channel.key.clone()).collect();
             if root
                 .dataset(&identity.hash)
                 .is_ok_and(|dataset| dataset.manifest().state == CacheState::Ready)
@@ -397,16 +388,6 @@ impl AppState {
                 dataset_dir.join(format!("source.{original_ext}")),
             )
             .map_err(io_err)?;
-            let mut gridded: HashMap<String, ChannelSeries> = HashMap::new();
-            for (index, channel) in grid.channels.iter().enumerate() {
-                gridded.insert(
-                    channel_keys[index].clone(),
-                    ChannelSeries {
-                        times: grid.times.clone(),
-                        values: channel.values.clone(),
-                    },
-                );
-            }
             let channel_keys: Vec<String> = cache
                 .manifest()
                 .channels
@@ -414,9 +395,12 @@ impl AppState {
                 .map(|e| e.meta.key.clone())
                 .collect();
             for key in &channel_keys {
-                let series = gridded
+                let series = samples
                     .get(key)
                     .ok_or_else(|| command_error("channel_not_found", key))?;
+                if series.is_empty() {
+                    continue;
+                }
                 cache.build_overview(key, series).map_err(cache_error)?;
                 cache.build_pyramid(key).map_err(cache_error)?;
             }
@@ -632,6 +616,20 @@ mod integration_tests {
         assert!(
             source_xrk.exists(),
             "source.xrk must be stored inside the library"
+        );
+        let cached = state.cache.dataset(&status.file_hash).unwrap();
+        let ends: Vec<f64> = cached
+            .manifest()
+            .channels
+            .iter()
+            .filter_map(|entry| cached.read_raw(&entry.meta.key).ok())
+            .filter_map(|series| series.times.last().copied())
+            .collect();
+        let min_end = ends.iter().copied().reduce(f64::min).unwrap();
+        let max_end = ends.iter().copied().reduce(f64::max).unwrap();
+        assert!(
+            max_end - min_end > 0.1,
+            "raw channels must retain their native end times, got {min_end}..{max_end}"
         );
         let handle = state.open_handle(&status.file_hash).unwrap();
         let frame = state
