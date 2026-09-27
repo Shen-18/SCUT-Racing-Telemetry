@@ -1,5 +1,5 @@
 use telemetry_core::*;
-fn series(t: &[f64], v: &[f32]) -> ChannelSeries {
+fn series(t: &[f64], v: &[f64]) -> ChannelSeries {
     ChannelSeries {
         times: t.to_vec(),
         values: v.to_vec(),
@@ -28,13 +28,13 @@ fn distance_known_constant_and_left_hold() {
         vec![0., 2., 10.]
     );
     assert_eq!(
-        integrate_distance(&[0., 1., 1., 3.], &[2., 4., f32::NAN, 8.]),
+        integrate_distance(&[0., 1., 1., 3.], &[2., 4., f64::NAN, 8.]),
         vec![0., 2., 2., 2.]
     );
 }
 #[test]
 fn stats_known_population_distribution_and_missing_values() {
-    let s = series(&[0., 1., 2., 3., 4.], &[1., 2., 3., 4., f32::NAN]);
+    let s = series(&[0., 1., 2., 3., 4.], &[1., 2., 3., 4., f64::NAN]);
     let r = channel_stats(&s, (0., 4.));
     assert_eq!((r.min, r.max, r.mean), (1., 4., 2.5));
     assert!((r.std - 1.118033988749895).abs() < 1e-12);
@@ -112,23 +112,23 @@ fn rmse_and_corr_handles_non_sample_window_endpoints() {
 }
 #[test]
 fn rmse_and_corr_handles_leading_nan_and_isolated_nan() {
-    let a = series(&[0., 1., 2.], &[f32::NAN, 1., 2.]);
+    let a = series(&[0., 1., 2.], &[f64::NAN, 1., 2.]);
     let b = series(&[0., 1., 2.], &[0., 1., 2.]);
     let (rmse, corr) = rmse_and_corr(&a, &b, (0., 2.));
     assert_eq!(rmse, 0.);
     assert_eq!(corr, 1.);
 
-    let a_mid = series(&[0., 1., 2.], &[0., f32::NAN, 2.]);
+    let a_mid = series(&[0., 1., 2.], &[0., f64::NAN, 2.]);
     let (rmse_mid, corr_mid) = rmse_and_corr(&a_mid, &b, (0., 2.));
     assert_eq!(rmse_mid, 0.);
     assert_eq!(corr_mid, 1.);
 
-    let a_tail = series(&[0., 1., 2.], &[0., 1., f32::NAN]);
+    let a_tail = series(&[0., 1., 2.], &[0., 1., f64::NAN]);
     let (rmse_tail, corr_tail) = rmse_and_corr(&a_tail, &b, (0., 2.));
     assert_eq!(rmse_tail, 0.);
     assert_eq!(corr_tail, 1.);
 
-    let a_all_nan = series(&[0., 1.], &[f32::NAN, f32::NAN]);
+    let a_all_nan = series(&[0., 1.], &[f64::NAN, f64::NAN]);
     let (rmse_nan, corr_nan) = rmse_and_corr(&a_all_nan, &b, (0., 1.));
     assert!(rmse_nan.is_nan());
     assert!(corr_nan.is_nan());

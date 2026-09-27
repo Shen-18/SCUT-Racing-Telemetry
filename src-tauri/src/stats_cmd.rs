@@ -37,8 +37,8 @@ pub fn window_stats(
                 }
             }
             None => ChannelStatsDto {
-                min: f32::NAN,
-                max: f32::NAN,
+                min: f64::NAN,
+                max: f64::NAN,
                 mean: f64::NAN,
                 std_dev: f64::NAN,
             },

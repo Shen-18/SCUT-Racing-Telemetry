@@ -6,9 +6,9 @@ use crate::MinMaxFrame;
 #[derive(Clone, Copy, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct MinMax {
     /// Minimum sample value.
-    pub min: f32,
+    pub min: f64,
     /// Maximum sample value.
-    pub max: f32,
+    pub max: f64,
 }
 /// One pyramid layer with possibly a partial final bucket.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -36,7 +36,7 @@ pub struct ChannelPyramid {
 /// assert_eq!(p.levels[0].times, vec![0., 1.]);
 /// assert_eq!(p.levels[0].minmax[0].min, 2.);
 /// ```
-pub fn build_pyramid(times: &[f64], values: &[f32]) -> ChannelPyramid {
+pub fn build_pyramid(times: &[f64], values: &[f64]) -> ChannelPyramid {
     let n = times.len().min(values.len());
     let mut out = ChannelPyramid::default();
     if n == 0 {

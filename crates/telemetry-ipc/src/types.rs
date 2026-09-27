@@ -88,8 +88,8 @@ pub struct ExportOutcome {
 /// 通道窗口统计（Rust 侧全分辨率计算，spec B.4-P5）。
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 pub struct ChannelStatsDto {
-    pub min: f32,
-    pub max: f32,
+    pub min: f64,
+    pub max: f64,
     pub mean: f64,
     pub std_dev: f64,
 }

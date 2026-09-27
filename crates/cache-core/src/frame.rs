@@ -17,8 +17,8 @@ struct FrameHeader<'a> {
     generation: u64,
 }
 impl DatasetCache {
-    /// Bounded random reads of PRECOMPUTED data only. Never builds a pyramid or
-    /// runs live downsampling. A too-small pixel budget is an explicit error.
+    /// Bounded random reads from the precomputed pyramid, or every raw sample
+    /// when the caller requests the explicit exact/raw mode.
     pub fn read_window_frame(
         &self,
         key: &str,
@@ -33,6 +33,44 @@ impl DatasetCache {
             ));
         }
         let entry = self.entry(key)?;
+        // u32::MAX is the explicit exact/raw mode used by analysis charts.
+        // It bypasses pyramid buckets and returns every raw sample in range.
+        if pixels == u32::MAX {
+            let mut reader = open_raw(&self.path, entry)?;
+            let left = storage::lower_bound(&mut reader, 16, 8, entry.full_count, start)?;
+            let right = storage::upper_bound(&mut reader, 16, 8, entry.full_count, end)?;
+            let count = right.saturating_sub(left);
+            let mut times = Vec::with_capacity(count as usize);
+            let mut values = Vec::with_capacity(count as usize);
+            let time_bytes = reader.read(
+                16 + left * 8,
+                usize::try_from(count.checked_mul(8).ok_or_else(|| storage::invalid("frame too large"))?)
+                    .map_err(|_| storage::invalid("frame too large"))?,
+            )?;
+            let value_bytes = reader.read(
+                16 + entry.full_count * 8 + left * 8,
+                usize::try_from(count.checked_mul(8).ok_or_else(|| storage::invalid("frame too large"))?)
+                    .map_err(|_| storage::invalid("frame too large"))?,
+            )?;
+            for bytes in time_bytes.as_chunks::<8>().0 {
+                times.push(f64::from_le_bytes(*bytes));
+            }
+            for bytes in value_bytes.as_chunks::<8>().0 {
+                values.push(f64::from_le_bytes(*bytes));
+            }
+            let mins = values.clone();
+            let maxs = values;
+            let header = FrameHeader {
+                channel: key,
+                unit: &entry.meta.unit,
+                buckets: times.len(),
+                win_start: start,
+                win_end: end,
+                full_count: entry.full_count,
+                generation,
+            };
+            return encode(header, times, mins, maxs);
+        }
         let pyramid = entry
             .pyramid
             .as_ref()
@@ -53,23 +91,25 @@ impl DatasetCache {
             let n =
                 usize::try_from(right - left).map_err(|_| storage::invalid("frame too large"))?;
             let bytes = reader.read(
-                level.offset + left * 16,
-                n.checked_mul(16)
+                level.offset + left * 24,
+                n.checked_mul(24)
                     .ok_or_else(|| storage::invalid("frame too large"))?,
             )?;
-            for b in bytes.as_chunks::<16>().0.iter() {
+            for b in bytes.as_chunks::<24>().0 {
                 times.push(f64::from_le_bytes(b[..8].try_into().unwrap()));
-                mins.push(f32::from_le_bytes(b[8..12].try_into().unwrap()));
-                maxs.push(f32::from_le_bytes(b[12..].try_into().unwrap()));
+                mins.push(f64::from_le_bytes(b[8..16].try_into().unwrap()));
+                maxs.push(f64::from_le_bytes(b[16..24].try_into().unwrap()));
             }
             if let Some(last_time) = entry.last_time {
                 let needs_endpoint = times.last().is_none_or(|t| *t < last_time - 1e-9);
                 if needs_endpoint && last_time >= start - 1e-9 && last_time <= end + 1e-9 {
-                    let mut raw = open_raw(&self.path, entry)?;
-                    let value = raw.f32(16 + entry.full_count * 8 + (entry.full_count - 1) * 4)?;
-                    times.push(last_time);
-                    mins.push(value);
-                    maxs.push(value);
+                    if let Ok(mut reader) = open_raw(&self.path, entry) {
+                        if let Ok(value) = reader.f64(16 + entry.full_count * 8 + (entry.full_count - 1) * 8) {
+                            times.push(last_time);
+                            mins.push(value);
+                            maxs.push(value);
+                        }
+                    }
                 }
             }
         }
@@ -91,15 +131,15 @@ pub(crate) fn window(
     start: f64,
     end: f64,
 ) -> Result<(u64, u64)> {
-    let left = storage::lower_bound(reader, l.offset, 16, l.count, start)?;
-    let right = storage::upper_bound(reader, l.offset, 16, l.count, end)?;
+    let left = storage::lower_bound(reader, l.offset, 24, l.count, start)?;
+    let right = storage::upper_bound(reader, l.offset, 24, l.count, end)?;
     Ok((left.min(right), right))
 }
 fn encode(
     header: FrameHeader<'_>,
     times: Vec<f64>,
-    mins: Vec<f32>,
-    maxs: Vec<f32>,
+    mins: Vec<f64>,
+    maxs: Vec<f64>,
 ) -> Result<Vec<u8>> {
     let mut json = serde_json::to_vec(&header)?;
     // Align times for JS Float64Array views; JSON whitespace is insignificant.

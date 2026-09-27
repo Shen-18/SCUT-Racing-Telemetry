@@ -496,7 +496,7 @@ impl AimDll {
                 values.truncate(got as usize);
                 let mut s = ChannelSeries {
                     times,
-                    values: values.into_iter().map(|v| v as f32).collect(),
+                    values,
                 };
                 sort_series(&mut s);
                 if family.source == ChannelSource::Gps {
@@ -524,8 +524,8 @@ impl AimDll {
                 let values = if let Recipe::Position { axis, .. } = entry.recipe {
                     let (lat, lon, alt) = ecef_to_geodetic(&x.values, &y.values, &z.values);
                     match axis {
-                        0 => lat.into_iter().map(|v| v as f32).collect(),
-                        1 => lon.into_iter().map(|v| v as f32).collect(),
+                        0 => lat,
+                        1 => lon,
                         _ => alt,
                     }
                 } else {
@@ -550,7 +550,7 @@ impl AimDll {
                 );
                 ChannelSeries {
                     times: s.times.clone(),
-                    values: distance.into_iter().map(|v| v as f32).collect(),
+                    values: distance,
                 }
             }
         };

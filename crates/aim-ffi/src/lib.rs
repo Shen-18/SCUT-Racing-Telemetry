@@ -306,7 +306,7 @@ impl AimDll {
             values.truncate(got as usize);
             let mut pairs: Vec<_> = times
                 .into_iter()
-                .zip(values.into_iter().map(|v| v as f32))
+                .zip(values)
                 .collect();
             pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
             let (mut times, mut values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
@@ -422,7 +422,7 @@ impl AimDll {
                 "deg".into(),
                 ChannelSeries {
                     times: x.times.clone(),
-                    values: lat.into_iter().map(|v| v as f32).collect(),
+                    values: lat,
                 },
                 ChannelSource::DerivedGps,
             );
@@ -433,7 +433,7 @@ impl AimDll {
                 "deg".into(),
                 ChannelSeries {
                     times: x.times.clone(),
-                    values: lon.into_iter().map(|v| v as f32).collect(),
+                    values: lon,
                 },
                 ChannelSource::DerivedGps,
             );
@@ -490,7 +490,7 @@ impl AimDll {
                 "m".into(),
                 ChannelSeries {
                     times: raw_speed.times,
-                    values: d.into_iter().map(|v| v as f32).collect(),
+                    values: d,
                 },
                 ChannelSource::DerivedCalc,
             );

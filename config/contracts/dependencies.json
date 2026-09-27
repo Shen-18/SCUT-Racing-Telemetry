@@ -10,6 +10,9 @@
     "fast-float": "0.2",
     "rustfft": "6",
     "dashmap": "6",
+    "ab_glyph": "0.2",
+    "png": "0.17",
+    "tiny-skia": "0.11",
     "tauri": "2",
     "serde_json": "1",
     "sha2": "0.10",
@@ -44,6 +47,7 @@
     "crates/csv-parser",
     "crates/telemetry-store",
     "crates/telemetry-ipc",
+    "crates/cover-video",
     "src-tauri",
     "crates/migrate-v1",
     "tests/golden-tests"
@@ -68,13 +72,15 @@
       "telemetry-store",
       "cache-core"
     ],
+    "cover-video": [],
     "scut-racing-telemetry": [
       "telemetry-core",
       "cache-core",
       "aim-ffi",
       "csv-parser",
       "telemetry-store",
-      "telemetry-ipc"
+      "telemetry-ipc",
+      "cover-video"
     ],
     "migrate-v1": [
       "telemetry-core",

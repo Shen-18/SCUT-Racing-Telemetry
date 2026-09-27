@@ -12,8 +12,10 @@ aim-ffi={path="../crates/aim-ffi"}
 csv-parser={path="../crates/csv-parser"}
 telemetry-store={path="../crates/telemetry-store"}
 telemetry-ipc={path="../crates/telemetry-ipc"}
+cover-video={path="../crates/cover-video"}
 
 dashmap.workspace=true
+serde.workspace=true
 serde_json.workspace=true
 zip.workspace=true
 rfd.workspace=true

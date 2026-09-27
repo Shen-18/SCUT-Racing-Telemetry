@@ -67,7 +67,7 @@ pub fn raw_grid(
             .map_err(|error| command_error("raw_missing", error))?;
         selected.push((&entry.meta, series));
     }
-    let mut events: Vec<(f64, usize, f32)> = Vec::new();
+    let mut events: Vec<(f64, usize, f64)> = Vec::new();
     for (channel_index, (_, series)) in selected.iter().enumerate() {
         for (&time, &value) in series.times.iter().zip(&series.values) {
             if time.is_finite() && time >= start - 1e-9 && time <= end + 1e-9 {
@@ -90,7 +90,7 @@ pub fn raw_grid(
         }
         times.push(time);
         for channel in &mut values {
-            channel.push(f32::NAN);
+            channel.push(f64::NAN);
         }
         for (_, channel_index, value) in &events[row_start..index] {
             values[*channel_index].last_mut().map(|slot| *slot = *value);

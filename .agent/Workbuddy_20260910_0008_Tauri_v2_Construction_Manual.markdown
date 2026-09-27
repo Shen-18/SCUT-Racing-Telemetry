@@ -9,11 +9,11 @@
 
 > **rev.4.2 开工修订（2026-09-11）**：本文定义新 Tauri v1.0（技术框架仍是 Tauri v2），旧实现称 Python legacy。旧代码只读参考根为 `D:\Desktop\SCUTRacing\code\scut_telemetry\`；读取 `xrk_dll.py`、`models.py`、`parser.py` 和同级 `../tests/`，不修改旧仓库。Gemini 文档是旧行为参考，Rust 公共类型以本文 Step 2 为准；CSV 是物理真值，旧 Python 是兼容性参照，两者不能混为一谈。
 >
-> **已裁决的边界**：保留 Rust `TelemetryDataset.series`，不复制 Python 的 DataFrame/随机 UUID；缓存身份用源文件 hash，数据库记录 id 按 store 契约。`DerivedGps` 对应旧 `derived:gps_raw`；`ChannelMeta` 补 `dtype: ChannelDType`（Time/Numeric/Flag/Text），文本不进入 f32 数值缓存，须显式报告不支持或保留独立元数据。文件采样率放 `SessionMeta`，单通道采样率放 `ChannelSeries`，不用于重采样。`ImportStage` 定义于 cache-core，IPC 引用它，禁止反向依赖。core 的 export.rs 仅格式化到 `std::io::Write`，文件选择、创建和落盘在 Tauri/应用边界执行。Step 10 新目录 `src/api/analysis/` 为统计/圈速调用适配层。Step 14 包含 ADR-0007，便携包位于 `target/release/bundle/portable/`。
+> **已裁决的边界**：保留 Rust `TelemetryDataset.series`，不复制 Python 的 DataFrame/随机 UUID；缓存身份用源文件 hash，数据库记录 id 按 store 契约。`DerivedGps` 对应旧 `derived:gps_raw`；`ChannelMeta` 补 `dtype: ChannelDType`（Time/Numeric/Flag/Text），文本不进入 f32 数值缓存，须显式报告不支持或保留独立元数据。文件采样率放 `SessionMeta`，单通道采样率放 `ChannelSeries`，不用于重采样。`ImportStage` 定义于 cache-core，IPC 引用它，禁止反向依赖。core 的 export.rs 仅格式化到 `std::io::Write`，文件选择、创建和落盘在 Tauri/应用边界执行。Step 10 规划新目录 `src/api/analysis/` 作为统计/圈速调用适配层，当前尚未创建。Step 14 包含 ADR-0007，便携包位于 `target/release/bundle/portable/`。
 >
-> **开工验证而非已通过声明**：Step 1 锁定依赖并编译核查 MSRV；Step 3 按 DLL 实际加载错误检查 VC90 CRT/SxS，Step 14 在干净 Windows x64 验证，不从第三方站下载散装 msvcr90.dll。技能以 `C:\Users\Shen\.agents\skills` 为主源，Codex 缺项才同步；`verification-before-completion` 已存在并已同步，`superpowers` 是流程族称呼，实际入口为 `superpower`/`using-superpowers`。agy 调用以调用手册的 Codex 适配节为准，后台执行尚须独立冒烟验证。
+> **开工验证而非已通过声明**：Step 1 锁定依赖并编译核查 MSRV；Step 3 按 DLL 实际加载错误检查 VC90 CRT/SxS，Step 14 在干净 Windows x64 验证，不从第三方站下载散装 msvcr90.dll。技能以 `C:\Users\Shen\.agents\skills` 为主源，Codex 缺项才同步；`verification-before-completion` 已存在并已同步。历史流程说明中的 `superpower`/`using-superpowers` 目录已移除，不作为当前项目约束。agy 调用以调用手册的 Codex 适配节为准，后台执行尚须独立冒烟验证。
 >
-> **rev.4.3（2026-09-11）WiFi 设备下载立项**：新增 **Step 13「WiFi 设备下载」**（经记录仪 WiFi 把 .xrk 下载到资料库原始文件目录，Ready 后自动 `StartImport` 入库）；新增冻结决策 **D15**（WiFi 下载 = 文件获取通道，不是 `TelemetrySource`，D4 不变）；新 crate `device-link`（workspace 产品构件 9 个、含 golden-tests 合计 10 个）；**原 Step 13「发布硬化」顺移为 Step 14，原 Step 14「双文件对比」顺移为 Step 15**（全文交叉引用已同步）；新 ADR-0008 于 Step 13 开工前立项。任务编号按立项顺序：WiFi 下载 = T09。
+> **rev.4.3（2026-09-11）WiFi 设备下载立项**：新增 **Step 13「WiFi 设备下载」**（经记录仪 WiFi 把 .xrk 下载到资料库原始文件目录，Ready 后自动 `StartImport` 入库）；新增冻结决策 **D15**（WiFi 下载 = 文件获取通道，不是 `TelemetrySource`，D4 不变）；规划新 crate `device-link`（当前尚未加入 workspace）；**原 Step 13「发布硬化」顺移为 Step 14，原 Step 14「双文件对比」顺移为 Step 15**（全文交叉引用已同步）；新 ADR-0008 于 Step 13 开工前立项。任务编号按立项顺序：WiFi 下载 = T09。
 
 > **用法**：从 Step 1 开始顺序执行。每个 Step 讲清：做什么 → 谁做 → 怎么做 → 先写哪些测试 → 接口 → 验收标准 → 审查重点。
 > 文档不规定工期，进度由负责人掌管；步骤顺序是硬约束（标注"可并行"的除外）。
@@ -1253,119 +1253,64 @@ get_device_id, get_number_of_devices
 - **播放**：▶ PLAY = 游标以 0.05s/帧（≈20fps）从窗口起点扫到窗口终点，循环；出窗重置到窗口起点；播放中按钮变 `❚❚ PAUSE` 且红色主按钮样式；空格键同效；
 - 通道行点击：勾选/取消，图表与详情即时增删（无动画要求），导入中联动 `PrioritizeImport`（D11）。
 
-## 附录 C：仓库结构（rev.4 · 工业标准规范）
+## 附录 C：仓库结构（当前实现快照，2026-09-24）
+
+> 本附录区分“当前实际存在的路径”和“施工计划中的未来模块”。未来步骤不能当作已经落地的文件树。
 
 ```text
 SCUTRacingTelemetry/
-├── ⚙️ 项目全局配置与依赖清单（根目录）
-│   ├── Cargo.toml                  # Workspace 根配置（统领 8 个 crates 与 src-tauri）
-│   ├── Cargo.lock                  # Rust 依赖版本精确锁定
-│   ├── package.json                # 前端根配置（React 18 + TS + Tailwind + Vite 脚本）
-│   ├── pnpm-workspace.yaml         # pnpm 工作区定义
-│   ├── pnpm-lock.yaml              # 前端依赖版本精确锁定
-│   ├── tsconfig.json               # TypeScript strict 全局编译规则
-│   ├── vite.config.ts              # Vite 6 开发服务器与打包配置
-│   ├── tailwind.config.js          # Tailwind 3.4 设计令牌配置（严格映射附录 B.1）
-│   ├── .gitignore                  # 忽略 target/、node_modules/、dist/ 与临时缓存
-│   └── README.md                   # 项目简介与开发启动指引
-│
-├── 💻 Rust 核心与服务层（crates/，业务引擎纯逻辑，禁依赖 Tauri）
-│   ├── telemetry-core/             # [Step 2] 核心数据模型、纯算法、SoA 序列、pyramid 构建与选层、GPS 投影、统计
-│   │   ├── Cargo.toml
-│   │   └── src/{lib.rs, models.rs, pyramid.rs, downsample.rs, gps.rs, stats.rs, align.rs}
-│   ├── cache-core/                 # [Step 9A] 金字塔与原始数据磁盘布局、.raw/.pyr 编解码、mmap 快速切片、状态机
-│   │   ├── Cargo.toml
-│   │   └── src/{lib.rs, root.rs, dataset.rs, session.rs, manifest.rs, raw.rs, pyr.rs}
-│   ├── aim-ffi/                    # [Step 3] AiM DLL 桥接 actor（唯一 unsafe crate，45 个导出函数封装）
-│   │   ├── Cargo.toml
-│   │   └── src/{lib.rs, actor.rs, dll.rs, ffi.rs}
-│   ├── csv-parser/                 # [Step 6] 极速 CSV 解析引擎（mmap、编码探测、方言嗅探、rayon 并行分块）
-│   │   ├── Cargo.toml
-│   │   └── src/{lib.rs, parse.rs, dialect.rs, encoding.rs}
-│   ├── telemetry-store/            # [Step 9A] SQLite 持久化层（元数据、Job 记录、圈速、用户布局、注释）
-│   │   ├── Cargo.toml
-│   │   └── src/{lib.rs, store.rs, schema.rs, record.rs, comment.rs, layout.rs}
-│   ├── telemetry-ipc/              # [Step 4] 前后端通信契约、命令枚举、二进制帧编解码、specta 类型导出
-│   │   ├── Cargo.toml
-│   │   └── src/{lib.rs, cmd.rs, frame.rs, types.rs}
-│   ├── migrate-v1/                 # [Step 12] 旧库迁移工具（读取 v1 SQLite 并写入新架构，一次性工具）
-│   │   ├── Cargo.toml
-│   │   └── src/{main.rs, migrate.rs, verify.rs}
-│   └── device-link/                # [Step 13] AiM 记录仪 WiFi 下载（协议状态机 + 断点续传，零 tauri 依赖）
-│       ├── Cargo.toml
-│       └── src/{lib.rs, protocol.rs, client.rs, transport.rs}
-│
-├── 🖥️ 桌面外壳宿主（src-tauri/，Tauri 胶水层）
-│   ├── Cargo.toml                  # 依赖上述业务 crate 与 tauri 2.x
-│   ├── tauri.conf.json             # 窗口 1440×900、标题、图标、NSIS 安装包配置、DLL bundle 资源映射
-│   ├── capabilities/               # Tauri 2 权限与安全能力声明
-│   ├── icons/                      # 应用多尺寸图标集合
-│   └── src/
-│       ├── main.rs                 # 桌面宿主启动入口
-│       ├── state.rs                # AppState 全局状态管理（DashMap 缓存句柄、Job 任务队列）
-│       └── commands/               # Tauri Command 路由实现（将请求派发至各 crate）
-│
-├── 🎨 前端界面与渲染层（src/，纯 React/TS 渲染与交互）
-│   ├── main.tsx                    # React 应用挂载入口
-│   ├── App.tsx                     # 根组件（dockview 宿主与预设布局装配）
-│   ├── index.css                   # 全局样式（注入附录 B.1 令牌 CSS 变量）
-│   ├── api/                        # [Step 5] 后端调用门面
-│   │   ├── client.ts               # 唯一 invoke 入口与二进制帧解析器（禁止组件直接调 tauri）
-│   │   └── types.ts                # 由 specta 自动导出的后端强类型定义
-│   ├── state/                      # [Step 5] 全局状态管理
-│   │   └── appStore.ts             # zustand 单一状态源（窗口视口、generation、活动通道、Job）
-│   ├── plot/                       # [Step 7] uPlot 图表封装与双速渲染
-│   │   ├── uPlotFactory.ts         # uPlot 实例构建、X 轴联动配置、主题色同步
-│   │   ├── worker.ts               # Web Worker 窗口化数据取帧
-│   │   └── compare/                # [Step 15] 对比模式曲线渲染扩展
-│   ├── track/                      # [Step 11] GPS 赛道图 Canvas 2D 渲染引擎
-│   ├── panels/                     # dockview 面板注册与预设
-│   │   └── registry.ts             # [Step 5] 面板注册中心（PANELS 数组）
-│   ├── components/                 # UI 视图组件
-│   │   ├── AppShell.tsx            # 顶栏 40px、状态栏 24px
-│   │   ├── ImportProgressBar.tsx   # [Step 5/B.7] 导入进度条组件
-│   │   ├── ChannelTreePanel.tsx    # [Step 8/P1] 通道选择树
-│   │   ├── PlotStack.tsx           # [Step 7/P2] 多图堆叠区
-│   │   ├── TimelineBar.tsx         # [Step 7/P3] 底部固定时间轴
-│   │   ├── LapPanel.tsx            # [Step 10/P4] 圈速分析面板
-│   │   ├── StatsPanel.tsx          # [Step 10/P5] 窗口通道统计面板
-│   │   ├── TrackMapPanel.tsx       # [Step 11/P6] 赛道轨迹回放面板
-│   │   ├── CommentsPanel.tsx       # [Step 11/P7] 时间锚定注释面板
-│   │   ├── ComparePanel.tsx        # [Step 15/P9] 双文件对比面板
-│   │   ├── device/                 # [Step 13] 设备下载对话框（扫描/设备列表/文件选择）
-│   │   └── library/                # [Step 9B/P8] 资料库主页与卡片组件
-│   ├── theme/                      # [Step 8] 双主题（深色/浅色）切换驱动
-│   └── hooks/                      # 自定义 Hook（useHotkeys 等快捷键驱动）
-│
-├── 📦 验证资产与硬件依赖（自包含，只读）
-│   ├── Data/                       # 实测基准资产（AGX.xrk/csv、Du.xrk/csv、test_large.xrk 大文件冒烟样本、SCUTRacing.ico 等）
-│   └── TestMatLabXRK/              # AiM 官方组件（只读，结构固定，不可移动）
-│       ├── DLL-2022/               # 主解析 DLL
-│       │   └── MatLabXRK-2022-64-ReleaseU.dll
-│       ├── 64/                     # 主 DLL 运行时依赖（libiconv/libxml2/libz/pthreadVC2）
-│       └── inc/                    # C 头文件（MatLabXRK.h，导出函数权威签名）
-│
-├── 🧪 测试套件与验证夹具（tests/）
-│   ├── golden/                     # 真值比对夹具（AGX 速度基准二进制、CSV 元数据 JSON）
-│   ├── fixtures/                   # 测试样本（含 v1_library.db 旧库快照）
-│   └── e2e/                        # [Step 12] WebdriverIO + tauri-driver 端到端自动化脚本
-│
-├── 📚 架构文档与契约
-│   ├── .agent/                     # 施工手册（本文件唯一执行依据）
-│   └── .agent/
-│       ├── adr/                    # 架构决策记录（0001~0008；0008 = WiFi 设备下载，Step 13 开工前立项）
-│       └── contracts/              # core-api.md、dependencies.md 依赖白名单
-│
-├── 🛠️ 工程化脚本（tests/tooling/）
-│   ├── check.ps1                   # 六道关 CI 检查脚本（fmt/clippy/test/tsc/eslint/golden）
-│   └── bundle-dll.ps1              # 打包时同步 AiM DLL 至产物目录脚本
-│
-└── 🚀 构建输出（target/，机器自动生成，禁止提交至 Git）
-    ├── debug/                      # 开发调试版本
-    └── release/                    # 最终优化正式版
-        ├── SCUTRacingTelemetry.exe # 主执行文件
-        ├── *.dll                   # AiM 官方 DLL 依赖（同目录就绪）
-        └── bundle/nsis/            # 最终安装包（SCUTRacingTelemetry_Setup.exe）
+├── Cargo.toml / Cargo.lock              Rust workspace 与锁定依赖
+├── package.json / pnpm-workspace.yaml   React/Tauri 前端脚本与 pnpm 工作区
+├── config/frontend/                     Vite、TypeScript、ESLint、Tailwind 配置
+├── crates/                              Rust 业务模块
+│   ├── telemetry-core/                  纯模型、SoA、对齐、GPS、统计、金字塔算法
+│   ├── cache-core/                      manifest、raw/pyramid 缓存与窗口读取
+│   ├── aim-ffi/                         AiM 官方 DLL 边界（唯一 unsafe 业务 crate）
+│   ├── csv-parser/                      规范 CSV 解析
+│   ├── telemetry-ipc/                   DTO、命令类型、SXK1 二进制帧
+│   ├── cover-video/                      固定示例帧透明 PNG 渲染器（Rust demo）
+│   ├── telemetry-store/                 当前为空壳，预留持久化模块
+│   └── migrate-v1/                      当前为 placeholder，预留迁移工具
+├── src-tauri/                           Tauri v2 桌面主干
+│   ├── src/main.rs                      启动、AppState、command 实现与注册
+│   ├── src/state.rs                     cache、AiM actor、dataset handle、Job 状态
+│   ├── src/imports.rs                   XRK/CSV/ZIP 导入工作流
+│   ├── src/export.rs                    raw/CSV 导出
+│   ├── src/cover_video.rs                Cover Video 文件对话框、PNG 命令适配
+│   └── tauri.conf.json / capabilities/  窗口、构建和权限
+├── src/                                 React/TypeScript 前端
+│   ├── main.tsx → App.tsx               前端入口
+│   ├── api/client.ts                    唯一 Tauri IPC 门面
+│   ├── api/types.ts / frame.ts          前后端类型和帧解码
+│   ├── state/appStore.ts                全局状态
+│   ├── panels/                          面板注册与主要分析面板
+│   ├── components/                      壳层、资料库、图表、时间轴等视图
+│   ├── plot/                            uPlot 图表封装
+│   └── theme/ / hooks/ / utils/         主题、交互和通用工具
+├── tests/                               golden 夹具、工具检查、依赖守卫
+├── Data/                                XRK 样本和产品图标（只读测试资产）
+├── TestMatLabXRK/                       官方 DLL、头文件、运行时依赖和样本
+├── design-demos/                        设计规范；HTML/字体 demo 为本地参考
+├── .agent/                              ADR、契约、施工手册、工作进度和历史证据
+└── target/ / node_modules/ / .pnpm-store/ 构建和依赖产物，可重建
+```
+
+### 当前不存在但仍在施工手册中出现的规划路径
+
+- `crates/device-link/`：WiFi 下载尚未进入当前 workspace；
+- `src-tauri/src/commands/`：command 尚未从 `main.rs` 拆分；
+- `src/components/library/`、`src/components/device/`、`src/track/`：当前仍使用平铺目录；
+- `telemetry.db` / `telemetry-store` 的完整 SQLite 实现：尚未落地。
+
+### 当前主干依赖方向
+
+```text
+aim-ffi / csv-parser → telemetry-core
+cache-core           → telemetry-core
+telemetry-ipc        → telemetry-core
+cover-video          → tiny-skia + ab_glyph + png（不读取 telemetry）
+src-tauri            → telemetry-core + cache-core + aim-ffi + csv-parser + telemetry-ipc + cover-video
+src/api/client.ts    → Tauri commands（前端其他文件不直接触达 Tauri）
 ```
 
 ## 风险登记册（rev.4 更新）

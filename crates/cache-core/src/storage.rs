@@ -182,11 +182,6 @@ impl BlobReader {
             self.read(offset, 8)?.try_into().unwrap(),
         ))
     }
-    pub fn f32(&mut self, offset: u64) -> Result<f32> {
-        Ok(f32::from_le_bytes(
-            self.read(offset, 4)?.try_into().unwrap(),
-        ))
-    }
 }
 pub(crate) fn invalid(message: &str) -> CacheError {
     CacheError::Invalid(message.into())

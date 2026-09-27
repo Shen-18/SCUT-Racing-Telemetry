@@ -1,5 +1,5 @@
 // 时间窗视口运算（手册附录 B.11 交互约定）
-// zoomAt：以鼠标横向位置为焦点缩放，焦点保持在原时间点；窗口最小 2s、最大全程。
+// zoomAt：以鼠标横向位置为焦点缩放，焦点保持在原时间点。
 // panViewport：窗口跟手平移（鼠标右拖 → 窗口右移），位移按窗口宽度换算，触边 clamp。
 
 export interface Viewport {
@@ -22,13 +22,18 @@ export function zoomAtViewport(
   vp: Viewport,
   duration: number,
   focal: number,
-  factor: number
+  factor: number,
+  minSpan = MIN_WINDOW_S
 ): Viewport {
   const f = Math.min(1, Math.max(0, focal));
   const span = Math.max(0, vp.end - vp.start);
   const anchor = vp.start + f * span;
   const nextSpan = span * factor;
-  const clamped = clampViewport({ start: anchor - f * nextSpan, end: anchor + (1 - f) * nextSpan }, duration);
+  const clamped = clampViewport(
+    { start: anchor - f * nextSpan, end: anchor + (1 - f) * nextSpan },
+    duration,
+    minSpan
+  );
   return clamped;
 }
 

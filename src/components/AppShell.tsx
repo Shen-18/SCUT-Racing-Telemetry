@@ -5,6 +5,7 @@ import { TimelineBar } from "./TimelineBar";
 import { ColumnSplitter } from "./ColumnSplitter";
 import { FileCard } from "./FileCard";
 import { LibraryView } from "./LibraryView";
+import { CoverVideoView } from "./CoverVideoView";
 import { PANELS } from "../panels/registry";
 import * as client from "../api/client";
 import { getDatasetFileName } from "../api/dataset";
@@ -19,9 +20,9 @@ const GHOST_BUTTON_STYLE: React.CSSProperties = {
   background: "transparent",
   border: "1px solid var(--line)",
   color: "var(--text)",
-  fontFamily: "inherit",
+  fontFamily: '"F1 Display", sans-serif',
   fontWeight: 700,
-  fontSize: "14px",
+  fontSize: "13px",
   letterSpacing: "1.5px",
   padding: "7px 16px",
   cursor: "pointer",
@@ -67,7 +68,7 @@ function GhostButton({
 
 export interface AppShellProps {
   /** 测试缝隙：SSR 渲染下 zustand 恒返回初始状态，用覆盖值验证另一视图 */
-  viewOverride?: "library" | "analysis";
+  viewOverride?: "library" | "analysis" | "cover-video";
 }
 
 export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
@@ -160,6 +161,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
 
   const datasetFileName = getDatasetFileName(dataset);
   const isLibrary = view === "library";
+  const isCoverVideo = view === "cover-video";
 
   // 播放（B.9 rev.5）：按真实帧间隔推进游标，到窗口末端回到起点；离开分析页自动暂停
   const windowRef = useRef(window);
@@ -267,25 +269,32 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
               DATABASE
             </span>
             <span
-              className="nav-tab nav-tab--disabled"
-              title="遥测视频导出（遥测数据叠加车载画面生成视频）将于后续版本提供"
+              className="nav-tab"
+              data-testid="nav-cover-video"
+              onClick={() => setView("cover-video")}
+              title="生成透明 HUD PNG demo"
             >
-              TELEMETRY VIDEO
+              COVER VIDEO
             </span>
             <span className="nav-tab nav-tab--disabled" title="WiFi 设备下载于后续版本提供">
               WIFI DOWNLOAD
             </span>
           </nav>
+        ) : isCoverVideo ? (
+          <span className="app-shell__dataset-title" style={{ color: "#FFFFFF", fontFamily: '"F1 Display", sans-serif', fontWeight: 700, fontSize: "16px", letterSpacing: "2px", marginLeft: "20px", lineHeight: 1, whiteSpace: "nowrap" }}>
+            COVER VIDEO
+          </span>
         ) : (
           <span
             className="app-shell__dataset-title"
             style={{
               color: "#FFFFFF",
+              fontFamily: '"F1 Display", sans-serif',
               fontWeight: 700,
-              fontSize: "14px",
+              fontSize: "16px",
               letterSpacing: "2px",
-              alignSelf: "flex-end",
-              paddingBottom: "9px",
+              marginLeft: "20px",
+              lineHeight: 1,
               whiteSpace: "nowrap",
             }}
           >
@@ -297,7 +306,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
 
         {/* 右侧按钮组 */}
         <div className="app-shell__tools" style={{ display: "flex", alignItems: "center", gap: "10px", flex: "none" }}>
-          {!isLibrary && (
+          {!isLibrary && !isCoverVideo && (
             <>
               <GhostButton onRed testId="open-library" onClick={() => setView("library")} title="返回 DATABASE">
                 BACK
@@ -318,6 +327,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
               </GhostButton>
             </>
           )}
+          {isCoverVideo && <GhostButton onRed onClick={() => setView("library")} title="返回 DATABASE">BACK</GhostButton>}
           <GhostButton onRed onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title="切换主题">
             {theme === "dark" ? "☾ Dark" : "☀ Light"}
           </GhostButton>
@@ -359,6 +369,8 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
       <main className="app-shell__main" style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
         {isLibrary ? (
           <LibraryView />
+        ) : isCoverVideo ? (
+          <CoverVideoView />
         ) : (
           <div
             style={{
@@ -425,7 +437,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
       </main>
 
       {/* 状态栏 24px（B.2 保留）：--bg2 底 + 1px --line 上边线（分析视图） */}
-      {!isLibrary && (
+      {!isLibrary && !isCoverVideo && (
       <footer
         className="app-shell__statusbar"
         style={{

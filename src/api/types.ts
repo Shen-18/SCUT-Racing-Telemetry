@@ -2,7 +2,7 @@
 export type ImportStage = "ReadingMetadata" | "ReadingChannels" | "BuildingRawCache" | "BuildingPyramid" | "Ready" | "Failed" | "Cancelled" | "Duplicate";
 export interface ImportStatus { job_id:number; stage:ImportStage; progress:number; file_hash:string; meta_ready:boolean; error:string|null }
 export interface FrameHeader { channel:string; unit:string; buckets:number; win_start:number; win_end:number; full_count:number; generation:number }
-export interface WindowFrame { header:FrameHeader; times:Float64Array; mins:Float32Array; maxs:Float32Array }
+export interface WindowFrame { header:FrameHeader; times:Float64Array; mins:Float64Array; maxs:Float64Array }
 export interface ChannelMeta { key:string; name:string; unit:string; source:string; dtype:string; sample_rate_hz:number }
 export interface SessionMeta {
   file_path:string;

@@ -18,8 +18,8 @@ impl CacheRoot {
             .iter_mut()
             .find(|c| c.meta.key == key)
             .ok_or_else(|| CacheError::UnknownChannel(key.into()))?;
-        let mut bytes = Vec::with_capacity(16 + series.len() * 12);
-        bytes.extend_from_slice(b"RAW1");
+        let mut bytes = Vec::with_capacity(16 + series.len() * 16);
+        bytes.extend_from_slice(b"RAW2");
         bytes.extend_from_slice(&1u32.to_le_bytes());
         bytes.extend_from_slice(&(series.len() as u64).to_le_bytes());
         for t in &series.times {
@@ -52,16 +52,14 @@ pub(crate) fn open_raw(path: &std::path::Path, entry: &ChannelEntry) -> Result<B
         .raw
         .as_ref()
         .ok_or_else(|| CacheError::ChannelBuilding(entry.meta.key.clone()))?;
-    let size = entry
-        .full_count
-        .checked_mul(12)
-        .and_then(|n| n.checked_add(16))
-        .ok_or_else(|| storage::invalid("raw size overflow"))?;
-    if blob.bytes != size {
-        return Err(storage::invalid("raw count mismatch"));
-    }
     let mut reader = BlobReader::open(path, blob, "raw")?;
-    let mut expected = b"RAW1".to_vec();
+    let magic = reader.read(0, 4)?;
+    if magic.as_slice() != b"RAW2" {
+        return Err(storage::invalid("unsupported raw format; RAW2 required"));
+    }
+    let size = entry.full_count.checked_mul(16).and_then(|n| n.checked_add(16)).ok_or_else(|| storage::invalid("raw size overflow"))?;
+    if blob.bytes != size { return Err(storage::invalid("raw count mismatch")); }
+    let mut expected = magic;
     expected.extend_from_slice(&1u32.to_le_bytes());
     expected.extend_from_slice(&entry.full_count.to_le_bytes());
     if reader.read(0, 16)? != expected {
@@ -166,20 +164,20 @@ impl DatasetCache {
         let values = reader
             .read(
                 16 + entry.full_count * 8,
-                n.checked_mul(4)
+                n.checked_mul(8)
                     .ok_or_else(|| storage::invalid("raw too large"))?,
             )?
-            .as_chunks::<4>()
+            .as_chunks::<8>()
             .0
             .iter()
-            .map(|b| f32::from_le_bytes(*b))
+            .map(|b| f64::from_le_bytes(*b))
             .collect();
         let series = ChannelSeries { times, values };
         validate_series(&series)?;
         Ok(series)
     }
     /// Step-hold cursor lookup bounded to native sample range; empty or out-of-range returns NaN.
-    pub fn read_cursor_values(&self, keys: &[String], t: f64) -> Result<Vec<f32>> {
+    pub fn read_cursor_values(&self, keys: &[String], t: f64) -> Result<Vec<f64>> {
         if !t.is_finite() {
             return Err(CacheError::InvalidRequest("non-finite cursor".into()));
         }
@@ -188,16 +186,16 @@ impl DatasetCache {
                 let entry = self.entry(key)?;
                 let mut reader = open_raw(&self.path, entry)?;
                 if entry.full_count == 0 {
-                    return Ok(f32::NAN);
+                    return Ok(f64::NAN);
                 }
                 let first = reader.f64(16)?;
                 let last = entry.last_time.unwrap_or(first);
                 if t < first - 1e-9 || t > last + 1e-9 {
-                    return Ok(f32::NAN);
+                    return Ok(f64::NAN);
                 }
                 let index = storage::upper_bound(&mut reader, 16, 8, entry.full_count, t)?
                     .saturating_sub(1);
-                reader.f32(16 + entry.full_count * 8 + index * 4)
+                reader.f64(16 + entry.full_count * 8 + index * 8)
             })
             .collect()
     }

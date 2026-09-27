@@ -30,6 +30,11 @@ describe("zoomAtViewport (B.11 焦点缩放)", () => {
     const tiny = zoomAtViewport({ start: 10, end: 12.5 }, 90, 0.5, 1 / 5);
     expect(tiny.end - tiny.start).toBe(2);
   });
+
+  it("supports a data-rate-derived minimum window", () => {
+    const tiny = zoomAtViewport({ start: 10, end: 12.5 }, 90, 0.5, 1 / 50, 0.2);
+    expect(tiny.end - tiny.start).toBeCloseTo(0.2);
+  });
 });
 
 describe("panViewport (B.11 窗口跟手)", () => {

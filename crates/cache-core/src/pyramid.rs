@@ -51,11 +51,11 @@ impl DatasetCache {
                     count: l.times.len() as u64,
                     offset,
                 };
-                offset += index.count * 16;
+                offset += index.count * 24;
                 index
             })
             .collect();
-        let mut bytes = pyramid_header(&levels);
+        let mut bytes = pyramid_header(&levels, b"PYR2");
         for level in &pyramid.levels {
             for (t, mm) in level.times.iter().zip(&level.minmax) {
                 bytes.extend_from_slice(&t.to_le_bytes());
@@ -89,8 +89,8 @@ impl DatasetCache {
     }
 }
 
-fn pyramid_header(levels: &[LevelIndex]) -> Vec<u8> {
-    let mut bytes = b"PYR1".to_vec();
+fn pyramid_header(levels: &[LevelIndex], magic: &[u8; 4]) -> Vec<u8> {
+    let mut bytes = magic.to_vec();
     bytes.extend_from_slice(&1u32.to_le_bytes());
     bytes.extend_from_slice(&(levels.len() as u64).to_le_bytes());
     for l in levels {
@@ -107,7 +107,11 @@ pub(crate) fn open_pyramid(path: &std::path::Path, entry: &ChannelEntry) -> Resu
         .as_ref()
         .ok_or_else(|| CacheError::ChannelBuilding(entry.meta.key.clone()))?;
     let mut reader = BlobReader::open(path, &index.blob, "pyr")?;
-    let expected = pyramid_header(&index.levels);
+    let magic = reader.read(0, 4)?;
+    if magic.as_slice() != b"PYR2" {
+        return Err(storage::invalid("unsupported pyramid format; PYR2 required"));
+    }
+    let expected = pyramid_header(&index.levels, b"PYR2");
     if reader.read(0, expected.len())? != expected {
         return Err(storage::invalid("pyramid header/index mismatch"));
     }

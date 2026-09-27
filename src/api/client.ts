@@ -61,6 +61,13 @@ export interface Comment {
   [key: string]: unknown;
 }
 
+export interface CoverVideoDemoResult {
+  path: string;
+  width: number;
+  height: number;
+  bytes: number[];
+}
+
 export const clientApi = {
   invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
     return tauriInvoke<T>(command, args);
@@ -195,6 +202,14 @@ export function pickExportFile(suggestedName: string): Promise<string | null> {
 
 export function pickExportFolder(): Promise<string | null> {
   return invoke<string | null>("pick_export_folder");
+}
+
+export function pickCoverVideoFile(): Promise<string | null> {
+  return invoke<string | null>("pick_cover_video_file");
+}
+
+export function generateCoverVideoDemo(path: string): Promise<CoverVideoDemoResult> {
+  return invoke<CoverVideoDemoResult>("generate_cover_video_demo", { path });
 }
 
 export function exportRecords(hashes: string[], dir: string): Promise<ExportOutcome[]> {

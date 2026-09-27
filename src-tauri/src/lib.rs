@@ -1,4 +1,5 @@
 pub mod batch;
+pub mod cover_video;
 pub mod export;
 mod imports;
 pub mod jobs;

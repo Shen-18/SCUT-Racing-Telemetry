@@ -4,22 +4,44 @@ import * as client from "../api/client";
 import type { WindowFrame } from "../api/types";
 import { getDatasetDuration } from "../api/dataset";
 import { formatClockTime } from "../utils/time";
-import { fullFraction } from "../utils/viewport";
 import { resolveColor } from "../theme/channelColors";
 
 // B.4-P6 rev.5 赛道图（右栏上 300px）：单线轨迹 + 红色起终点 + 红色车箭头
-// + 尾迹 + HUD（TIME / SPEED）+ 右上缩放钮。
+// + 尾迹 + HUD（TIME / SPEED）+ 滚轮缩放/右键拖动。
 // 数据 = GPS Latitude/Longitude 全程包络（桶中线近似轨迹，等比投影按纬度修正）。
 // 弯道编号无数据源不绘制（DESIGN-SPEC 9.4）。
 
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 3;
-const ZOOM_STEP = 1.25;
 const TRAIL_SECONDS = 11;
+const HUD_RESERVED_TOP = 68;
 
 interface TrackPoint {
+  t: number;
   x: number;
   y: number;
+}
+
+function trackIndexAtTime(track: TrackPoint[], time: number): number {
+  let low = 0;
+  let high = track.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (track[mid].t < time) low = mid + 1;
+    else high = mid;
+  }
+  return Math.max(0, Math.min(track.length - 1, low));
+}
+
+function interpolateTrackPoint(track: TrackPoint[], time: number): TrackPoint {
+  const right = trackIndexAtTime(track, time);
+  if (right <= 0) return track[0];
+  const left = right - 1;
+  const a = track[left];
+  const b = track[right];
+  const span = b.t - a.t;
+  const f = span > 0 ? Math.max(0, Math.min(1, (time - a.t) / span)) : 0;
+  return { t: time, x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
 }
 
 function findChannelKey(
@@ -54,6 +76,8 @@ export const TrackMapPanel: React.FC = () => {
   const [latFrame, setLatFrame] = useState<WindowFrame | null>(null);
   const [lonFrame, setLonFrame] = useState<WindowFrame | null>(null);
   const [speedFrame, setSpeedFrame] = useState<WindowFrame | null>(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const panDragRef = useRef<{ pointerId: number; x: number; y: number; origin: { x: number; y: number } } | null>(null);
 
   const duration = dataset ? getDatasetDuration(dataset) : 0;
 
@@ -78,16 +102,16 @@ export const TrackMapPanel: React.FC = () => {
     if (!dataset || duration <= 0 || !latKey || !lonKey) return;
     let cancelled = false;
     client
-      .windowSeries(dataset.id, latKey, 0, duration, 1024, 0)
+      .windowSeries(dataset.id, latKey, 0, duration, 0xffffffff, 0)
       .then((f) => !cancelled && setLatFrame(f))
       .catch(() => undefined);
     client
-      .windowSeries(dataset.id, lonKey, 0, duration, 1024, 0)
+      .windowSeries(dataset.id, lonKey, 0, duration, 0xffffffff, 0)
       .then((f) => !cancelled && setLonFrame(f))
       .catch(() => undefined);
     if (speedKey) {
       client
-        .windowSeries(dataset.id, speedKey, 0, duration, 512, 0)
+        .windowSeries(dataset.id, speedKey, 0, duration, 0xffffffff, 0)
         .then((f) => !cancelled && setSpeedFrame(f))
         .catch(() => undefined);
     }
@@ -125,6 +149,7 @@ export const TrackMapPanel: React.FC = () => {
       const lo = (lonFrame.mins[i] + lonFrame.maxs[i]) / 2;
       if (!Number.isFinite(la) || !Number.isFinite(lo)) continue;
       points.push({
+        t: latFrame.times[i],
         x: ((lo - lonMin) * mPerDegLon) / ((latMax - latMin) * mPerDegLat || 1),
         y: 1 - (la - latMin) / (latMax - latMin),
       });
@@ -169,9 +194,10 @@ export const TrackMapPanel: React.FC = () => {
     const contentW = (spanX / Math.max(spanX, spanY)) * scale;
     const contentH = (spanY / Math.max(spanX, spanY)) * scale;
     const ox = (w - contentW) / 2 - (minX / Math.max(spanX, spanY)) * scale;
-    const oy = (h - 24 - contentH) / 2 - (minY / Math.max(spanX, spanY)) * scale;
+    const availableHeight = Math.max(1, h - HUD_RESERVED_TOP - 8);
+    const oy = HUD_RESERVED_TOP + (availableHeight - contentH) / 2 - (minY / Math.max(spanX, spanY)) * scale + pan.y;
     const P = (p: TrackPoint): [number, number] => [
-      ox + (p.x / Math.max(spanX, spanY)) * scale,
+      ox + (p.x / Math.max(spanX, spanY)) * scale + pan.x,
       oy + (p.y / Math.max(spanX, spanY)) * scale,
     ];
 
@@ -192,23 +218,19 @@ export const TrackMapPanel: React.FC = () => {
     g.fillStyle = red;
     g.fillRect(sx - 1, sy - 5, 2, 10);
     // 车辆 + 尾迹
-    const frac = fullFraction(cursorT, duration);
-    const carIdx = Math.min(track.length - 1, Math.floor(frac * track.length));
-    const trailCount = Math.max(
-      1,
-      Math.min(carIdx + 1, Math.round((TRAIL_SECONDS / Math.max(duration, 1e-9)) * track.length))
-    );
+    const carIdx = trackIndexAtTime(track, cursorT);
+    const car = interpolateTrackPoint(track, cursorT);
+    const trailStartIdx = trackIndexAtTime(track, cursorT - TRAIL_SECONDS);
     g.strokeStyle = withAlpha(text, 0.35);
     g.lineWidth = 1.5;
     g.beginPath();
-    for (let k = trailCount; k >= 0; k--) {
-      const idx = Math.max(0, carIdx - k);
+    for (let idx = trailStartIdx; idx <= carIdx; idx += 1) {
       const [x, y] = P(track[idx]);
-      if (k === trailCount) g.moveTo(x, y);
+      if (idx === trailStartIdx) g.moveTo(x, y);
       else g.lineTo(x, y);
     }
     g.stroke();
-    const [cx, cy] = P(track[carIdx]);
+    const [cx, cy] = P(car);
     const nextIdx = Math.min(track.length - 1, carIdx + 1);
     const prevIdx = Math.max(0, carIdx - 1);
     const angle = Math.atan2(
@@ -231,29 +253,55 @@ export const TrackMapPanel: React.FC = () => {
     g.stroke();
     g.restore();
     void dim;
-  }, [track, cursorT, duration, zoom, theme, dataset]);
+  }, [track, cursorT, duration, zoom, pan, theme, dataset]);
 
   // HUD 速度（全程速度包络中线，按游标比例取最近桶）
   const hudSpeed = useMemo(() => {
     if (!speedFrame || speedFrame.times.length === 0 || duration <= 0) return null;
-    const idx = Math.min(
-      speedFrame.times.length - 1,
-      Math.floor(fullFraction(cursorT, duration) * speedFrame.times.length)
-    );
+    const found = speedFrame.times.findIndex((time) => time >= cursorT);
+    const idx = Math.min(speedFrame.times.length - 1, Math.max(0, found < 0 ? speedFrame.times.length - 1 : found));
     const v = (speedFrame.mins[idx] + speedFrame.maxs[idx]) / 2;
     return Number.isFinite(v) ? Math.round(v) : null;
   }, [speedFrame, cursorT, duration]);
 
-  const zoomButtons: Array<{ label: string; action: () => void; title: string }> = [
-    { label: "＋", action: () => setZoom((z) => Math.min(ZOOM_MAX, z * ZOOM_STEP)), title: "放大" },
-    { label: "－", action: () => setZoom((z) => Math.max(ZOOM_MIN, z / ZOOM_STEP)), title: "缩小" },
-    { label: "⟲", action: () => setZoom(1), title: "复位" },
-  ];
+  const resetMap = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+    setZoom((value) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, value * factor)));
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 2) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    panDragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, origin: pan };
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = panDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    setPan({ x: drag.origin.x + event.clientX - drag.x, y: drag.origin.y + event.clientY - drag.y });
+  };
+
+  const stopPointerDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (panDragRef.current?.pointerId === event.pointerId) panDragRef.current = null;
+  };
 
   return (
     <div
       data-testid="track-map"
-      style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}
+      onWheel={handleWheel}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={stopPointerDrag}
+      onPointerCancel={stopPointerDrag}
+      onContextMenu={(event) => event.preventDefault()}
+      style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", touchAction: "none" }}
     >
       <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
       {/* HUD（左上） */}
@@ -271,30 +319,28 @@ export const TrackMapPanel: React.FC = () => {
           {hudSpeed ?? "--"} <span style={{ fontSize: "11px", color: "var(--dim)", fontWeight: 700 }}>km/h</span>
         </div>
       </div>
-      {/* 缩放按钮（右上纵排） */}
-      <div style={{ position: "absolute", top: "10px", right: "10px", display: "flex", flexDirection: "column", gap: "4px", zIndex: 2 }}>
-        {zoomButtons.map((btn) => (
-          <button
-            key={btn.label}
-            onClick={btn.action}
-            title={btn.title}
-            className="ghost-button"
-            style={{
-              width: "26px",
-              height: "26px",
-              background: "var(--panel)",
-              border: "1px solid var(--line)",
-              color: "var(--text)",
-              fontWeight: 700,
-              fontSize: "13px",
-              cursor: "pointer",
-              padding: 0,
-            }}
-          >
-            {btn.label}
-          </button>
-        ))}
-      </div>
+      <button
+        onClick={resetMap}
+        title="重置地图"
+        className="ghost-button"
+        style={{
+          position: "absolute",
+          top: "10px",
+          right: "10px",
+          width: "26px",
+          height: "26px",
+          background: "var(--panel)",
+          border: "1px solid var(--line)",
+          color: "var(--text)",
+          fontWeight: 700,
+          fontSize: "13px",
+          cursor: "pointer",
+          padding: 0,
+          zIndex: 3,
+        }}
+      >
+        ⟲
+      </button>
     </div>
   );
 };

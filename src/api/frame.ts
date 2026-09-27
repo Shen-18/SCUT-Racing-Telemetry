@@ -3,8 +3,8 @@ import type { FrameHeader } from "./types";
 export interface WindowFrame {
   header: FrameHeader;
   times: Float64Array;
-  mins: Float32Array;
-  maxs: Float32Array;
+  mins: Float64Array;
+  maxs: Float64Array;
 }
 export type FrameBytes = ArrayBuffer | Uint8Array | number[];
 const invalid = (reason: string): never => { throw new Error(`Invalid SXK1 frame: ${reason}`); };
@@ -27,15 +27,15 @@ export function decodeFrame(input: FrameBytes, generation?: number): WindowFrame
     typeof header.win_start !== "number" || !Number.isFinite(header.win_start) ||
     typeof header.win_end !== "number" || !Number.isFinite(header.win_end) || header.win_end < header.win_start) invalid("header fields");
   const n = header.buckets;
-  if (bytes.length - offset !== n * 16) invalid("payload length/buckets mismatch");
+  if (bytes.length - offset !== n * 24) invalid("payload length/buckets mismatch");
   if (generation !== undefined && header.generation !== generation) return null;
   // JSON is variable-length: typed-array views may be unaligned and host endian dependent.
-  const times = new Float64Array(n), mins = new Float32Array(n), maxs = new Float32Array(n);
+  const times = new Float64Array(n), mins = new Float64Array(n), maxs = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     times[i] = view.getFloat64(offset + i * 8, true);
     if (!Number.isFinite(times[i]) || (i > 0 && times[i] < times[i - 1])) invalid("time order");
-    mins[i] = view.getFloat32(offset + n * 8 + i * 4, true);
-    maxs[i] = view.getFloat32(offset + n * 12 + i * 4, true);
+    mins[i] = view.getFloat64(offset + n * 8 + i * 8, true);
+    maxs[i] = view.getFloat64(offset + n * 16 + i * 8, true);
     if (Number.isFinite(mins[i]) && Number.isFinite(maxs[i]) && mins[i] > maxs[i]) invalid("inverted envelope");
   }
   return { header, times, mins, maxs };

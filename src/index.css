@@ -96,12 +96,18 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--border-focu
   color: var(--dim2) !important;
 }
 
+.app-shell__topbar .ghost-button:hover:not(:disabled) {
+  border-color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
 /* 资料库导航 tab（P8 顶栏）：激活 = 白字 + 2px 红下划线 */
 /* 一级栏导航 tab（9.5）：红底白字，激活态白色下划线（F1 转播栏样式） */
 .nav-tab {
   display: flex;
   align-items: flex-end;
   padding: 0 16px 9px;
+  font-family: "F1 Display", sans-serif;
   font-weight: 700;
   font-size: 14px;
   letter-spacing: 2px;

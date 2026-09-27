@@ -6,12 +6,12 @@ pub struct MinMaxFrame {
     /// First real sample time of each bucket or boundary sample.
     pub times: Vec<f64>,
     /// Finite minimum, or NaN for an all-missing bucket.
-    pub mins: Vec<f32>,
+    pub mins: Vec<f64>,
     /// Finite maximum, or NaN for an all-missing bucket.
-    pub maxs: Vec<f32>,
+    pub maxs: Vec<f64>,
 }
 impl MinMaxFrame {
-    pub(crate) fn push(&mut self, time: f64, min: f32, max: f32) {
+    pub(crate) fn push(&mut self, time: f64, min: f64, max: f64) {
         self.times.push(time);
         self.mins.push(min);
         self.maxs.push(max);
@@ -20,8 +20,8 @@ impl MinMaxFrame {
 pub(crate) fn valid_window(start: f64, end: f64) -> bool {
     start.is_finite() && end.is_finite() && start <= end && (end - start).is_finite()
 }
-pub(crate) fn extrema(values: impl Iterator<Item = f32>) -> (f32, f32) {
-    let (mut min, mut max) = (f32::NAN, f32::NAN);
+pub(crate) fn extrema(values: impl Iterator<Item = f64>) -> (f64, f64) {
+    let (mut min, mut max) = (f64::NAN, f64::NAN);
     for v in values.filter(|v| v.is_finite()) {
         min = min.min(v);
         max = max.max(v);
@@ -42,7 +42,7 @@ pub(crate) fn extrema(values: impl Iterator<Item = f32>) -> (f32, f32) {
 /// ```
 pub fn minmax_buckets(
     times: &[f64],
-    values: &[f32],
+    values: &[f64],
     start: f64,
     end: f64,
     buckets: usize,

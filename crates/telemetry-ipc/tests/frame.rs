@@ -26,7 +26,7 @@ fn bucket_count_must_match_payload_on_both_boundaries() {
     assert!(encode_frame(&header(2), &[0.0], &[1.0], &[2.0]).is_err());
     for count in [0, 2, u32::MAX] {
         let json = serde_json::to_vec(&header(count)).unwrap();
-        assert!(decode_frame(&wire(&json, &[0; 16])).is_err());
+        assert!(decode_frame(&wire(&json, &[0; 24])).is_err());
     }
 }
 
@@ -49,8 +49,9 @@ fn exact_manual_header_and_little_endian_soa_fixture() {
     let json = br#"{"channel":"GPS Speed","unit":"km/h","buckets":2,"win_start":0.0,"win_end":2.0,"full_count":100,"generation":7}"#;
     // Times 0.5, 1.5; minima -2, 3; maxima 4, 5. Literal IEEE-754 bytes.
     let payload = [
-        0, 0, 0, 0, 0, 0, 224, 63, 0, 0, 0, 0, 0, 0, 248, 63, 0, 0, 0, 192, 0, 0, 64, 64, 0, 0,
-        128, 64, 0, 0, 160, 64,
+        0, 0, 0, 0, 0, 0, 224, 63, 0, 0, 0, 0, 0, 0, 248, 63,
+        0, 0, 0, 0, 0, 0, 0, 192, 0, 0, 0, 0, 0, 0, 8, 64,
+        0, 0, 0, 0, 0, 0, 16, 64, 0, 0, 0, 0, 0, 0, 20, 64,
     ];
     let fixture = wire(json, &payload);
     let typed: FrameHeader = serde_json::from_slice(json).unwrap();
@@ -66,7 +67,7 @@ fn exact_manual_header_and_little_endian_soa_fixture() {
 
 #[test]
 fn rejects_every_truncation_trailing_data_and_bad_prefix() {
-    let full = wire(&serde_json::to_vec(&header(1)).unwrap(), &[0; 16]);
+    let full = wire(&serde_json::to_vec(&header(1)).unwrap(), &[0; 24]);
     for length in 0..full.len() {
         assert!(decode_frame(&full[..length]).is_err(), "length={length}");
     }
@@ -88,7 +89,7 @@ fn empty_frames_and_missing_measurements_are_not_malformed() {
     let bytes = encode_frame(&header(0), &[], &[], &[]).unwrap();
     let (_, t, lo, hi) = decode_frame(&bytes).unwrap();
     assert!(t.is_empty() && lo.is_empty() && hi.is_empty());
-    let bytes = encode_frame(&header(1), &[0.0], &[f32::NAN], &[f32::NAN]).unwrap();
+    let bytes = encode_frame(&header(1), &[0.0], &[f64::NAN], &[f64::NAN]).unwrap();
     let (_, _, lo, hi) = decode_frame(&bytes).unwrap();
     assert!(lo[0].is_nan() && hi[0].is_nan());
 }

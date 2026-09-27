@@ -1,0 +1,10 @@
+[package]
+name = "cover-video"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ab_glyph.workspace = true
+png.workspace = true
+thiserror.workspace = true
+tiny-skia.workspace = true

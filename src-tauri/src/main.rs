@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(dead_code)]
 use scut_racing_telemetry::{
-    batch, export, records,
+    batch, cover_video, export, records,
     state::{self, command_error, AppState},
     stats_cmd, window_fit,
 };
@@ -189,7 +189,7 @@ fn cursor_values(
     channels: Vec<String>,
     t: f64,
     state: tauri::State<'_, Arc<AppState>>,
-) -> Result<Vec<f32>, CmdError> {
+) -> Result<Vec<f64>, CmdError> {
     state
         .dataset(id)?
         .read_cursor_values(&channels, t)
@@ -473,6 +473,8 @@ fn main() {
             export_channels,
             pick_export_folder,
             pick_export_file,
+            cover_video::pick_cover_video_file,
+            cover_video::generate_cover_video_demo,
             list_records,
             delete_record,
             export_csv,

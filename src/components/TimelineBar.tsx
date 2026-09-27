@@ -365,7 +365,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
             fontWeight: 700,
             letterSpacing: "1px",
             cursor: "pointer",
-            fontFamily: "inherit",
+            fontFamily: '"F1 Display", sans-serif',
           }}
           title="Reset zoom"
         >

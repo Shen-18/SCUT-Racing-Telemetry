@@ -272,6 +272,8 @@ export interface StackedPlotOptionsParams {
   height?: number;
   /** 仅堆叠中最后一张图显示 x 轴刻度。 */
   xAxisVisible?: boolean;
+  /** Show a marker at every raw sample when the current window is sparse. */
+  showPoints?: boolean;
   theme?: PlotTheme;
 }
 
@@ -286,6 +288,7 @@ export function createStackedOptions({
   width = 600,
   height = 120,
   xAxisVisible = false,
+  showPoints = false,
   theme = getPlotTheme(),
 }: StackedPlotOptionsParams): uPlot.Options {
   const stroke = color ?? theme.accent;
@@ -314,7 +317,7 @@ export function createStackedOptions({
         stroke,
         width: 1.5,
         spanGaps: true,
-        points: { show: false },
+        points: { show: showPoints, size: 4, width: 1.5 },
         value: (_u, v) => (v == null ? "—" : unit ? `${v.toFixed(2)} ${unit}` : v.toFixed(2)),
       },
     ],

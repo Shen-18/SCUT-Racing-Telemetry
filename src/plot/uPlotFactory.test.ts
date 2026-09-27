@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   SCUT_SYNC_KEY,
+  createStackedOptions,
   createPlotOptions,
   frameToAlignedData,
   formatAxisValues,
@@ -63,8 +64,8 @@ describe("uPlotFactory", () => {
         generation: 1,
       },
       times: new Float64Array([0, 1]),
-      mins: new Float32Array([10, 20]),
-      maxs: new Float32Array([14, 25]),
+      mins: new Float64Array([10, 20]),
+      maxs: new Float64Array([14, 25]),
     });
 
     expect(data).toEqual([[0, 1], [10, 20], [14, 25]]);
@@ -123,6 +124,12 @@ describe("uPlotFactory", () => {
     } as unknown as uPlot;
     resizePlot(mockPlot, 1024, 400);
     expect(mockPlot.setSize).toHaveBeenCalledWith({ width: 1024, height: 400 });
+  });
+
+  it("can render a marker at every sample for a short exact window", () => {
+    const opts = createStackedOptions({ channel: "Speed", showPoints: true });
+    expect(opts.series?.[1]?.points?.show).toBe(true);
+    expect(opts.series?.[1]?.points?.size).toBe(4);
   });
 
   it("zooms around the cursor anchor in both directions", () => {

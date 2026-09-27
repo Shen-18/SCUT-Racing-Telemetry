@@ -60,7 +60,7 @@ pub struct ChannelSeries {
     /// Sample times in seconds.
     pub times: Vec<f64>,
     /// Measurements; non-finite entries denote missing data.
-    pub values: Vec<f32>,
+    pub values: Vec<f64>,
 }
 impl ChannelSeries {
     /// Number of paired samples.

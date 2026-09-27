@@ -19,11 +19,11 @@ export interface AppState {
   openingFileHash: string | null;
   leftWidth: number;
   rightWidth: number;
-  view: "library" | "analysis";
+  view: "library" | "analysis" | "cover-video";
   playing: boolean;
 
   openDataset(fileHash: string): Promise<void>;
-  setView(view: "library" | "analysis"): void;
+  setView(view: "library" | "analysis" | "cover-video"): void;
   setPlaying(playing: boolean): void;
   setWindow(w: { start: number; end: number }): void;
   setActiveRange(range: SampleRange | null): void;
@@ -107,7 +107,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
   },
 
-  setView(view: "library" | "analysis") {
+  setView(view: "library" | "analysis" | "cover-video") {
     // 切视图即暂停播放，避免离开分析页后游标继续跑
     set({ view, playing: false });
   },

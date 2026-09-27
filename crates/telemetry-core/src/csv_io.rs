@@ -9,7 +9,7 @@ const MIN_GRID_HZ: f64 = 1.0;
 pub struct GriddedChannel {
     pub name: String,
     pub unit: String,
-    pub values: Vec<f32>,
+    pub values: Vec<f64>,
 }
 pub struct Gridded {
     pub grid_hz: f64,
@@ -32,9 +32,9 @@ fn median_positive_diff(times: &[f64]) -> Option<f64> {
     Some(diffs[diffs.len() / 2])
 }
 
-fn channel_grid_values(times: &[f64], values: &[f32], grid: &[f64]) -> Vec<f32> {
+fn channel_grid_values(times: &[f64], values: &[f64], grid: &[f64]) -> Vec<f64> {
     let Some(first_time) = times.first().copied() else {
-        return vec![f32::NAN; grid.len()];
+        return vec![f64::NAN; grid.len()];
     };
     let last_time = times.last().copied().unwrap_or(first_time);
     let mut out = Vec::with_capacity(grid.len());
@@ -48,9 +48,9 @@ fn channel_grid_values(times: &[f64], values: &[f32], grid: &[f64]) -> Vec<f32> 
             cursor += 1;
         }
         if t < first_time - 1e-9 || t > last_time + 1e-9 {
-            out.push(f32::NAN);
+            out.push(f64::NAN);
         } else {
-            out.push(current.unwrap_or(f32::NAN));
+            out.push(current.unwrap_or(f64::NAN));
         }
     }
     out
@@ -102,7 +102,7 @@ fn csv_field(text: &str) -> String {
         text.replace(['\r', '\n'], " ").replace('"', "\"\"")
     )
 }
-fn format_value(value: f32) -> String {
+fn format_value(value: f64) -> String {
     if value.is_finite() {
         format!("{value:.9}")
     } else {
@@ -230,7 +230,7 @@ pub struct AimCsv {
     pub channel_names: Vec<String>,
     pub channel_units: Vec<String>,
     pub times: Vec<f64>,
-    pub columns: Vec<Vec<f32>>,
+    pub columns: Vec<Vec<f64>>,
 }
 
 pub fn read_aim_csv(text: &str) -> Result<AimCsv, TelemetryError> {
@@ -301,7 +301,7 @@ pub fn read_aim_csv(text: &str) -> Result<AimCsv, TelemetryError> {
         }
         times.push(time);
         for (i, value) in row[1..].iter().enumerate() {
-            columns[i].push(value.parse::<f32>().unwrap_or(f32::NAN));
+            columns[i].push(value.parse::<f64>().unwrap_or(f64::NAN));
         }
     }
     if times.is_empty() {
@@ -317,7 +317,7 @@ pub fn read_aim_csv(text: &str) -> Result<AimCsv, TelemetryError> {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         let mut sorted_times: Vec<f64> = Vec::with_capacity(times.len());
-        let mut sorted_columns: Vec<Vec<f32>> = columns
+        let mut sorted_columns: Vec<Vec<f64>> = columns
             .iter()
             .map(|_| Vec::with_capacity(times.len()))
             .collect();

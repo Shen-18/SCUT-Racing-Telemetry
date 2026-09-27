@@ -4,9 +4,9 @@ use crate::ChannelSeries;
 #[derive(Clone, Debug, serde::Serialize, specta::Type)]
 pub struct ChannelStats {
     /// Minimum finite value in the window.
-    pub min: f32,
+    pub min: f64,
     /// Maximum finite value in the window.
-    pub max: f32,
+    pub max: f64,
     /// Arithmetic mean of finite samples in the window.
     pub mean: f64,
     /// Population standard deviation of finite samples in the window.
@@ -48,16 +48,16 @@ pub fn channel_stats(s: &ChannelSeries, w: (f64, f64)) -> ChannelStats {
         .collect();
     if a.is_empty() {
         return ChannelStats {
-            min: f32::NAN,
-            max: f32::NAN,
+            min: f64::NAN,
+            max: f64::NAN,
             mean: f64::NAN,
             std: f64::NAN,
         };
     }
     let m = a.iter().sum::<f64>() / a.len() as f64;
     ChannelStats {
-        min: a.iter().copied().fold(f64::INFINITY, f64::min) as f32,
-        max: a.iter().copied().fold(f64::NEG_INFINITY, f64::max) as f32,
+        min: a.iter().copied().fold(f64::INFINITY, f64::min),
+        max: a.iter().copied().fold(f64::NEG_INFINITY, f64::max),
         mean: m,
         std: (a.iter().map(|x| (x - m).powi(2)).sum::<f64>() / a.len() as f64).sqrt(),
     }

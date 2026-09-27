@@ -19,6 +19,7 @@ import { getDatasetDuration } from "../api/dataset";
 // 滚轮 = 以鼠标横向位置为焦点缩放时间窗（×1.18/÷1.18，最小 2s）。
 
 const ZOOM_FACTOR = 1.18;
+const MAX_VISIBLE_SAMPLE_POINTS = 500;
 
 function formatChannelValue(value: number | undefined, unit: string): string {
   if (value === undefined || !Number.isFinite(value)) return "--";
@@ -36,6 +37,7 @@ interface ChannelChartProps {
   isLast: boolean;
   cursorValue: number | undefined;
   duration: number;
+  minWindowSeconds: number;
 }
 
 const ChannelChart: React.FC<ChannelChartProps> = ({
@@ -47,6 +49,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
   isLast,
   cursorValue,
   duration,
+  minWindowSeconds,
 }) => {
   const window = useAppStore((s) => s.window);
   const generation = useAppStore((s) => s.generation);
@@ -73,7 +76,10 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
     let cancelled = false;
     const reqGen = generation;
     const width = containerRef.current?.clientWidth || 600;
-    const pixels = Math.max(128, Math.min(4096, width));
+    // Analysis charts must render every real raw sample.  The backend keeps
+    // the normal pixel budget for thumbnails, but u32::MAX explicitly selects
+    // exact/raw mode for this chart.
+    const pixels = 0xffffffff;
     setLoading(true);
     setError(null);
     setBuilding(false);
@@ -122,6 +128,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
       width,
       height,
       xAxisVisible: isLast,
+      showPoints: frame.times.length <= MAX_VISIBLE_SAMPLE_POINTS,
     });
     options.scales = {
       ...options.scales,
@@ -195,7 +202,13 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
     e.preventDefault();
     const f = fractionFromEvent(e.clientX);
     if (f < 0) return;
-    const next = zoomAtViewport(window, duration, f, e.deltaY > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR);
+    const next = zoomAtViewport(
+      window,
+      duration,
+      f,
+      e.deltaY > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR,
+      minWindowSeconds
+    );
     setWindow(next);
   };
 
@@ -296,6 +309,10 @@ export const PlotStack: React.FC = () => {
   }, [dataset]);
 
   const ordered = checkedChannels.filter((key) => channelByKey.has(key));
+  const sampleRates = ordered
+    .map((key) => dataset?.channels.find((channel) => channel.key === key)?.sample_rate_hz ?? 0)
+    .filter((rate) => Number.isFinite(rate) && rate > 0);
+  const minWindowSeconds = sampleRates.length > 0 ? 20 / Math.max(...sampleRates) : 2;
   const cursorValues = useCursorValues(
     dataset?.id ?? null,
     ordered,
@@ -359,6 +376,7 @@ export const PlotStack: React.FC = () => {
             isLast={index === ordered.length - 1}
             cursorValue={cursorValues[key]}
             duration={duration}
+            minWindowSeconds={minWindowSeconds}
           />
         );
       })}

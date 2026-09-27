@@ -4,15 +4,15 @@ import { decodeFrame } from "./frame";
 export function wireFrame(generation = 7, overrides = {}, samples = [12, 24]) {
   const header = new TextEncoder().encode(JSON.stringify({ channel: "Speed", unit: "km/h",
     buckets: samples.length, win_start: 0, win_end: 2, full_count: 100, generation, ...overrides }));
-  const bytes = new Uint8Array(8 + header.length + samples.length * 16);
+  const bytes = new Uint8Array(8 + header.length + samples.length * 24);
   bytes.set([83, 88, 75, 49]);
   const view = new DataView(bytes.buffer);
   view.setUint32(4, header.length, true);
   bytes.set(header, 8);
   samples.forEach((v, i) => {
     view.setFloat64(8 + header.length + i * 8, i, true);
-    view.setFloat32(8 + header.length + samples.length * 8 + i * 4, v, true);
-    view.setFloat32(8 + header.length + samples.length * 12 + i * 4, v + 1, true);
+    view.setFloat64(8 + header.length + samples.length * 8 + i * 8, v, true);
+    view.setFloat64(8 + header.length + samples.length * 16 + i * 8, v + 1, true);
   });
   return bytes;
 }

@@ -105,30 +105,30 @@ fn raw_publication_survives_cancellation_and_can_resume_in_a_new_root() {
     ));
 }
 
-fn decode(bytes: &[u8]) -> (serde_json::Value, Vec<f64>, Vec<f32>, Vec<f32>) {
+fn decode(bytes: &[u8]) -> (serde_json::Value, Vec<f64>, Vec<f64>, Vec<f64>) {
     assert_eq!(&bytes[..4], b"SXK1");
     let hlen = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
     let header: serde_json::Value = serde_json::from_slice(&bytes[8..8 + hlen]).unwrap();
     let n = header["buckets"].as_u64().unwrap() as usize;
     let payload = &bytes[8 + hlen..];
-    assert_eq!(payload.len(), n * 16);
+    assert_eq!(payload.len(), n * 24);
     let times = payload[..n * 8]
         .as_chunks::<8>()
         .0
         .iter()
         .map(|b| f64::from_le_bytes(*b))
         .collect();
-    let mins = payload[n * 8..n * 12]
-        .as_chunks::<4>()
+    let mins = payload[n * 8..n * 16]
+        .as_chunks::<8>()
         .0
         .iter()
-        .map(|b| f32::from_le_bytes(*b))
+        .map(|b| f64::from_le_bytes(*b))
         .collect();
-    let maxs = payload[n * 12..]
-        .as_chunks::<4>()
+    let maxs = payload[n * 16..]
+        .as_chunks::<8>()
         .0
         .iter()
-        .map(|b| f32::from_le_bytes(*b))
+        .map(|b| f64::from_le_bytes(*b))
         .collect();
     (header, times, mins, maxs)
 }
@@ -223,6 +223,34 @@ fn window_frame_contains_only_samples_inside_requested_range() {
     let (_, times, _, _) = decode(&cache.read_window_frame("Speed", 1.5, 3.5, 100, 1).unwrap());
     assert!(!times.is_empty());
     assert!(times.iter().all(|time| *time >= 1.5 && *time <= 3.5));
+}
+
+#[test]
+fn exact_window_frame_returns_every_raw_sample() {
+    let disk = Disk::new();
+    let identity = disk.source();
+    let root = CacheRoot::open(&disk.0.join("cache")).unwrap();
+    let mut cache = root
+        .publish_metadata(identity.clone(), SessionMeta::default(), vec![channel("Speed")], vec![])
+        .unwrap();
+    cache
+        .write_raw(
+            "Speed",
+            &telemetry_core::ChannelSeries {
+                times: vec![0., 0.25, 0.5, 0.75, 1.0],
+                values: vec![1.123456789012, 2.234567890123, 3.345678901234, 4.456789012345, 5.567890123456],
+            },
+        )
+        .unwrap();
+    cache.build_pyramid("Speed").unwrap();
+    let (_, times, mins, maxs) = decode(
+        &cache
+            .read_window_frame("Speed", 0.2, 0.8, u32::MAX, 1)
+            .unwrap(),
+    );
+    assert_eq!(times, vec![0.25, 0.5, 0.75]);
+    assert_eq!(mins, vec![2.234567890123, 3.345678901234, 4.456789012345]);
+    assert_eq!(maxs, mins);
 }
 
 #[test]

@@ -32,8 +32,8 @@ fn validate_header(header: &FrameHeader) -> Result<usize, IpcError> {
 pub fn encode_frame<T: Serialize>(
     header: &T,
     times: &[f64],
-    mins: &[f32],
-    maxs: &[f32],
+    mins: &[f64],
+    maxs: &[f64],
 ) -> Result<Vec<u8>, IpcError> {
     if times.len() != mins.len() || times.len() != maxs.len() {
         return Err(invalid("array lengths differ"));
@@ -46,7 +46,7 @@ pub fn encode_frame<T: Serialize>(
     let header_len = u32::try_from(json.len()).map_err(|_| invalid("header too large"))?;
     let capacity = times
         .len()
-        .checked_mul(16)
+        .checked_mul(24)
         .and_then(|n| n.checked_add(json.len()))
         .and_then(|n| n.checked_add(8))
         .ok_or_else(|| invalid("frame length overflow"))?;
@@ -66,7 +66,7 @@ pub fn encode_frame<T: Serialize>(
 }
 
 /// The validated original JSON header followed by decoded times, minima and maxima.
-pub type DecodedFrame = (Vec<u8>, Vec<f64>, Vec<f32>, Vec<f32>);
+pub type DecodedFrame = (Vec<u8>, Vec<f64>, Vec<f64>, Vec<f64>);
 
 /// Reject malformed headers, overflow, truncation and trailing bytes before allocating arrays.
 pub fn decode_frame(bytes: &[u8]) -> Result<DecodedFrame, IpcError> {
@@ -82,7 +82,7 @@ pub fn decode_frame(bytes: &[u8]) -> Result<DecodedFrame, IpcError> {
     let header: FrameHeader = serde_json::from_slice(&bytes[8..header_end])?;
     let n = validate_header(&header)?;
     let payload_len = n
-        .checked_mul(16)
+        .checked_mul(24)
         .ok_or_else(|| invalid("payload length overflow"))?;
     let payload = &bytes[header_end..];
     if payload.len() != payload_len {
@@ -96,16 +96,16 @@ pub fn decode_frame(bytes: &[u8]) -> Result<DecodedFrame, IpcError> {
         .collect();
     let floats = |slice: &[u8]| {
         slice
-            .as_chunks::<4>()
+            .as_chunks::<8>()
             .0
             .iter()
-            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .map(|c| f64::from_le_bytes(*c))
             .collect()
     };
     Ok((
         bytes[8..header_end].to_vec(),
         times,
-        floats(&payload[n * 8..n * 12]),
-        floats(&payload[n * 12..]),
+        floats(&payload[n * 8..n * 16]),
+        floats(&payload[n * 16..]),
     ))
 }

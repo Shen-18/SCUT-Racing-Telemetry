@@ -10,3 +10,7 @@ min/max 包络保留尖峰，渲染成本按像素而非总样本数增长；raw
 
 ## 影响与边界
 Level 0 为 raw，Level k 聚合 2^k 原始点，time 取桶首时间，直到桶数≤512；查询选窗口桶数≤2×像素的最细层，更细读 raw。Missing → MetadataReady → RawPartial → RawReady → PyramidPartial → Ready，任意阶段可 Failed；中断按每通道进度恢复。先元数据、概览、点击优先通道、其余通道。二进制头偏移和实现测试属于 Step 9A，不能把本 ADR 当已实现证明。
+
+## 实现偏差记录（2026-09-24）
+
+当前 `src-tauri/src/main.rs` 的默认路径仍是仓库根下的 `.cache`，而不是本 ADR 决策中的 `%APPDATA%/SCUTRacingTelemetry/cache`。`.cache` 已包含导入数据集、源文件副本和恢复临时文件，因此在该路径决策落实前，不应把 `.cache` 当作普通构建缓存直接删除。后续需要单独决定是把默认路径迁回 AppData，还是更新本 ADR 以接受仓库内缓存。
