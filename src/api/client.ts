@@ -126,7 +126,8 @@ export async function windowSeries(
   start: number,
   end: number,
   pixels: number,
-  generation: number
+  /** null = 跳过代际门控（一次性全程包络等无过期语义的请求）。 */
+  generation: number | null
 ): Promise<WindowFrame> {
   const bytes = await invoke<ArrayBuffer | Uint8Array | number[]>("window_series", {
     id,
@@ -134,9 +135,9 @@ export async function windowSeries(
     start,
     end,
     pixels,
-    generation,
+    generation: generation ?? 0,
   });
-  const frame = decodeFrame(bytes, generation);
+  const frame = generation === null ? decodeFrame(bytes) : decodeFrame(bytes, generation);
   if (!frame) {
     throw new Error(`Generation mismatch: expected ${generation}`);
   }

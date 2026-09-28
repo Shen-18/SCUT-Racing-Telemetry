@@ -152,7 +152,6 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
   // ---- canvas 层（B.4 rev.5）：110px 画布 + 红窗口框 + 缩略曲线 + 白色游标 ----
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const generation = useAppStore((s) => s.generation);
   const [thumb, setThumb] = useState<WindowFrame | null>(null);
 
   useEffect(() => {
@@ -168,7 +167,9 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
     return () => observer.disconnect();
   }, []);
 
-  // 缩略曲线 = 默认速度通道的全程包络（一次粗采样，供画布画底噪）
+  // 缩略曲线 = 默认速度通道的全程包络（一次粗采样，供画布画底噪）。
+  // 不挂 generation：拖动中每次 setWindow 都 bump generation,挂在上面会把
+  // 全程包络跟着重拉一遍,纯粹挤占数据请求的队列。
   useEffect(() => {
     if (!storeDataset || duration <= 0) {
       setThumb(null);
@@ -181,7 +182,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
     }
     let cancelled = false;
     client
-      .windowSeries(storeDataset.id, channel, domain.start, domain.end, 480, generation)
+      .windowSeries(storeDataset.id, channel, domain.start, domain.end, 480, null)
       .then((frame) => {
         if (!cancelled) setThumb(frame);
       })
@@ -191,7 +192,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
     return () => {
       cancelled = true;
     };
-  }, [storeDataset, domain.start, domain.end, duration, generation]);
+  }, [storeDataset, domain.start, domain.end, duration]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

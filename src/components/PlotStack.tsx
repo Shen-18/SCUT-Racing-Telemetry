@@ -20,6 +20,19 @@ import { getDatasetDuration } from "../api/dataset";
 
 const ZOOM_FACTOR = 1.18;
 const MAX_VISIBLE_SAMPLE_POINTS = 500;
+// 两阶段取数：窗口一变先发金字塔低清预览（拖动中按节流合并），停顿后
+// 再发 raw 精确请求。若每次窗口变化都整窗全样本拉取，拖动会形成请求风暴，
+// 最新数据永远排在队尾 —— 新露出的区域要等很久才被填充。
+const PREVIEW_THROTTLE_MS = 60;
+const RAW_DEBOUNCE_MS = 200;
+// 最粗金字塔层 ≤512 桶，预览像素低于 256 会选不出层级（budget = pixels*2）。
+const PREVIEW_PIXELS_MIN = 512;
+const PREVIEW_PIXELS_MAX = 1024;
+
+function previewThrottleDelay(lastFireAt: number, now: number): number {
+  if (lastFireAt <= 0) return 0;
+  return Math.max(0, PREVIEW_THROTTLE_MS - (now - lastFireAt));
+}
 
 function formatChannelValue(value: number | undefined, unit: string): string {
   if (value === undefined || !Number.isFinite(value)) return "--";
@@ -61,8 +74,9 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
   const setCursor = useAppStore((s) => s.setCursor);
   const setZoomWindow = useAppStore((s) => s.setZoomWindow);
   const theme = useAppStore((s) => s.theme);
+  // 仅作为依赖触发"导入中通道构建完成 → 重拉";fire 内部用 getState 读取,
+  // 避免闭包过期。导入轮询期间每次状态更新都会重发请求,与既有行为一致。
   const importJobs = useAppStore((s) => s.importJobs);
-  const prioritizeImport = useAppStore((s) => s.prioritizeImport);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
@@ -73,45 +87,106 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
   const [, setPlotLayoutVersion] = useState(0);
   const draggingRef = useRef(false);
   const lastCursorLeftRef = useRef<number | null>(null);
+  const aliveRef = useRef(true);
+  const previewLastFireRef = useRef(0);
+  const previewTimerRef = useRef<number | undefined>(undefined);
+  const previewPendingRef = useRef<{
+    datasetId: number;
+    channelKey: string;
+    start: number;
+    end: number;
+    generation: number;
+  } | null>(null);
 
   const plotOverRect = (): DOMRect | null => plotRef.current?.over.getBoundingClientRect() ?? null;
 
-  // 数据请求：每通道独立，generation 过期丢弃
   useEffect(() => {
-    let cancelled = false;
-    const reqGen = generation;
-    const width = containerRef.current?.clientWidth || 600;
-    // Analysis charts must render every real raw sample.  The backend keeps
-    // the normal pixel budget for thumbnails, but u32::MAX explicitly selects
-    // exact/raw mode for this chart.
-    const pixels = 0xffffffff;
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+      if (previewTimerRef.current !== undefined) {
+        globalThis.clearTimeout(previewTimerRef.current);
+        previewTimerRef.current = undefined;
+      }
+    };
+  }, []);
+
+  const previewPixels = () =>
+    Math.min(PREVIEW_PIXELS_MAX, Math.max(PREVIEW_PIXELS_MIN, containerRef.current?.clientWidth || 600));
+
+  const firePreviewRequest = (
+    req: { datasetId: number; channelKey: string; start: number; end: number; generation: number }
+  ) => {
+    previewLastFireRef.current = Date.now();
     setLoading(true);
     setError(null);
     setBuilding(false);
     client
-      .windowSeries(datasetId, channelKey, window.start, window.end, pixels, reqGen)
+      .windowSeries(req.datasetId, req.channelKey, req.start, req.end, previewPixels(), req.generation)
       .then((next) => {
-        if (cancelled) return;
+        if (!aliveRef.current) return;
         setLoading(false);
         if (next.header.generation !== useAppStore.getState().generation) return; // 过期帧
         setFrame(next);
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
+        if (!aliveRef.current) return;
         setLoading(false);
         const code = (err as { code?: string })?.code;
         if (code === "channel_building") {
           setBuilding(true);
-          const activeJob = Object.values(importJobs).find((j) => !j.error);
-          if (activeJob) void prioritizeImport(activeJob.job_id, [channelKey]);
+          const activeJob = Object.values(useAppStore.getState().importJobs).find((j) => !j.error);
+          if (activeJob) void useAppStore.getState().prioritizeImport(activeJob.job_id, [req.channelKey]);
           return;
         }
         setError(err instanceof Error ? err.message : String(err));
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [datasetId, channelKey, window.start, window.end, generation, importJobs, prioritizeImport]);
+  };
+
+  // 阶段一：金字塔低清预览。连续窗口变化按节流合并（leading + trailing），
+  // 响应仍按 generation 校验，过期帧直接丢弃。
+  useEffect(() => {
+    const pending = { datasetId, channelKey, start: window.start, end: window.end, generation };
+    previewPendingRef.current = pending;
+    const delay = previewThrottleDelay(previewLastFireRef.current, Date.now());
+    if (delay === 0) {
+      if (previewTimerRef.current !== undefined) {
+        globalThis.clearTimeout(previewTimerRef.current);
+        previewTimerRef.current = undefined;
+      }
+      previewPendingRef.current = null;
+      firePreviewRequest(pending);
+      return;
+    }
+    if (previewTimerRef.current === undefined) {
+      previewTimerRef.current = globalThis.setTimeout(() => {
+        previewTimerRef.current = undefined;
+        const queued = previewPendingRef.current;
+        previewPendingRef.current = null;
+        if (queued && aliveRef.current) firePreviewRequest(queued);
+      }, delay);
+    }
+  }, [datasetId, channelKey, window.start, window.end, generation, importJobs]);
+
+  // 阶段二：窗口停顿后发 raw 精确请求（u32::MAX = 每个真实样本）。
+  // 静默替换预览帧；错误由预览阶段负责上报。
+  useEffect(() => {
+    const reqGen = generation;
+    const timer = globalThis.setTimeout(() => {
+      client
+        .windowSeries(datasetId, channelKey, window.start, window.end, 0xffffffff, reqGen)
+        .then((next) => {
+          if (!aliveRef.current) return;
+          if (next.header.generation !== useAppStore.getState().generation) return;
+          setFrame(next);
+          setError(null);
+          setBuilding(false);
+          setLoading(false);
+        })
+        .catch(() => undefined);
+    }, RAW_DEBOUNCE_MS);
+    return () => globalThis.clearTimeout(timer);
+  }, [datasetId, channelKey, window.start, window.end, generation, importJobs]);
 
   // uPlot 实例：通道/单位/主题/颜色变化时重建
   useEffect(() => {
@@ -220,7 +295,12 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
 
   const frac = cursorFraction(cursorT, window);
   const span = window.end - window.start;
-  const extrema = detailFocusKey === channelKey && frame
+  // frame 可能属于上一个窗口（拖动中响应未到）。MIN/MAX 标记只有在
+  // frame 与当前视口一致时才画，否则 min/max 时间点会被 clamp 贴到边缘。
+  const frameIsCurrent = frame !== null
+    && frame.header.win_start === window.start
+    && frame.header.win_end === window.end;
+  const extrema = detailFocusKey === channelKey && frameIsCurrent
     ? (() => {
         let minT: number | null = null;
         let maxT: number | null = null;

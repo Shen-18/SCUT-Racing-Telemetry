@@ -52,7 +52,7 @@ describe("Frontend vertical slice acceptance pipeline", () => {
     const prioritizeSpy = vi.spyOn(client, "prioritizeImport").mockResolvedValue();
     const windowSeriesSpy = vi.spyOn(client, "windowSeries").mockImplementation(
       async (_id, channel, start, end, _pixels, gen) => {
-        return client.decodeFrame(wireFrame(gen, { channel, win_start: start, win_end: end }));
+        return client.decodeFrame(wireFrame(gen ?? 0, { channel, win_start: start, win_end: end }));
       }
     );
 

@@ -169,7 +169,10 @@ fn dataset_meta(id: u64, state: tauri::State<'_, Arc<AppState>>) -> Result<Datas
 fn close_dataset(id: u64, state: tauri::State<'_, Arc<AppState>>) -> Result<(), CmdError> {
     state.close_dataset(id)
 }
-#[tauri::command]
+/// 同步命令默认在主线程执行并互相串行;拖动中每秒会发起多次窗口请求,
+/// 全部排在主线程上会让最新数据迟迟轮不到。async 标记使其进入线程池并行执行
+/// (前端按 generation 丢弃过期帧,乱序返回无害)。
+#[tauri::command(async)]
 fn window_series(
     id: u64,
     channel: String,
@@ -183,7 +186,7 @@ fn window_series(
         .window_series(id, &channel, start, end, pixels, generation)
         .map(tauri::ipc::Response::new)
 }
-#[tauri::command]
+#[tauri::command(async)]
 fn cursor_values(
     id: u64,
     channels: Vec<String>,
@@ -215,7 +218,7 @@ fn cache_root_status(state: tauri::State<'_, Arc<AppState>>) -> telemetry_ipc::C
             .count() as u32,
     }
 }
-#[tauri::command]
+#[tauri::command(async)]
 fn stats(
     id: u64,
     channels: Vec<String>,
