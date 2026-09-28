@@ -86,17 +86,21 @@ const PANEL_TITLE_STYLE: React.CSSProperties = {
   flex: "none",
 };
 
-const GRID_COLUMNS = "28px 120px 100px minmax(120px,1fr) 84px 72px";
+const GRID_COLUMNS = "28px 120px 112px minmax(120px,1fr) 92px 72px";
 
-function headerCellStyle(align: "left" | "center" = "left"): React.CSSProperties {
+// 表头与数据行必须共用同一套网格几何：同样的 margin(16px)+水平 padding(8px),
+// 单元格自身不再加横向补差 padding —— 否则两套网格原点差 8px,
+// 按轨道居中的列(选择框/ACTIONS)会和表头错开。
+// 全表列内容统一居中对齐(负责人要求)。
+function headerCellStyle(): React.CSSProperties {
   return {
     fontFamily: '"F1 Display", sans-serif',
-    fontSize: "11px",
+    fontSize: "12px",
     fontWeight: 700,
     letterSpacing: "1.5px",
     color: "var(--dim2)",
-    padding: align === "center" ? "4px 0" : "4px 8px",
-    textAlign: align,
+    padding: "6px 0",
+    textAlign: "center",
     whiteSpace: "nowrap",
   };
 }
@@ -467,10 +471,11 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                 display: "grid",
                 gridTemplateColumns: GRID_COLUMNS,
                 gap: "0 8px",
-                padding: "0 16px",
+                margin: "0 16px",
+                padding: "0 8px",
                 borderBottom: "1px solid var(--line)",
                 alignItems: "center",
-                minHeight: "28px",
+                minHeight: "32px",
                 flex: "none",
               }}
             >
@@ -499,11 +504,11 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                   <span style={{ position: "absolute", left: "2px", right: "2px", top: "4px", height: "2px", background: "var(--red)" }} />
                 )}
               </span>
-              <span style={headerCellStyle("left")}>START TIME</span>
-              <span style={headerCellStyle("left")}>DRIVER</span>
-              <span style={headerCellStyle("left")}>CAR</span>
-              <span style={headerCellStyle("left")}>DURATION</span>
-              <span style={headerCellStyle("center")}>ACTIONS</span>
+              <span style={headerCellStyle()}>START TIME</span>
+              <span style={headerCellStyle()}>DRIVER</span>
+              <span style={headerCellStyle()}>CAR</span>
+              <span style={headerCellStyle()}>DURATION</span>
+              <span style={headerCellStyle()}>ACTIONS</span>
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
@@ -526,11 +531,12 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                         gridTemplateColumns: GRID_COLUMNS,
                         gap: "0 8px",
                         alignItems: "center",
+                        textAlign: "center",
                         margin: "0 16px",
-                        padding: "6px 8px",
+                        padding: "9px 8px",
                         borderBottom: "1px solid var(--line)",
                         cursor: "pointer",
-                        fontSize: "13px",
+                        fontSize: "14px",
                         background: selected.has(record.file_hash) ? "var(--bg2)" : undefined,
                       }}
                       className="library-row"
@@ -585,8 +591,8 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                             border: "none",
                             color: "var(--dim)",
                             cursor: "pointer",
-                            fontSize: "13px",
-                            padding: "2px 4px",
+                            fontSize: "14px",
+                            padding: "2px 6px",
                           }}
                         >
                           ⬇
@@ -603,8 +609,8 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                             border: "none",
                             color: "var(--dim2)",
                             cursor: "pointer",
-                            fontSize: "13px",
-                            padding: "2px 4px",
+                            fontSize: "14px",
+                            padding: "2px 6px",
                           }}
                         >
                           ✕
