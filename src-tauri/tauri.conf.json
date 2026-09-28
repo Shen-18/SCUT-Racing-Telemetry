@@ -28,6 +28,13 @@
     "active": true,
     "targets": "nsis",
     "icon": ["../Data/SCUTRacing.ico"],
+    "resources": {
+      "../TestMatLabXRK/DLL-2022/MatLabXRK-2022-64-ReleaseU.dll": "aim/MatLabXRK-2022-64-ReleaseU.dll",
+      "../TestMatLabXRK/64/libiconv-2.dll": "aim/libiconv-2.dll",
+      "../TestMatLabXRK/64/libxml2-2.dll": "aim/libxml2-2.dll",
+      "../TestMatLabXRK/64/libz.dll": "aim/libz.dll",
+      "../TestMatLabXRK/64/pthreadVC2_x64.dll": "aim/pthreadVC2_x64.dll"
+    },
     "windows": {"webviewInstallMode": {"type": "embedBootstrapper"}}
   }
 }

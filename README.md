@@ -118,6 +118,8 @@ pnpm tauri build
 
 The generated executable and installer are written below `target/release/` and `target/release/bundle/nsis/`.
 
+The NSIS installer includes the AiM XRK DLL and its native dependencies under the application's resource directory, so a clean Windows machine does not need the repository or development DLL folder. Imported data is stored in the user's cache directory; set `SCUT_CACHE_ROOT` only when a custom location is required.
+
 The repository also provides `build.cmd` for a guided release executable build and `start.cmd` for launching the local executable.
 
 ## Data and cache model

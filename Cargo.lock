@@ -3181,6 +3181,7 @@ dependencies = [
  "cover-video",
  "csv-parser",
  "dashmap",
+ "dirs",
  "rfd",
  "serde",
  "serde_json",

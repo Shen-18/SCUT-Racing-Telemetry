@@ -18,12 +18,27 @@ fn project_root() -> PathBuf {
 }
 fn make_state() -> Result<AppState, CmdError> {
     let root = project_root();
+    let runtime_root = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| root.clone());
+    let bundled_aim = runtime_root.join("resources/aim/MatLabXRK-2022-64-ReleaseU.dll");
     let dll = std::env::var_os("SCUT_AIM_DLL")
         .map(PathBuf::from)
-        .unwrap_or_else(|| root.join("TestMatLabXRK/DLL-2022/MatLabXRK-2022-64-ReleaseU.dll"));
+        .unwrap_or_else(|| {
+            if bundled_aim.exists() {
+                bundled_aim
+            } else {
+                root.join("TestMatLabXRK/DLL-2022/MatLabXRK-2022-64-ReleaseU.dll")
+            }
+        });
     let cache = std::env::var_os("SCUT_CACHE_ROOT")
         .map(PathBuf::from)
-        .unwrap_or_else(|| root.join(".cache"));
+        .unwrap_or_else(|| {
+            dirs::cache_dir()
+                .map(|path| path.join("SCUT Racing Telemetry"))
+                .unwrap_or_else(|| runtime_root.join(".cache"))
+        });
     AppState::new(&cache, &dll)
 }
 #[tauri::command]
