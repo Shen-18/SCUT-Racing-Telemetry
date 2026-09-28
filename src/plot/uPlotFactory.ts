@@ -304,8 +304,10 @@ function getAxisMeasureCtx(): CanvasRenderingContext2D | null {
 /**
  * y 轴宽度 = 最宽刻度文本的实测宽度 + 少量内边距,并夹在 [24,140] 内。
  * 固定宽度(86px)对短标签浪费左侧空间,对长标签又可能截断;按内容自适应两者兼顾。
+ * uPlot 初始化时会以 values=null 调用 size(uPlot.iife.js:3785),此时返回缺省宽度。
  */
-export function computeYAxisSize(values: Array<unknown>): number {
+export function computeYAxisSize(values: Array<unknown> | null): number {
+  if (!values) return 24;
   const ctx = getAxisMeasureCtx();
   let widest = 0;
   if (ctx) {

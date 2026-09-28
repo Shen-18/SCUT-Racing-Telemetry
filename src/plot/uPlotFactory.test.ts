@@ -151,6 +151,8 @@ describe("uPlotFactory", () => {
     expect(wide).toBeGreaterThan(narrow);
     expect(wide).toBeLessThanOrEqual(140);
     expect(computeYAxisSize(["", "  "])).toBe(24);
+    // uPlot 初始化阶段以 null 调用 size,必须安全返回缺省宽度而不是抛错
+    expect(computeYAxisSize(null)).toBe(24);
   });
 
   it("can render a marker at every sample for a short exact window", () => {
