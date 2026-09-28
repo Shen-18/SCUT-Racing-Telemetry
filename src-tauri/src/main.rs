@@ -16,13 +16,12 @@ fn project_root() -> PathBuf {
         .expect("workspace root")
         .to_path_buf()
 }
-fn make_state() -> Result<AppState, CmdError> {
+fn make_state(resource_root: Option<PathBuf>, app_data_root: Option<PathBuf>) -> Result<AppState, CmdError> {
     let root = project_root();
-    let runtime_root = std::env::current_exe()
-        .ok()
-        .and_then(|path| path.parent().map(Path::to_path_buf))
+    let runtime_root = resource_root
+        .or_else(|| std::env::current_exe().ok().and_then(|path| path.parent().map(Path::to_path_buf)))
         .unwrap_or_else(|| root.clone());
-    let bundled_aim = runtime_root.join("resources/aim/MatLabXRK-2022-64-ReleaseU.dll");
+    let bundled_aim = runtime_root.join("aim/MatLabXRK-2022-64-ReleaseU.dll");
     let dll = std::env::var_os("SCUT_AIM_DLL")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
@@ -32,13 +31,11 @@ fn make_state() -> Result<AppState, CmdError> {
                 root.join("TestMatLabXRK/DLL-2022/MatLabXRK-2022-64-ReleaseU.dll")
             }
         });
-    let cache = std::env::var_os("SCUT_CACHE_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            dirs::cache_dir()
-                .map(|path| path.join("SCUT Racing Telemetry"))
-                .unwrap_or_else(|| runtime_root.join(".cache"))
-        });
+    let cache = std::env::var_os("SCUT_CACHE_ROOT").map(PathBuf::from).or(app_data_root).unwrap_or_else(|| {
+        dirs::cache_dir()
+            .map(|path| path.join("SCUT Racing Telemetry"))
+            .unwrap_or_else(|| root.join(".cache"))
+    });
     AppState::new(&cache, &dll)
 }
 #[tauri::command]
@@ -491,13 +488,16 @@ fn clamp_main_window(app: &tauri::AppHandle) {
 }
 
 fn main() {
-    let state = Arc::new(
-        make_state().expect("SCUT Racing Telemetry requires a valid AiM DLL and cache root"),
-    );
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
-        .manage(state)
         .setup(|app| {
+            use tauri::Manager;
+            let resource_root = app.path().resource_dir().ok();
+            let app_data_root = app.path().app_data_dir().ok();
+            let state = Arc::new(make_state(resource_root, app_data_root).expect(
+                "SCUT Racing Telemetry requires bundled AiM resources and a writable app data directory",
+            ));
+            app.manage(state);
             clamp_main_window(app.handle());
             Ok(())
         })
