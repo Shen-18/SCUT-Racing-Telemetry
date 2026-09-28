@@ -3,6 +3,7 @@ import * as client from "../api/client";
 import type { RecordSummary } from "../api/client";
 import { LEFT_WIDTH_RANGE, useAppStore } from "../state/appStore";
 import { ColumnSplitter } from "./ColumnSplitter";
+import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import { formatDateTime, formatDurationShort } from "../utils/time";
 
 // 资料库主页（2026-09-16 负责人重构）：
@@ -122,6 +123,8 @@ export interface LibraryHomeViewProps {
   onToggleSelect(fileHash: string): void;
   onToggleSelectAll?(hashes: string[], select: boolean): void;
   onDeleteSelected?(): void;
+  onReveal?(fileHash: string): void;
+  onDeleteDay?(dayKey: string): void;
   onExportOne(fileHash: string): void;
   onExportSelected(): void;
   onExportDay(dayKey: string): void;
@@ -144,6 +147,8 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
   onToggleSelect,
   onToggleSelectAll,
   onDeleteSelected,
+  onReveal,
+  onDeleteDay,
   onExportOne,
   onExportSelected,
   onExportDay,
@@ -170,6 +175,9 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
     () => Boolean(visible && visible.length > 0 && visible.every((r) => selected.has(r.file_hash))),
     [visible, selected]
   );
+
+  const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
 
   const handleSelectAllToggle = () => {
     if (!visible || visible.length === 0) return;
@@ -252,11 +260,28 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
           </div>
           {groups.map((group) => {
             const active = group.key === selectedGroup;
+            // 日期分组右键：导出/删除该日记录（负责人 2026-09-28 指定，替代 EXPORT DAY 按钮）
+            const groupMenu =
+              category === "time"
+                ? (e: React.MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      items: [
+                        { key: "export-day", label: "导出该日记录", onSelect: () => onExportDay(group.key) },
+                        { key: "delete-day", label: "删除该日记录", danger: true, onSelect: () => onDeleteDay?.(group.key) },
+                      ],
+                    });
+                  }
+                : undefined;
             return (
               <div
                 key={group.key}
                 data-testid={`group-${group.key}`}
                 onClick={() => onGroupChange(active ? null : group.key)}
+                onContextMenu={groupMenu}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -298,8 +323,27 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
         onResize={setCategoryWidth}
       />
 
-      {/* 右侧：记录明细 */}
-      <section style={{ flex: 1, minWidth: 0, height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+      {/* 右侧：记录明细（空白处右键 = 页面菜单：导入/全选/刷新） */}
+      <section
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMenu({
+            x: e.clientX,
+            y: e.clientY,
+            items: [
+              { key: "import", label: "导入", onSelect: () => onPickFiles() },
+              {
+                key: "select-all",
+                label: "全选",
+                disabled: !visible || visible.length === 0,
+                onSelect: () => onToggleSelectAll?.(visible!.map((r) => r.file_hash), true),
+              },
+              { key: "refresh", label: "刷新", onSelect: () => onRetry() },
+            ],
+          });
+        }}
+        style={{ flex: 1, minWidth: 0, height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}
+      >
         <div
           data-testid="library-detail-header"
           style={{
@@ -384,27 +428,6 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                 DELETE ALL
               </button>
             </span>
-          )}
-          {category === "time" && selectedGroup !== null && (
-            <button
-              data-testid="export-day"
-              onClick={() => onExportDay(selectedGroup)}
-              className="ghost-button"
-              style={{
-                background: "transparent",
-                border: "1px solid var(--line)",
-                color: "var(--dim)",
-                fontFamily: '"F1 Display", sans-serif',
-                fontWeight: 700,
-                fontSize: "11px",
-                letterSpacing: "1px",
-                padding: "5px 12px",
-                cursor: "pointer",
-              }}
-              title={`Export all records for ${selectedGroup}`}
-            >
-              EXPORT DAY
-            </button>
           )}
           <button
             data-testid="pick-files"
@@ -528,6 +551,25 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                       title="DOUBLE-CLICK TO OPEN FOR ANALYSIS"
                       onDoubleClick={() => onOpen(record.file_hash)}
                       onKeyDown={(e) => e.key === "Enter" && onOpen(record.file_hash)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const hash = record.file_hash;
+                        setMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          items: [
+                            { key: "reveal", label: "打开文件目录", onSelect: () => onReveal?.(hash) },
+                            { key: "export", label: "导出此记录", onSelect: () => onExportOne(hash) },
+                            { key: "delete", label: "删除此记录", danger: true, onSelect: () => onDelete(hash) },
+                            {
+                              key: "toggle-select",
+                              label: selected.has(hash) ? "取消勾选" : "勾选",
+                              onSelect: () => onToggleSelect(hash),
+                            },
+                          ],
+                        });
+                      }}
                       style={{
                         display: "grid",
                         gridTemplateColumns: GRID_COLUMNS,
@@ -626,6 +668,8 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
           </>
         )}
       </section>
+
+      <ContextMenu menu={menu} onClose={closeMenu} />
     </div>
   );
 };
@@ -778,6 +822,39 @@ export const LibraryView: React.FC = () => {
     }
   }, []);
 
+  // 右键"打开文件目录"：资源管理器定位原始源文件
+  const handleReveal = useCallback((fileHash: string) => {
+    client.revealRecord(fileHash).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : String(err));
+    });
+  }, []);
+
+  // 日期分组右键"删除该日记录"
+  const handleDeleteDay = useCallback(
+    (dayKey: string) => {
+      if (records === null) return;
+      const hashes = records
+        .filter((r) => (r.record_date.trim() || "UNKNOWN DATE") === dayKey)
+        .map((r) => r.file_hash);
+      if (hashes.length === 0) return;
+      const confirmed = window.confirm(
+        `Confirm deleting cached data for ${hashes.length} record(s) of ${dayKey}? Raw files are unaffected, but will need to be re-imported to analyze again.`
+      );
+      if (!confirmed) return;
+      void (async () => {
+        try {
+          for (const hash of hashes) {
+            await client.purgeCache(hash);
+          }
+          setReloadTick((t) => t + 1);
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      })();
+    },
+    [records]
+  );
+
   const handleDeleteSelected = useCallback(async () => {
     const hashes = [...selected];
     if (hashes.length === 0) return;
@@ -854,6 +931,8 @@ export const LibraryView: React.FC = () => {
           );
         }}
         onDelete={(hash) => void handleDelete(hash)}
+        onReveal={handleReveal}
+        onDeleteDay={handleDeleteDay}
         onRetry={() => setReloadTick((t) => t + 1)}
         onPickFiles={() => void handlePickFiles()}
         onToggleSelect={(hash) =>

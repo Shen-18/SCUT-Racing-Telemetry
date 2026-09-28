@@ -221,6 +221,11 @@ export function listRecords(query = ""): Promise<RecordSummary[]> {
   return invoke<RecordSummary[]>("list_records", { query });
 }
 
+/** 在系统文件管理器中定位该记录的原始源文件。 */
+export function revealRecord(hash: string): Promise<void> {
+  return invoke<void>("reveal_record", { hash });
+}
+
 export function deleteRecord(recordId: number): Promise<void> {
   return invoke<void>("delete_record", { recordId });
 }

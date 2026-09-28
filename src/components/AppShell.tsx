@@ -94,6 +94,18 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
 
   const [error, setError] = useState<string | null>(null);
 
+  // 全局屏蔽 WebView2 默认右键菜单：应用内一律用自绘菜单（DATABASE 页）或不弹菜单。
+  // 文本输入类元素保留系统菜单（复制/粘贴）。
+  useEffect(() => {
+    const suppress = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      event.preventDefault();
+    };
+    globalThis.addEventListener("contextmenu", suppress);
+    return () => globalThis.removeEventListener("contextmenu", suppress);
+  }, []);
+
   const panelById = useRef<Record<string, React.FC>>({}).current;
   for (const panel of PANELS) {
     if (!panelById[panel.id]) {

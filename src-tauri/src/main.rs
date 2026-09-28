@@ -290,6 +290,38 @@ fn list_records(
 ) -> Result<Vec<RecordSummary>, CmdError> {
     Ok(records::scan_records(state.cache.path(), &query))
 }
+
+/// 在系统文件管理器中定位记录的原始源文件（资源管理器 /select）。
+#[tauri::command(async)]
+fn reveal_record(hash: String, state: tauri::State<'_, Arc<AppState>>) -> Result<(), CmdError> {
+    if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(command_error("invalid_hash", hash));
+    }
+    let dataset = state.cache.dataset(&hash).map_err(state::cache_error)?;
+    let source = dataset.manifest().meta.file_path.clone();
+    drop(dataset);
+    let source = source
+        .canonicalize()
+        .map_err(|e| command_error("source_missing", format!("{}: {e}", source.display())))?;
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(format!("/select,\"{}\"", source.display()))
+            .spawn()
+            .map_err(|e| command_error("reveal_failed", e))?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let Some(dir) = source.parent() else {
+            return Err(command_error("source_missing", source.display().to_string()));
+        };
+        std::process::Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| command_error("reveal_failed", e))?;
+    }
+    Ok(())
+}
 #[tauri::command]
 fn delete_record(_record_id: i64) -> Result<(), CmdError> {
     Err(command_error(
@@ -479,6 +511,7 @@ fn main() {
             cover_video::pick_cover_video_file,
             cover_video::generate_cover_video_demo,
             list_records,
+            reveal_record,
             delete_record,
             export_csv,
             comments,
