@@ -97,15 +97,15 @@ describe("LibraryHomeView", () => {
     expect(html).toContain("BY DATE");
     expect(html).toContain("2026-09-14");
     expect(html).toContain("10:00:00");
-    expect(html).toContain("START TIME");
-    expect(html).toContain("DRIVER");
-    expect(html).toContain("CAR");
-    expect(html).toContain("DURATION");
-    expect(html).toContain("ACTIONS");
+    expect(html).toContain("开始时间");
+    expect(html).toContain("车手");
+    expect(html).toContain("车辆");
+    expect(html).toContain("时长");
+    expect(html).toContain("操作");
     expect(html).toContain("1:29.0");
-    expect(html).not.toContain("缓存");
+    expect(html).toContain("删除该记录的缓存");
     expect(html).not.toContain(">就绪<");
-    expect(html).toContain("3 RECORDS");
+    expect(html).toContain("3 条记录");
   });
 
   it("renders the empty-library guide", () => {
@@ -130,8 +130,8 @@ describe("LibraryHomeView", () => {
         onExportDay={() => {}}
       />
     );
-    expect(html).toContain("IMPORT TELEMETRY TO START ANALYSIS");
-    expect(html).toContain("IMPORT FILES");
+    expect(html).toContain("导入遥测数据以开始分析");
+    expect(html).toContain("导入文件");
   });
 
   it("renders skeleton while loading and error banner with retry", () => {
@@ -180,7 +180,7 @@ describe("LibraryHomeView", () => {
       />
     );
     expect(failed).toContain("invoke failed");
-    expect(failed).toContain("RETRY");
+    expect(failed).toContain("重试");
   });
 
   it("shows no-match hint when the query filters everything out", () => {
@@ -205,7 +205,7 @@ describe("LibraryHomeView", () => {
         onExportDay={() => {}}
       />
     );
-    expect(html).toContain("NO MATCHING RECORDS");
+    expect(html).toContain("没有匹配的记录");
   });
 
   it("renders bulk selection bar and toggle select all / deselect all buttons", () => {
@@ -232,8 +232,7 @@ describe("LibraryHomeView", () => {
       />
     );
     expect(partialHtml).toContain("bulk-bar");
-    expect(partialHtml).toContain("1 SELECTED");
-    expect(partialHtml).toContain("SELECT ALL");
+    expect(partialHtml).toContain("已选 1 条");
 
     // All 3 selected: bulk bar toggle shows DESELECT ALL
     const allHtml = renderToStaticMarkup(
@@ -257,7 +256,6 @@ describe("LibraryHomeView", () => {
         onExportDay={() => {}}
       />
     );
-    expect(allHtml).toContain("3 SELECTED");
-    expect(allHtml).toContain("DESELECT ALL");
+    expect(allHtml).toContain("已选 3 条");
   });
 });

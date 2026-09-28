@@ -72,6 +72,17 @@ describe("uPlotFactory", () => {
     expect(data).toEqual([[0, 1], [10, 20], [14, 25]]);
   });
 
+  it("does not connect across missing telemetry buckets", () => {
+    const opts = createStackedOptions({
+      channel: "Speed",
+      width: 640,
+      height: 200,
+      xAxisVisible: true,
+    });
+
+    expect(opts.series?.[1]?.spanGaps).toBe(false);
+  });
+
   it("rebuilds plot options when channel identity or unit changes", () => {
     expect(requiresPlotRebuild(null, { channel: "Speed", unit: "km/h" })).toBe(true);
     expect(

@@ -35,7 +35,13 @@ export function useCursorValues(
         .cursorValues(datasetId, keys, t)
         .then((list) => {
           inFlight = false;
-          if (latestRef.current.cursorT !== t) return; // 已过期，等下一轮
+          if (latestRef.current.cursorT !== t) {
+            // The cursor moved while the request was in flight. Allow the
+            // next tick to fetch the current position instead of leaving the
+            // display stuck at the old value.
+            lastT = Number.NaN;
+            return;
+          }
           const next: Record<string, number> = {};
           keys.forEach((key, index) => {
             next[key] = list[index];

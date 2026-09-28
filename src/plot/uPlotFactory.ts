@@ -285,7 +285,7 @@ export interface StackedPlotOptionsParams {
 }
 
 /**
- * 堆叠区单张图的 uPlot 配置：单条线、无数据点、缺口直连（spanGaps）。
+ * 堆叠区单张图的 uPlot 配置：单条线、无数据点，缺失数据保持断线。
  * x 域由调用方随后用 setScale 控制（窗口变化时先平移，数据到达再重建）。
  */
 // uPlot 默认坐标轴字体(uPlot.iife.js:1435)。注意 uPlot 绘制时会用 pxRatioFont
@@ -368,7 +368,9 @@ export function createStackedOptions({
         label: channel,
         stroke,
         width: 1.5,
-        spanGaps: true,
+        // NaN/null buckets represent genuinely missing telemetry. Connecting
+        // across them fabricates a slope and hides the missing interval.
+        spanGaps: false,
         points: { show: showPoints, size: 4, width: 1.5 },
         value: (_u, v) => (v == null ? "—" : unit ? `${v.toFixed(2)} ${unit}` : v.toFixed(2)),
       },
