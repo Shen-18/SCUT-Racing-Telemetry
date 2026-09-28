@@ -217,18 +217,26 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
     return () => globalThis.removeEventListener("keydown", onKey);
   }, [view, setPlaying]);
 
-  const handleExportCheckedChannels = async () => {
-    if (!dataset || checkedChannels.length === 0) {
+  // 导出弹窗选择:勾选通道(当前活动范围) / 完整数据(全部通道、完整会话)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+
+  const runExport = async (mode: "selected" | "full") => {
+    if (!dataset) return;
+    const isFull = mode === "full";
+    const channels = isFull ? dataset.channels.map((c) => c.key) : checkedChannels;
+    if (!isFull && channels.length === 0) {
       setError("请先在左栏勾选要导出的通道");
       return;
     }
     try {
-      const outPath = await client.pickExportFile(`${datasetFileName.replace(/\.[^.]+$/, "")}_selected.csv`);
+      const baseName = datasetFileName.replace(/\.[^.]+$/, "");
+      const outPath = await client.pickExportFile(isFull ? `${baseName}_full.csv` : `${baseName}_selected.csv`);
       if (!outPath) return;
       const duration = activeRange?.end ?? (dataset.meta.duration > 0 ? dataset.meta.duration : 1e9);
       const start = activeRange?.start ?? 0;
-      await client.exportCsv(dataset.id, checkedChannels, start, duration, outPath);
-      setError(`已导出 ${checkedChannels.length} 个通道`);
+      // 完整数据传 0~1e12,后端按全局样本范围 clamp
+      await client.exportCsv(dataset.id, channels, isFull ? 0 : start, isFull ? 1e12 : duration, outPath);
+      setError(`已导出 ${channels.length} 个通道`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -330,7 +338,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
               >
                 {playing ? "❚❚ PAUSE" : "▶ PLAY"}
               </GhostButton>
-              <GhostButton onRed testId="export-channels" onClick={() => void handleExportCheckedChannels()} title="导出当前勾选通道的数据为 CSV">
+              <GhostButton onRed testId="export-channels" onClick={() => setExportDialogOpen(true)} title="导出数据为 CSV">
                 EXPORT
               </GhostButton>
             </>
@@ -474,6 +482,108 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
           {dataset ? datasetFileName : "无活跃文件"}
         </span>
       </footer>
+      )}
+      {exportDialogOpen && (
+        <div
+          data-testid="export-dialog"
+          onClick={() => setExportDialogOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 900,
+            background: "rgba(0,0,0,0.6)",
+            display: "grid",
+            placeItems: "center",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "var(--bg2, #1B1B27)",
+              border: "1px solid var(--line)",
+              minWidth: "340px",
+              padding: "14px 16px",
+              boxShadow: "0 12px 32px rgba(0,0,0,0.6)",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
+                fontWeight: 700,
+                fontSize: "13px",
+                letterSpacing: "2px",
+                color: "var(--dim)",
+                marginBottom: "12px",
+              }}
+            >
+              导出数据
+            </div>
+            <div style={{ display: "grid", gap: "8px" }}>
+              <button
+                data-testid="export-option-selected"
+                disabled={checkedChannels.length === 0}
+                onClick={() => {
+                  setExportDialogOpen(false);
+                  void runExport("selected");
+                }}
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  background: "var(--bg)",
+                  border: "1px solid var(--line)",
+                  color: "var(--text)",
+                  cursor: checkedChannels.length === 0 ? "default" : "pointer",
+                  opacity: checkedChannels.length === 0 ? 0.45 : 1,
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: "13px" }}>导出当前勾选通道</div>
+                <div style={{ fontSize: "11px", color: "var(--dim2)", marginTop: "2px" }}>
+                  {checkedChannels.length > 0
+                    ? `共 ${checkedChannels.length} 个通道 · 当前活动范围`
+                    : "尚未勾选任何通道"}
+                </div>
+              </button>
+              <button
+                data-testid="export-option-full"
+                onClick={() => {
+                  setExportDialogOpen(false);
+                  void runExport("full");
+                }}
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  background: "var(--bg)",
+                  border: "1px solid var(--line)",
+                  color: "var(--text)",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: "13px" }}>导出完整数据</div>
+                <div style={{ fontSize: "11px", color: "var(--dim2)", marginTop: "2px" }}>
+                  {dataset ? `共 ${dataset.channels.length} 个通道 · 完整会话范围` : ""}
+                </div>
+              </button>
+              <button
+                data-testid="export-dialog-cancel"
+                onClick={() => setExportDialogOpen(false)}
+                style={{
+                  marginTop: "2px",
+                  padding: "6px 0",
+                  background: "transparent",
+                  border: "1px solid var(--line)",
+                  color: "var(--dim)",
+                  fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
+                  fontWeight: 700,
+                  fontSize: "11px",
+                  letterSpacing: "1px",
+                  cursor: "pointer",
+                }}
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -147,8 +147,8 @@ export const StatsPanel: React.FC = () => {
               style={{ padding: "5px 8px", borderBottom: "1px solid rgba(127,127,127,0.35)" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                <span style={{ width: "3px", height: "12px", background: color, display: "inline-block", flex: "none" }} />
-                <span style={{ fontWeight: 700, fontSize: "12px", letterSpacing: "1.5px" }}>{meta.name}</span>
+                <span style={{ width: "3px", height: "14px", background: color, display: "inline-block", flex: "none" }} />
+                <span style={{ fontWeight: 700, fontSize: "14px", letterSpacing: "1px" }}>{meta.name}</span>
                 <span style={{ marginLeft: "auto", display: "flex", alignItems: "baseline", gap: "3px", flex: "none" }}>
                   <span className="f1 tnum" style={{ fontWeight: 700, fontSize: "16px", lineHeight: 1 }}>
                     {formatCurrentValue(cursorValues[key])}
