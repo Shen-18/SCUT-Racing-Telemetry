@@ -91,7 +91,7 @@ target/release/bundle/nsis/SCUT Racing Telemetry_1.0.0_x64-setup.exe
 
 安装包包含编译后的 React 前端、Rust/Tauri 后端、AiM 主 DLL 及其依赖。请分发 setup.exe，不要只复制单独的 exe；安装器会释放运行所需的原生 DLL，并处理 WebView2 安装。
 
-导入记录使用源文件 SHA-256 标识，并保存到用户应用数据目录。缺失样本保留为非有限值，前端会显示为空白；generation 字段用于丢弃拖动和缩放期间返回的过期请求。
+导入记录使用源文件 SHA-256 标识，默认保存在安装目录下的 data 文件夹中。也可以通过 SCUT_CACHE_ROOT 指定其他位置。缺失样本保留为非有限值，前端会显示为空白；generation 字段用于丢弃拖动和缩放期间返回的过期请求。
 
 ## 项目状态
 
