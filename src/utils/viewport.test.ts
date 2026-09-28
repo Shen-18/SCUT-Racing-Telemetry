@@ -35,6 +35,12 @@ describe("zoomAtViewport (B.11 焦点缩放)", () => {
     const tiny = zoomAtViewport({ start: 10, end: 12.5 }, 90, 0.5, 1 / 50, 0.2);
     expect(tiny.end - tiny.start).toBeCloseTo(0.2);
   });
+
+  it("clamps a non-zero domain without jumping to zero", () => {
+    const next = zoomAtViewport({ start: 4.6, end: 9.17 }, 636.8, 0, 1 / 1.18, 0.2, 4.6);
+    expect(next.start).toBe(4.6);
+    expect(next.end).toBeGreaterThan(4.6);
+  });
 });
 
 describe("panViewport (B.11 窗口跟手)", () => {

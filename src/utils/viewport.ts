@@ -9,10 +9,16 @@ export interface Viewport {
 
 export const MIN_WINDOW_S = 2;
 
-export function clampViewport(vp: Viewport, duration: number, minSpan = MIN_WINDOW_S): Viewport {
+export function clampViewport(
+  vp: Viewport,
+  duration: number,
+  minSpan = MIN_WINDOW_S,
+  domainStart = 0
+): Viewport {
   const durationSafe = duration > 0 ? duration : minSpan;
+  const domainEnd = domainStart + durationSafe;
   let span = Math.min(Math.max(vp.end - vp.start, minSpan), durationSafe);
-  const start = Math.min(Math.max(vp.start, 0), durationSafe - span);
+  const start = Math.min(Math.max(vp.start, domainStart), domainEnd - span);
   // duration 太小时（< minSpan）允许窗口小于 minSpan 而不是溢出
   if (durationSafe < minSpan) span = durationSafe;
   return { start, end: start + span };
@@ -23,7 +29,8 @@ export function zoomAtViewport(
   duration: number,
   focal: number,
   factor: number,
-  minSpan = MIN_WINDOW_S
+  minSpan = MIN_WINDOW_S,
+  domainStart = 0
 ): Viewport {
   const f = Math.min(1, Math.max(0, focal));
   const span = Math.max(0, vp.end - vp.start);
@@ -32,7 +39,8 @@ export function zoomAtViewport(
   const clamped = clampViewport(
     { start: anchor - f * nextSpan, end: anchor + (1 - f) * nextSpan },
     duration,
-    minSpan
+    minSpan,
+    domainStart
   );
   return clamped;
 }
@@ -40,11 +48,12 @@ export function zoomAtViewport(
 export function panViewport(
   vp: Viewport,
   duration: number,
-  deltaFraction: number
+  deltaFraction: number,
+  domainStart = 0
 ): Viewport {
   const span = Math.max(0, vp.end - vp.start);
   const dt = deltaFraction * span;
-  return clampViewport({ start: vp.start + dt, end: vp.end + dt }, duration);
+  return clampViewport({ start: vp.start + dt, end: vp.end + dt }, duration, MIN_WINDOW_S, domainStart);
 }
 
 /** 游标时间 → 绘图区比例 [0,1]；窗外返回 null（图表不画线）。 */

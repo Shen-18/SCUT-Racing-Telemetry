@@ -7,7 +7,7 @@ import { formatClockTime } from "../utils/time";
 import { resolveColor } from "../theme/channelColors";
 
 // B.4-P6 rev.5 赛道图（右栏上 300px）：单线轨迹 + 红色起终点 + 红色车箭头
-// + 尾迹 + HUD（TIME / SPEED）+ 滚轮缩放/右键拖动。
+// + 尾迹 + TIME HUD + 滚轮缩放/左键拖动。
 // 数据 = GPS Latitude/Longitude 全程包络（桶中线近似轨迹，等比投影按纬度修正）。
 // 弯道编号无数据源不绘制（DESIGN-SPEC 9.4）。
 
@@ -75,7 +75,6 @@ export const TrackMapPanel: React.FC = () => {
   const [zoom, setZoom] = useState(1);
   const [latFrame, setLatFrame] = useState<WindowFrame | null>(null);
   const [lonFrame, setLonFrame] = useState<WindowFrame | null>(null);
-  const [speedFrame, setSpeedFrame] = useState<WindowFrame | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const panDragRef = useRef<{ pointerId: number; x: number; y: number; origin: { x: number; y: number } } | null>(null);
 
@@ -89,16 +88,10 @@ export const TrackMapPanel: React.FC = () => {
     () => (dataset ? findChannelKey(dataset.channels, /longitude/i) : null),
     [dataset]
   );
-  const speedKey = useMemo(() => {
-    if (!dataset) return null;
-    return client.selectDefaultSpeedChannel(dataset.channels) ?? dataset.channels[0]?.key ?? null;
-  }, [dataset]);
-
   // 全程包络拉取（数据集变化时一次）
   useEffect(() => {
     setLatFrame(null);
     setLonFrame(null);
-    setSpeedFrame(null);
     if (!dataset || duration <= 0 || !latKey || !lonKey) return;
     let cancelled = false;
     client
@@ -109,12 +102,6 @@ export const TrackMapPanel: React.FC = () => {
       .windowSeries(dataset.id, lonKey, 0, duration, 0xffffffff, 0)
       .then((f) => !cancelled && setLonFrame(f))
       .catch(() => undefined);
-    if (speedKey) {
-      client
-        .windowSeries(dataset.id, speedKey, 0, duration, 0xffffffff, 0)
-        .then((f) => !cancelled && setSpeedFrame(f))
-        .catch(() => undefined);
-    }
     return () => {
       cancelled = true;
     };
@@ -242,27 +229,15 @@ export const TrackMapPanel: React.FC = () => {
     g.rotate(angle);
     g.fillStyle = red;
     g.beginPath();
-    g.moveTo(5.5, 0);
-    g.lineTo(-3.5, 3);
-    g.lineTo(-1.8, 0);
-    g.lineTo(-3.5, -3);
+    g.moveTo(9, 0);
+    g.lineTo(-6, 5);
+    g.lineTo(-3, 0);
+    g.lineTo(-6, -5);
     g.closePath();
     g.fill();
-    g.strokeStyle = text;
-    g.lineWidth = 1;
-    g.stroke();
     g.restore();
     void dim;
   }, [track, cursorT, duration, zoom, pan, theme, dataset]);
-
-  // HUD 速度（全程速度包络中线，按游标比例取最近桶）
-  const hudSpeed = useMemo(() => {
-    if (!speedFrame || speedFrame.times.length === 0 || duration <= 0) return null;
-    const found = speedFrame.times.findIndex((time) => time >= cursorT);
-    const idx = Math.min(speedFrame.times.length - 1, Math.max(0, found < 0 ? speedFrame.times.length - 1 : found));
-    const v = (speedFrame.mins[idx] + speedFrame.maxs[idx]) / 2;
-    return Number.isFinite(v) ? Math.round(v) : null;
-  }, [speedFrame, cursorT, duration]);
 
   const resetMap = () => {
     setZoom(1);
@@ -276,7 +251,8 @@ export const TrackMapPanel: React.FC = () => {
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 2) return;
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest("button")) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     panDragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, origin: pan };
@@ -300,7 +276,6 @@ export const TrackMapPanel: React.FC = () => {
       onPointerMove={handlePointerMove}
       onPointerUp={stopPointerDrag}
       onPointerCancel={stopPointerDrag}
-      onContextMenu={(event) => event.preventDefault()}
       style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", touchAction: "none" }}
     >
       <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
@@ -311,12 +286,6 @@ export const TrackMapPanel: React.FC = () => {
         </div>
         <div className="tnum" style={{ fontWeight: 700, fontSize: "22px", color: "var(--text)" }}>
           {formatClockTime(cursorT)}
-        </div>
-        <div style={{ fontWeight: 700, fontSize: "10px", letterSpacing: "2px", color: "var(--dim)", marginTop: "6px" }}>
-          SPEED
-        </div>
-        <div className="tnum" style={{ fontWeight: 700, fontSize: "22px", color: "var(--text)" }}>
-          {hudSpeed ?? "--"} <span style={{ fontSize: "11px", color: "var(--dim)", fontWeight: 700 }}>km/h</span>
         </div>
       </div>
       <button

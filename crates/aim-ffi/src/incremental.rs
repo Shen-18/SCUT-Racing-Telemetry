@@ -12,6 +12,34 @@ pub struct ImportChannel {
     pub dtype: ChannelDType,
 }
 
+fn usable_sample_count(count: i32) -> Option<i32> {
+    (count > 0).then_some(count)
+}
+
+pub(super) fn usable_channel_name(name: &str) -> Option<String> {
+    let trimmed = name.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
+#[cfg(test)]
+mod sample_count_tests {
+    use super::{usable_channel_name, usable_sample_count};
+
+    #[test]
+    fn skips_unavailable_channel_counts_without_aborting_catalog() {
+        assert_eq!(usable_sample_count(-1), None);
+        assert_eq!(usable_sample_count(0), None);
+        assert_eq!(usable_sample_count(42), Some(42));
+    }
+
+    #[test]
+    fn skips_empty_channel_names() {
+        assert_eq!(usable_channel_name(""), None);
+        assert_eq!(usable_channel_name("   "), None);
+        assert_eq!(usable_channel_name("  VehSpd  "), Some("VehSpd".into()));
+    }
+}
+
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
@@ -191,8 +219,10 @@ fn append(
     source: ChannelSource,
     recipe: Recipe,
 ) {
-    let base = if name.is_empty() { "unnamed" } else { &name };
-    let mut key = base.to_string();
+    let Some(base) = usable_channel_name(&name) else {
+        return;
+    };
+    let mut key = base.clone();
     let mut suffix = 2;
     while catalog.iter().any(|e| e.header.key == key) {
         key = format!("{base}#{suffix}");
@@ -251,16 +281,18 @@ impl AimDll {
                 return Err(TelemetryError::Dll("channel count failed".into()));
             }
             for channel in 0..count {
-                let n = unsafe { (family.sample_count)(idx, channel) };
-                if n < 0 {
-                    return Err(TelemetryError::Dll("sample count failed".into()));
-                }
-                if n == 0 {
+                let Some(n) = usable_sample_count(unsafe { (family.sample_count)(idx, channel) })
+                else {
+                    // Some vendor files expose catalog entries whose sample
+                    // count is unavailable.  Ignore that channel; one bad
+                    // entry must not make the whole file unimportable.
                     continue;
-                }
-                let mut name = decode(unsafe { (family.name)(idx, channel) })
-                    .trim()
-                    .to_string();
+                };
+                let Some(mut name) = usable_channel_name(&decode(unsafe {
+                    (family.name)(idx, channel)
+                })) else {
+                    continue;
+                };
                 let mut unit = decode(unsafe { (family.units)(idx, channel) })
                     .trim()
                     .to_string();

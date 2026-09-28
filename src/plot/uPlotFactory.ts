@@ -71,7 +71,14 @@ export function formatAxisValues(values: number[], suffix = ""): string[] {
   const decimals = step >= 1 || step === 0
     ? 1
     : Math.min(4, Math.max(1, Math.ceil(-Math.log10(step)) + 1));
-  return values.map((value) => `${value.toFixed(decimals)}${suffix}`);
+  return values.map((value) => {
+    if (!Number.isFinite(value)) return `—${suffix}`;
+    const formatted = value
+      .toFixed(decimals)
+      .replace(/(\.\d*?[1-9])0+$/, "$1")
+      .replace(/\.0+$/, "");
+    return `${formatted}${suffix}`;
+  });
 }
 
 export function zoomWindowAt(
@@ -295,7 +302,9 @@ export function createStackedOptions({
   return {
     width,
     height,
-    padding: [8, 8, xAxisVisible ? 0 : 4, 0],
+    // Leave room for the first/last tick text; uPlot clips axis labels at the
+    // canvas edge when the padding is zero.
+    padding: [12, 8, 12, 0],
     legend: { show: false },
     scales: {
       x: {
@@ -333,7 +342,8 @@ export function createStackedOptions({
       },
       {
         scale: "y",
-        size: 74,
+        // Compact labels still need room for a sign, value and unit.
+        size: 86,
         stroke: theme.textMuted,
         grid: { stroke: theme.borderSubtle, width: 1 },
         ticks: { stroke: theme.border, width: 1 },

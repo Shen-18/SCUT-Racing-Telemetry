@@ -37,6 +37,8 @@ interface ChannelChartProps {
   isLast: boolean;
   cursorValue: number | undefined;
   duration: number;
+  domainStart: number;
+  detailFocusKey: string | null;
   minWindowSeconds: number;
 }
 
@@ -49,13 +51,15 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
   isLast,
   cursorValue,
   duration,
+  domainStart,
+  detailFocusKey,
   minWindowSeconds,
 }) => {
   const window = useAppStore((s) => s.window);
   const generation = useAppStore((s) => s.generation);
   const cursorT = useAppStore((s) => s.cursorT);
   const setCursor = useAppStore((s) => s.setCursor);
-  const setWindow = useAppStore((s) => s.setWindow);
+  const setZoomWindow = useAppStore((s) => s.setZoomWindow);
   const theme = useAppStore((s) => s.theme);
   const importJobs = useAppStore((s) => s.importJobs);
   const prioritizeImport = useAppStore((s) => s.prioritizeImport);
@@ -68,6 +72,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [, setPlotLayoutVersion] = useState(0);
   const draggingRef = useRef(false);
+  const lastCursorLeftRef = useRef<number | null>(null);
 
   const plotOverRect = (): DOMRect | null => plotRef.current?.over.getBoundingClientRect() ?? null;
 
@@ -207,13 +212,43 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
       duration,
       f,
       e.deltaY > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR,
-      minWindowSeconds
+      minWindowSeconds,
+      domainStart
     );
-    setWindow(next);
+    setZoomWindow(next);
   };
 
   const frac = cursorFraction(cursorT, window);
   const span = window.end - window.start;
+  const extrema = detailFocusKey === channelKey && frame
+    ? (() => {
+        let minT: number | null = null;
+        let maxT: number | null = null;
+        let min = Infinity;
+        let max = -Infinity;
+        for (let i = 0; i < frame.times.length; i += 1) {
+          const lo = Number(frame.mins[i]);
+          const hi = Number(frame.maxs[i]);
+          const value = Number.isFinite(lo) && Number.isFinite(hi) ? (lo + hi) / 2 : Number.isFinite(lo) ? lo : hi;
+          if (!Number.isFinite(value)) continue;
+          if (value < min) { min = value; minT = frame.times[i]; }
+          if (value > max) { max = value; maxT = frame.times[i]; }
+        }
+        return { minT, maxT };
+      })()
+    : null;
+  const cursorLineLeft = (() => {
+    if (frac === null) return null;
+    const outer = containerRef.current?.getBoundingClientRect();
+    const over = plotOverRect();
+    // Keep the last correct screen position while uPlot replaces its overlay.
+    // Using a percentage of the outer card here would place the line in the
+    // Y-axis margin and cause the visible jump during wheel zoom.
+    if (!outer || !over || over.width <= 0) return lastCursorLeftRef.current;
+    const left = over.left - outer.left + frac * over.width;
+    lastCursorLeftRef.current = left;
+    return left;
+  })();
 
   return (
     <div
@@ -230,6 +265,18 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
       onWheel={handleWheel}
     >
       <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
+      {extrema && plotOverRect() && (
+        <>
+          {([ [extrema.minT, "var(--green)", "MIN"], [extrema.maxT, "var(--red)", "MAX"] ] as const).map(([time, color, label]) => {
+            if (time === null || span <= 0) return null;
+            const f = Math.max(0, Math.min(1, (time - window.start) / span));
+            const outer = containerRef.current!.getBoundingClientRect();
+            const over = plotOverRect()!;
+            const left = over.left - outer.left + f * over.width;
+            return <div key={label} style={{ position: "absolute", left, top: 0, bottom: 0, borderLeft: `1px dashed ${color}`, pointerEvents: "none", zIndex: 2 }}><span style={{ position: "absolute", top: 2, left: 3, color, fontSize: 9, fontWeight: 700 }}>{label}</span></div>;
+          })}
+        </>
+      )}
       {/* 左上图例：色条 + 通道名 + 当前值 + 单位 */}
       <div
         style={{
@@ -261,20 +308,14 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
         {error && <span style={{ fontSize: "9px", color: "var(--red)", fontWeight: 700 }}>{error}</span>}
       </div>
       {/* 数据游标线：红色实线 */}
-      {frac !== null && (
+      {cursorLineLeft !== null && (
         <div
           data-testid="cursor-line"
           style={{
             position: "absolute",
             top: 0,
             bottom: 0,
-            left: (() => {
-              const outer = containerRef.current?.getBoundingClientRect();
-              const over = plotOverRect();
-              return outer && over
-                ? `${over.left - outer.left + frac * over.width}px`
-                : `${(frac * 100).toFixed(3)}%`;
-            })(),
+            left: `${cursorLineLeft}px`,
             width: 0,
             borderLeft: "2px solid var(--red, #E10600)",
             pointerEvents: "none",
@@ -290,9 +331,12 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
 export const PlotStack: React.FC = () => {
   const dataset = useAppStore((s) => s.dataset);
   const activeRange = useAppStore((s) => s.activeRange);
+  const detailFocusKey = useAppStore((s) => s.detailFocusKey);
   const checkedChannels = useAppStore((s) => s.checkedChannels);
   const cursorT = useAppStore((s) => s.cursorT);
-  const duration = activeRange?.end ?? (dataset ? getDatasetDuration(dataset) : 0);
+  const domainStart = activeRange?.start ?? 0;
+  const domainEnd = activeRange?.end ?? (dataset ? getDatasetDuration(dataset) : 0);
+  const duration = Math.max(0, domainEnd - domainStart);
 
   const colorMap = useMemo(
     () => buildChannelColorMap(dataset?.channels.map((c) => c.name) ?? []),
@@ -308,7 +352,9 @@ export const PlotStack: React.FC = () => {
     return map;
   }, [dataset]);
 
-  const ordered = checkedChannels.filter((key) => channelByKey.has(key));
+  const ordered = (dataset?.channels ?? [])
+    .filter((channel) => checkedSet.has(channel.key))
+    .map((channel) => channel.key);
   const sampleRates = ordered
     .map((key) => dataset?.channels.find((channel) => channel.key === key)?.sample_rate_hz ?? 0)
     .filter((rate) => Number.isFinite(rate) && rate > 0);
@@ -376,6 +422,8 @@ export const PlotStack: React.FC = () => {
             isLast={index === ordered.length - 1}
             cursorValue={cursorValues[key]}
             duration={duration}
+            domainStart={domainStart}
+            detailFocusKey={detailFocusKey}
             minWindowSeconds={minWindowSeconds}
           />
         );

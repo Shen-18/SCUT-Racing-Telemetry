@@ -28,9 +28,7 @@ describe("foundation shell (B.2 rev.5)", () => {
     expect(html).toContain("right-column");
     expect(html).toContain('role="separator"');
     expect(html).toContain("statusbar-cursor");
-    expect(html).toContain("statusbar-window");
     expect(html).toContain("statusbar-cache");
-    expect(html).toContain("statusbar-generation");
   });
 
   it("renders with F1 design token variables", () => {

@@ -280,7 +280,11 @@ impl AimDll {
         }
         let mut result = Vec::new();
         for c in 0..count {
-            let name = decode(unsafe { (family.name)(idx, c) });
+            let Some(name) = incremental::usable_channel_name(&decode(unsafe {
+                (family.name)(idx, c)
+            })) else {
+                continue;
+            };
             let unit = decode(unsafe { (family.units)(idx, c) });
             let n = match lap {
                 Some(l) => unsafe { (family.lap_count)(idx, l, c) },
@@ -323,7 +327,7 @@ impl AimDll {
                 }
             }
             result.push((
-                name.trim().to_string(),
+                name,
                 unit.trim().to_string(),
                 ChannelSeries { times, values },
                 family.source,

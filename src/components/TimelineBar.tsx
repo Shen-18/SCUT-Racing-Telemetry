@@ -8,7 +8,7 @@ import type { SampleRange } from "../utils/sampleRange";
 const TIMELINE_PAN_INTERVAL_MS = 50;
 
 /** 拖动灵敏度倍率（走查：用户反馈幅度太小）。 */
-export const TIMELINE_PAN_SENSITIVITY = 3;
+export const TIMELINE_PAN_SENSITIVITY = 1;
 
 export function timelinePanThrottleDelay(lastDispatchAt: number, now: number): number {
   if (lastDispatchAt <= 0) return 0;
@@ -63,9 +63,6 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
 
   const trackRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const lastDispatchAtRef = useRef(0);
-  const pendingWindowRef = useRef<{ start: number; end: number } | null>(null);
-  const panTimerRef = useRef<number | undefined>();
   const dragStartRef = useRef<{ clientX: number; origWindow: { start: number; end: number } }>({
     clientX: 0,
     origWindow: { start: 0, end: 1 },
@@ -92,26 +89,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
   useEffect(() => {
     if (!isDragging) return;
 
-    const dispatchPan = (nextWindow: { start: number; end: number }) => {
-      const now = Date.now();
-      const delay = timelinePanThrottleDelay(lastDispatchAtRef.current, now);
-      pendingWindowRef.current = nextWindow;
-      if (delay === 0) {
-        pendingWindowRef.current = null;
-        lastDispatchAtRef.current = now;
-        setWindow(nextWindow);
-      } else if (panTimerRef.current === undefined) {
-        panTimerRef.current = globalThis.setTimeout(() => {
-          panTimerRef.current = undefined;
-          const pending = pendingWindowRef.current;
-          pendingWindowRef.current = null;
-          if (pending) {
-            lastDispatchAtRef.current = Date.now();
-            setWindow(pending);
-          }
-        }, delay);
-      }
-    };
+    const dispatchPan = (nextWindow: { start: number; end: number }) => setWindow(nextWindow);
 
     const handleMouseMove = (e: MouseEvent) => {
       const track = trackRef.current;
@@ -130,16 +108,6 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
     };
 
     const handleMouseUp = () => {
-      if (panTimerRef.current !== undefined) {
-        globalThis.clearTimeout(panTimerRef.current);
-        panTimerRef.current = undefined;
-      }
-      const pending = pendingWindowRef.current;
-      pendingWindowRef.current = null;
-      if (pending) {
-        lastDispatchAtRef.current = Date.now();
-        setWindow(pending);
-      }
       setIsDragging(false);
       suppressClickRef.current = didDragRef.current;
       globalThis.setTimeout(() => {
@@ -153,10 +121,6 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
     return () => {
       globalThis.removeEventListener("mousemove", handleMouseMove);
       globalThis.removeEventListener("mouseup", handleMouseUp);
-      if (panTimerRef.current !== undefined) {
-        globalThis.clearTimeout(panTimerRef.current);
-        panTimerRef.current = undefined;
-      }
     };
   }, [isDragging, duration, domain.start, setWindow]);
 

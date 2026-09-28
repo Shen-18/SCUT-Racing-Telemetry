@@ -22,6 +22,14 @@ function formatCurrentValue(value: number | undefined): string {
   return value.toFixed(2);
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  return "无法读取通道统计数据";
+}
+
 interface ChannelStats {
   min: number;
   max: number;
@@ -33,8 +41,10 @@ export const StatsPanel: React.FC = () => {
   const dataset = useAppStore((s) => s.dataset);
   const activeRange = useAppStore((s) => s.activeRange);
   const checkedChannels = useAppStore((s) => s.checkedChannels);
+  const window = useAppStore((s) => s.window);
+  const detailFocusKey = useAppStore((s) => s.detailFocusKey);
+  const setDetailFocusKey = useAppStore((s) => s.setDetailFocusKey);
   const cursorT = useAppStore((s) => s.cursorT);
-  const rangeStart = activeRange?.start ?? 0;
   const duration = activeRange?.end ?? (dataset ? getDatasetDuration(dataset) : 0);
 
   const [stats, setStats] = useState<Record<string, ChannelStats>>({});
@@ -52,7 +62,10 @@ export const StatsPanel: React.FC = () => {
     return map;
   }, [dataset]);
 
-  const ordered = checkedChannels.filter((key) => channelByKey.has(key));
+  const checkedSet = useMemo(() => new Set(checkedChannels), [checkedChannels]);
+  const ordered = (dataset?.channels ?? [])
+    .filter((channel) => checkedSet.has(channel.key))
+    .map((channel) => channel.key);
   const signature = ordered.join("\u0000");
   const cursorValues = useCursorValues(dataset?.id ?? null, ordered, cursorT, duration);
 
@@ -66,7 +79,7 @@ export const StatsPanel: React.FC = () => {
     const stateRef = { cancelled: false, timer: 0 };
     stateRef.timer = globalThis.setTimeout(() => {
       client
-        .getStats(dataset.id, [...ordered], rangeStart, duration)
+        .getStats(dataset.id, [...ordered], window.start, window.end)
         .then((result) => {
           if (!stateRef.cancelled) {
             setStats(result);
@@ -75,7 +88,8 @@ export const StatsPanel: React.FC = () => {
         })
         .catch((err: unknown) => {
           if (!stateRef.cancelled) {
-            setStatsError(err instanceof Error ? err.message : String(err));
+            setStats({});
+            setStatsError(errorMessage(err));
           }
         });
     }, 300);
@@ -83,7 +97,7 @@ export const StatsPanel: React.FC = () => {
       stateRef.cancelled = true;
       globalThis.clearTimeout(stateRef.timer);
     };
-  }, [dataset?.id, signature, rangeStart, duration]);
+  }, [dataset?.id, signature, window.start, window.end]);
 
   if (!dataset) {
     return (
@@ -128,7 +142,9 @@ export const StatsPanel: React.FC = () => {
           return (
             <div
               key={key}
-              style={{ padding: "10px 14px", borderBottom: "1px solid rgba(127,127,127,0.35)" }}
+              onClick={() => setDetailFocusKey(detailFocusKey === key ? null : key)}
+              title="点击显示此通道的 MIN/MAX 位置"
+              style={{ padding: "7px 10px", borderBottom: "1px solid rgba(127,127,127,0.35)" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
                 <span style={{ width: "3px", height: "12px", background: color, display: "inline-block", flex: "none" }} />
@@ -137,13 +153,13 @@ export const StatsPanel: React.FC = () => {
                   {meta.unit}
                 </span>
               </div>
-              <div className="f1 tnum" style={{ fontWeight: 700, fontSize: "24px", lineHeight: 1 }}>
+              <div className="f1 tnum" style={{ fontWeight: 700, fontSize: "20px", lineHeight: 1 }}>
                 {formatCurrentValue(cursorValues[key])}
                 {meta.unit && (
                   <span
                     style={{
                       fontFamily: "Titillium, 'Microsoft YaHei', sans-serif",
-                      fontSize: "11px",
+                      fontSize: "10px",
                       color: "var(--dim)",
                       fontWeight: 700,
                       marginLeft: "4px",
@@ -153,7 +169,7 @@ export const StatsPanel: React.FC = () => {
                   </span>
                 )}
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", marginTop: "8px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "4px", marginTop: "6px" }}>
                 {(
                   [
                     ["MIN", formatStat(stat?.min), "var(--green)"],
@@ -161,7 +177,7 @@ export const StatsPanel: React.FC = () => {
                     ["AVG", formatStat(stat?.mean), "var(--text)"],
                   ] as const
                 ).map(([label, value, colorValue]) => (
-                  <div key={label} style={{ background: "var(--bg2)", padding: "5px 8px" }}>
+                  <div key={label} style={{ background: "var(--bg2)", padding: "4px 6px" }}>
                     <div style={{ fontSize: "9px", color: "var(--dim2)", letterSpacing: "1.5px", fontWeight: 600 }}>
                       {label}
                     </div>

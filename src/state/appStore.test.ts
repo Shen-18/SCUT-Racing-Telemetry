@@ -109,7 +109,7 @@ describe("appStore", () => {
     expect(useAppStore.getState().channelOrder).toEqual(["Speed", "RPM", "Steering"]);
   });
 
-  it("uses the common real range of the currently selected channels", async () => {
+  it("uses the dataset-wide real range for the cursor activity area", async () => {
     useAppStore.setState({
       dataset: {
         id: 7,
@@ -121,15 +121,24 @@ describe("appStore", () => {
       },
       window: { start: 0, end: 641.9 },
     });
-    vi.spyOn(client, "sampleRange").mockResolvedValueOnce({ start: 4.672, end: 641.397 });
+    vi.spyOn(client, "sampleRange").mockResolvedValueOnce({ start: 4.6, end: 641.397 });
 
     useAppStore.getState().toggleChannel("Brake");
 
     await vi.waitFor(() => {
-      expect(useAppStore.getState().activeRange).toEqual({ start: 4.672, end: 641.397 });
+      expect(useAppStore.getState().activeRange).toEqual({ start: 0, end: 641.397 });
     });
-    expect(useAppStore.getState().window).toEqual({ start: 4.672, end: 641.397 });
-    expect(client.sampleRange).toHaveBeenCalledWith(7, ["Brake"]);
+    expect(useAppStore.getState().window).toEqual({ start: 0, end: 641.397 });
+    expect(client.sampleRange).toHaveBeenCalledWith(7, []);
+  });
+
+  it("keeps the cursor visible and its time aligned when wheel zoom changes the viewport", () => {
+    useAppStore.getState().setActiveRange({ start: 0, end: 50 });
+    useAppStore.getState().setCursor(0);
+    useAppStore.getState().setZoomWindow({ start: 2, end: 8 });
+    const state = useAppStore.getState();
+    expect(state.window).toEqual({ start: 2, end: 8 });
+    expect(state.cursorT).toBe(2);
   });
 
   it("setTheme and setCursor update respective properties", () => {

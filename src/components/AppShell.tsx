@@ -78,7 +78,6 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
   const cursorT = useAppStore((s) => s.cursorT);
   const activeRange = useAppStore((s) => s.activeRange);
   const setCursor = useAppStore((s) => s.setCursor);
-  const generation = useAppStore((s) => s.generation);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
   const importJobs = useAppStore((s) => s.importJobs);
@@ -274,7 +273,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
               onClick={() => setView("cover-video")}
               title="生成透明 HUD PNG demo"
             >
-              COVER VIDEO
+              TELEMETRY VIDEO
             </span>
             <span className="nav-tab nav-tab--disabled" title="WiFi 设备下载于后续版本提供">
               WIFI DOWNLOAD
@@ -282,7 +281,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
           </nav>
         ) : isCoverVideo ? (
           <span className="app-shell__dataset-title" style={{ color: "#FFFFFF", fontFamily: '"F1 Display", sans-serif', fontWeight: 700, fontSize: "16px", letterSpacing: "2px", marginLeft: "20px", lineHeight: 1, whiteSpace: "nowrap" }}>
-            COVER VIDEO
+            TELEMETRY VIDEO
           </span>
         ) : (
           <span
@@ -457,18 +456,11 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
         }}
       >
         <span className="tnum" data-testid="statusbar-cursor">t={formatClockTime(cursorT)}</span>
-        <span style={{ color: "var(--line)" }}>|</span>
-        <span className="tnum" data-testid="statusbar-window">
-          视口 [{window.start.toFixed(2)}s ~ {window.end.toFixed(2)}s]
-        </span>
-        <span style={{ color: "var(--line)" }}>|</span>
         <span className="tnum" data-testid="statusbar-channels">
           通道 {checkedChannels.length}/{dataset?.channels.length ?? 0}
         </span>
         <span style={{ color: "var(--line)" }}>|</span>
         <span data-testid="statusbar-cache">缓存: {cacheState}</span>
-        <span style={{ color: "var(--line)" }}>|</span>
-        <span className="tnum" data-testid="statusbar-generation">代际: {generation}</span>
         <span style={{ marginLeft: "auto", color: "var(--dim2)" }}>
           {dataset ? datasetFileName : "无活跃文件"}
         </span>

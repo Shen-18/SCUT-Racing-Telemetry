@@ -21,11 +21,14 @@ export interface AppState {
   rightWidth: number;
   view: "library" | "analysis" | "cover-video";
   playing: boolean;
+  detailFocusKey: string | null;
 
   openDataset(fileHash: string): Promise<void>;
   setView(view: "library" | "analysis" | "cover-video"): void;
   setPlaying(playing: boolean): void;
+  setDetailFocusKey(key: string | null): void;
   setWindow(w: { start: number; end: number }): void;
+  setZoomWindow(w: { start: number; end: number }): void;
   setActiveRange(range: SampleRange | null): void;
   setCursor(t: number): void;
   setLeftWidth(width: number): void;
@@ -65,17 +68,16 @@ function sameChannelSelection(a: string[], b: string[]): boolean {
   return a.every((key) => expected.has(key));
 }
 
-async function selectedSampleRange(id: number, channels: string[]): Promise<SampleRange | null> {
-  if (channels.length === 0) return null;
-  const ranges = await Promise.all(channels.map((channel) => client.sampleRange(id, [channel])));
-  let start = Number.POSITIVE_INFINITY;
-  let end = Number.NEGATIVE_INFINITY;
-  for (const range of ranges) {
-    if (!range) continue;
-    start = Math.min(start, range.start);
-    end = Math.max(end, range.end);
-  }
-  return Number.isFinite(start) && Number.isFinite(end) && start <= end ? { start, end } : null;
+async function datasetSampleRange(id: number): Promise<SampleRange | null> {
+  // The cursor/timeline activity area belongs to the dataset, not to the
+  // currently selected channel.  Individual channels can legitimately start
+  // later; their charts/cursor values remain empty until their first sample.
+  const range = await client.sampleRange(id, []);
+  if (!range) return null;
+  // The session timeline starts at t=0. Keep the raw last timestamp as the
+  // authoritative end; no channel samples are synthesized before their
+  // actual first sample.
+  return { start: 0, end: range.end };
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -92,6 +94,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentFrame: null,
   openingFileHash: null,
   playing: false,
+  detailFocusKey: null,
   leftWidth: LEFT_WIDTH_RANGE.default,
   rightWidth: RIGHT_WIDTH_RANGE.default,
   view: "library",
@@ -107,6 +110,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
   },
 
+  setZoomWindow(w: { start: number; end: number }) {
+    set((state) => {
+      const nextWindow = clampWindowToSampleRange(w, state.activeRange);
+      return {
+        window: nextWindow,
+        cursorT: Math.max(nextWindow.start, Math.min(nextWindow.end, state.cursorT)),
+        generation: state.generation + 1,
+      };
+    });
+  },
+
   setView(view: "library" | "analysis" | "cover-video") {
     // 切视图即暂停播放，避免离开分析页后游标继续跑
     set({ view, playing: false });
@@ -114,6 +128,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setPlaying(playing: boolean) {
     set({ playing });
+  },
+
+  setDetailFocusKey(key: string | null) {
+    set({ detailFocusKey: key });
   },
 
   setLeftWidth(width: number) {
@@ -156,7 +174,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const selected = get().checkedChannels;
     get().setActiveRange(null);
     if (selected.length === 0) return;
-    void selectedSampleRange(dataset.id, selected).then((range) => {
+    void datasetSampleRange(dataset.id).then((range) => {
       const state = get();
       if (state.dataset?.id !== dataset.id || !sameChannelSelection(state.checkedChannels, selected)) {
         return;
@@ -214,7 +232,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const duration = getDatasetDuration(meta);
     let initialRange: SampleRange | null = null;
     try {
-      initialRange = await selectedSampleRange(meta.id, initialChecked);
+      initialRange = await datasetSampleRange(meta.id);
     } catch {
       // Partially-built caches may not expose a range yet.
     }

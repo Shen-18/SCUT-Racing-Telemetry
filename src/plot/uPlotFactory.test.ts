@@ -112,9 +112,9 @@ describe("uPlotFactory", () => {
       "0.121s",
     ]);
     expect(formatAxisValues([1, 2, 3], " km/h")).toEqual([
-      "1.0 km/h",
-      "2.0 km/h",
-      "3.0 km/h",
+      "1 km/h",
+      "2 km/h",
+      "3 km/h",
     ]);
   });
 
@@ -124,6 +124,22 @@ describe("uPlotFactory", () => {
     } as unknown as uPlot;
     resizePlot(mockPlot, 1024, 400);
     expect(mockPlot.setSize).toHaveBeenCalledWith({ width: 1024, height: 400 });
+  });
+
+  it("trims redundant trailing zeroes from axis labels", () => {
+    expect(formatAxisValues([-0.5, 0, 0.5], " km/h")).toEqual([
+      "-0.5 km/h",
+      "0 km/h",
+      "0.5 km/h",
+    ]);
+  });
+
+  it("reserves display room for compact y-axis labels and edge ticks", () => {
+    const opts = createStackedOptions({ channel: "Speed", unit: "km/h" });
+    const yAxis = opts.axes?.[1];
+    expect(yAxis?.size).toBeGreaterThanOrEqual(86);
+    expect(opts.padding?.[0]).toBeGreaterThanOrEqual(12);
+    expect(opts.padding?.[2]).toBeGreaterThanOrEqual(12);
   });
 
   it("can render a marker at every sample for a short exact window", () => {
