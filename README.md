@@ -1,99 +1,74 @@
 # SCUT Racing Telemetry
 
-SCUT Racing Telemetry is a Windows desktop application for importing, inspecting, and exporting motorsport telemetry. It is designed for fast analysis of large AiM and CSV recordings, with a dense analysis workspace for channel selection, synchronized plots, cursor values, statistics, timeline navigation, and GPS track review.
+SCUT Racing Telemetry 是面向赛车数据分析的 Windows 桌面应用，用于导入、查看、对比和导出 AiM 及 CSV 遥测记录。
 
-## Features
+## 主要功能
 
-- Import AiM `.XRK` recordings and telemetry `.CSV` files.
-- Keep a local content-addressed cache so imported files can be reopened quickly.
-- Browse records by date, vehicle, driver, and session metadata.
-- Select multiple channels and render synchronized charts with shared time and cursor alignment.
-- Use pyramid previews while navigating and raw samples for detailed inspection.
-- Preserve missing telemetry as gaps instead of inventing connecting segments.
-- Inspect min/max/average statistics for the active time window.
-- Review GPS track data with zoom and pan controls.
-- Export selected records to CSV.
-- Open the original source file from the library view.
-- Light and dark themes, resizable analysis columns, and persistent window state.
+- 导入 AiM 文件（XRK、XRZ）和遥测 CSV 文件。
+- 使用本地缓存，重复打开记录时无需重新解析。
+- 按日期、车辆、车手和场次浏览记录。
+- 多通道同步曲线、时间游标和窗口缩放。
+- 拖动窗口时先显示金字塔预览，停顿后加载原始样本。
+- 缺失遥测保持为空白，不会跨越缺口人为连线。
+- 查看当前窗口的最小值、最大值、平均值和标准差。
+- 查看 GPS 赛道轨迹并进行缩放、平移。
+- 将选中的记录导出为 CSV。
+- 支持明暗主题、可调整栏宽和窗口状态保存。
 
-## Technology stack
+## 技术栈
 
-### Desktop shell
+- Tauri 2：Windows 桌面壳和原生命令。
+- Rust：导入、缓存、统计、导出、原始样本和 AiM DLL 接口。
+- React 18、TypeScript、Vite 6：前端界面。
+- uPlot：高性能时间序列绘图。
+- Zustand：应用状态管理。
+- Tailwind CSS 和 CSS 设计令牌：布局和主题。
+- Vitest：前端测试。
+- WebView2：Windows 界面运行时。
 
-- **Tauri 2** — Windows desktop packaging and native commands.
-- **Rust** — file import, cache management, raw sample access, statistics, export, and AiM DLL integration.
-- **WebView2** — renders the React interface on Windows.
+## Rust 模块
 
-### Frontend
+- telemetry-core：通道模型、对齐、统计、降采样和 CSV 工具。
+- cache-core：持久化缓存、原始通道和窗口数据。
+- aim-ffi：AiM XRK DLL 接口。
+- csv-parser：CSV 遥测解析。
+- telemetry-ipc：Rust 与前端之间的二进制帧协议。
+- cover-video：封面视频渲染支持。
+- src-tauri：Tauri 命令和桌面入口。
 
-- **React 18** with TypeScript.
-- **Vite 6** for development and production builds.
-- **uPlot** for high performance time-series rendering.
-- **Zustand** for application state.
-- **Tailwind CSS** and project QSS/CSS tokens for layout and theming.
-- **Vitest** and Testing Library utilities for frontend tests.
-
-### Rust workspace
-
-- `telemetry-core` — channel models, alignment, statistics, pyramids, and CSV utilities.
-- `cache-core` — persistent dataset metadata, raw channel storage, and cached window frames.
-- `aim-ffi` — FFI bridge for the AiM XRK DLL.
-- `csv-parser` — CSV telemetry parsing.
-- `telemetry-ipc` — validated binary frame encoding and decoding between Rust and the frontend.
-- `cover-video` — cover-video rendering support.
-- `src-tauri` — Tauri commands and application wiring.
-
-## Repository layout
+## 目录结构
 
 ```text
-src/                    React application and frontend tests
-src-tauri/              Tauri commands and desktop entry point
-crates/telemetry-core/  Shared telemetry algorithms and models
-crates/cache-core/      Persistent cache and raw sample access
-crates/aim-ffi/         AiM DLL integration
-crates/csv-parser/      CSV import support
-crates/telemetry-ipc/   Binary IPC frame contract
-config/frontend/        Vite, TypeScript, and ESLint configuration
-Data/                   Development fixtures and application assets
-tests/                  Tooling, golden data, and integration fixtures
+src/                    React 界面和前端测试
+src-tauri/              Tauri 命令和桌面入口
+crates/                 Rust 工作区模块
+config/frontend/        Vite、TypeScript、ESLint 配置
+Data/                   开发样例和应用资源
+TestMatLabXRK/          AiM 运行时 DLL 及其依赖
+tests/                  测试夹具和工具检查
 ```
 
-## Requirements
+## 开发环境
 
-- Windows 10 or later.
-- Node.js with pnpm 11.
-- Rust stable toolchain through `rustup`.
-- Microsoft WebView2 Runtime.
-- The AiM XRK DLL for XRK import. The development repository includes a test DLL under `TestMatLabXRK/DLL-2022/`.
-
-## Development
-
-Install JavaScript dependencies:
+- Windows 10 或更高版本
+- Node.js 和 pnpm 11
+- Rust stable（通过 rustup 安装）
+- Microsoft WebView2 Runtime
+- AiM XRK DLL（仓库中的 TestMatLabXRK 目录提供开发和打包所需 DLL）
 
 ```powershell
 pnpm install
-```
-
-Run the web UI:
-
-```powershell
-pnpm dev:web
-```
-
-Run the Tauri development application:
-
-```powershell
 pnpm dev
 ```
 
-The application looks for the AiM DLL at `TestMatLabXRK/DLL-2022/MatLabXRK-2022-64-ReleaseU.dll` by default. Override paths when needed:
+如需指定 DLL 或缓存目录：
 
 ```powershell
 $env:SCUT_AIM_DLL = "C:\path\to\MatLabXRK-2022-64-ReleaseU.dll"
 $env:SCUT_CACHE_ROOT = "C:\path\to\telemetry-cache"
 ```
 
-## Verification
+## 验证
 
 ```powershell
 pnpm typecheck
@@ -102,34 +77,22 @@ pnpm test
 cargo check --workspace
 ```
 
-## Production build
-
-Build the frontend and Rust executable without creating an installer:
-
-```powershell
-.\build.ps1
-```
-
-Create the Windows NSIS installer:
+## 构建和发布
 
 ```powershell
 pnpm tauri build
 ```
 
-Distribute the generated NSIS setup executable. Do not distribute only `target/release/scut-racing-telemetry.exe`: the installer also releases the native AiM DLL dependencies and installs the WebView2 bootstrapper required by the desktop shell.
+安装包输出位置：
 
-The generated executable and installer are written below `target/release/` and `target/release/bundle/nsis/`.
+```text
+target/release/bundle/nsis/SCUT Racing Telemetry_1.0.0_x64-setup.exe
+```
 
-The NSIS installer contains the compiled React frontend, the compiled Rust/Tauri backend, the WebView assets, the AiM XRK DLL, and its native dependencies. The installer releases these files into the application directory; a clean Windows machine does not need the repository or development DLL folder. Imported data is stored in the user's application-data directory; set `SCUT_CACHE_ROOT` only when a custom location is required.
+安装包包含编译后的 React 前端、Rust/Tauri 后端、AiM 主 DLL 及其依赖。请分发 setup.exe，不要只复制单独的 exe；安装器会释放运行所需的原生 DLL，并处理 WebView2 安装。
 
-The repository also provides `build.cmd` for a guided release executable build and `start.cmd` for launching the local executable.
+导入记录使用源文件 SHA-256 标识，并保存到用户应用数据目录。缺失样本保留为非有限值，前端会显示为空白；generation 字段用于丢弃拖动和缩放期间返回的过期请求。
 
-## Data and cache model
+## 项目状态
 
-Imported recordings are identified by SHA-256 source identity and stored in the local cache. Raw channels are retained separately from metadata and optional pyramid frames. Window requests use a validated binary frame containing timestamps, minimums, maximums, and request generation. A generation value lets the frontend discard stale responses while the user is dragging or zooming.
-
-Missing samples remain non-finite in the frame contract and are rendered as chart gaps. Cursor values are read from the raw channel data and are shown only when a finite sample is available at the requested time.
-
-## License and project status
-
-This repository is maintained for SCUT Racing telemetry analysis. Add the project license and release policy here when they are finalized.
+本项目用于 SCUT Racing 遥测分析。许可证和正式发布策略将在确定后补充。
