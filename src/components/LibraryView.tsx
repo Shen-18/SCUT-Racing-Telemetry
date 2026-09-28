@@ -78,7 +78,7 @@ const PANEL_TITLE_STYLE: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: "8px",
-  fontFamily: '"F1 Display", sans-serif',
+  fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
   fontWeight: 700,
   fontSize: "13px",
   letterSpacing: "2px",
@@ -95,7 +95,7 @@ const GRID_COLUMNS = "28px 120px 112px minmax(120px,1fr) 92px 72px";
 // 全表列内容统一居中对齐(负责人要求)。
 function headerCellStyle(): React.CSSProperties {
   return {
-    fontFamily: '"F1 Display", sans-serif',
+    fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
     fontSize: "12px",
     fontWeight: 700,
     letterSpacing: "1.5px",
@@ -186,8 +186,8 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
   };
 
   const categories: Array<{ id: LibraryCategory; label: string; en: string }> = [
-    { id: "time", label: "BY DATE", en: "BY DATE" },
-    { id: "vehicle", label: "BY CAR", en: "BY CAR" },
+    { id: "time", label: "按日期", en: "BY DATE" },
+    { id: "vehicle", label: "按车辆", en: "BY CAR" },
   ];
 
   return (
@@ -207,7 +207,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
       >
         <div style={PANEL_TITLE_STYLE}>
           <span style={RED_BLOCK_STYLE} />
-          CATEGORIES
+          分类
         </div>
         <div style={{ display: "flex", gap: "6px", padding: "0 14px 10px", flex: "none" }}>
           {categories.map((cat) => {
@@ -226,7 +226,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                   border: "1px solid",
                   borderColor: active ? "var(--red)" : "var(--line)",
                   color: active ? "#fff" : "var(--dim)",
-                  fontFamily: '"F1 Display", sans-serif',
+                  fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
                   fontWeight: 700,
                   fontSize: "11px",
                   letterSpacing: "1px",
@@ -253,7 +253,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
               borderLeft: selectedGroup === null ? "3px solid var(--red)" : "3px solid transparent",
             }}
           >
-            <span style={{ fontFamily: '"F1 Display", sans-serif', fontWeight: 700, fontSize: "12px", letterSpacing: "1px" }}>ALL</span>
+            <span style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 700, fontSize: "12px", letterSpacing: "1px" }}>全部</span>
             <span className="tnum" style={{ marginLeft: "auto", fontSize: "12px", color: "var(--dim2)", fontWeight: 700 }}>
               {total}
             </span>
@@ -294,7 +294,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
               >
                 <span
                   style={{
-                    fontFamily: '"F1 Display", sans-serif',
+                    fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
                     fontWeight: 700,
                     fontSize: "12px",
                     letterSpacing: "0.5px",
@@ -356,14 +356,14 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
             flex: "none",
           }}
         >
-          <span style={{ fontFamily: '"F1 Display", sans-serif', fontWeight: 700, fontSize: "13px", letterSpacing: "2px", color: "var(--dim)" }}>
-            DATA DETAILS
+          <span style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 700, fontSize: "13px", letterSpacing: "2px", color: "var(--dim)" }}>
+            数据明细
           </span>
           {records !== null && total > 0 && (
             <input
               data-testid="library-search"
               type="text"
-              placeholder="SEARCH DRIVER / CAR..."
+              placeholder="搜索车手 / 车辆…"
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
               style={{
@@ -374,21 +374,21 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                 color: "var(--text)",
                 padding: "5px 8px",
                 fontSize: "11px",
-                fontFamily: '"F1 Display", sans-serif',
+                fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
                 letterSpacing: "0.5px",
               }}
             />
           )}
           {records !== null && (
-            <span className="tnum" style={{ fontFamily: '"F1 Display", sans-serif', fontSize: "11px", letterSpacing: "1px", color: "var(--dim2)" }}>
-              {total} {total === 1 ? "RECORD" : "RECORDS"}{selectedGroup !== null ? ` · ${selectedGroup}` : ""}
+            <span className="tnum" style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "11px", letterSpacing: "1px", color: "var(--dim2)" }}>
+              {total} 条记录{selectedGroup !== null ? ` · ${selectedGroup}` : ""}
             </span>
           )}
           <span style={{ flex: 1 }} />
           {selected.size > 0 && (
             <span data-testid="bulk-bar" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span className="tnum" style={{ fontFamily: '"F1 Display", sans-serif', fontSize: "11px", fontWeight: 700, color: "var(--red)", letterSpacing: "1px" }}>
-                {selected.size} SELECTED
+              <span className="tnum" style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "11px", fontWeight: 700, color: "var(--red)", letterSpacing: "1px" }}>
+                已选 {selected.size} 条
               </span>
               <button
                 data-testid="export-selected"
@@ -398,7 +398,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                   background: "var(--red)",
                   border: "1px solid var(--red)",
                   color: "#fff",
-                  fontFamily: '"F1 Display", sans-serif',
+                  fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
                   fontWeight: 700,
                   fontSize: "11px",
                   letterSpacing: "1px",
@@ -406,7 +406,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                   cursor: "pointer",
                 }}
               >
-                EXPORT SELECTED
+                导出所选
               </button>
               <button
                 data-testid="delete-selected"
@@ -416,16 +416,16 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                   background: "transparent",
                   border: "1px solid var(--line)",
                   color: "var(--dim2)",
-                  fontFamily: '"F1 Display", sans-serif',
+                  fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
                   fontWeight: 700,
                   fontSize: "10px",
                   letterSpacing: "1px",
                   padding: "5px 10px",
                   cursor: "pointer",
                 }}
-                title="Delete cached data of all selected records (raw files are unaffected)"
+                title="删除所选记录的缓存数据(原始文件不受影响)"
               >
-                DELETE ALL
+                删除所选
               </button>
             </span>
           )}
@@ -437,7 +437,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
               background: "var(--red)",
               border: "1px solid var(--red)",
               color: "#fff",
-              fontFamily: '"F1 Display", sans-serif',
+              fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
               fontWeight: 700,
               fontSize: "12px",
               letterSpacing: "1.5px",
@@ -445,9 +445,9 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
               cursor: "pointer",
               whiteSpace: "nowrap",
             }}
-            title="Import xrk/xrz/csv/zip files"
+            title="导入 xrk / xrz / csv / zip 文件"
           >
-            IMPORT FILES
+            导入文件
           </button>
         </div>
         {error ? (
@@ -456,9 +456,9 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
             <button
               onClick={onRetry}
               className="ghost-button"
-              style={{ marginTop: "8px", background: "transparent", border: "1px solid var(--line)", color: "var(--text)", fontFamily: '"F1 Display", sans-serif', fontWeight: 700, fontSize: "11px", letterSpacing: "1px", padding: "4px 12px", cursor: "pointer" }}
+              style={{ marginTop: "8px", background: "transparent", border: "1px solid var(--line)", color: "var(--text)", fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 700, fontSize: "11px", letterSpacing: "1px", padding: "4px 12px", cursor: "pointer" }}
             >
-              RETRY
+              重试
             </button>
           </div>
         ) : records === null ? (
@@ -480,13 +480,13 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                 placeItems: "center",
               }}
             >
-              <span style={{ transform: "skewX(10deg)", fontFamily: '"F1 Display", sans-serif', fontWeight: 700, color: "#fff", fontSize: "16px" }}>
+              <span style={{ transform: "skewX(10deg)", fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 700, color: "#fff", fontSize: "16px" }}>
                 DB
               </span>
             </div>
-            <div style={{ fontFamily: '"F1 Display", sans-serif', fontWeight: 700, fontSize: "14px", letterSpacing: "1.5px" }}>IMPORT TELEMETRY TO START ANALYSIS</div>
-            <div style={{ fontFamily: '"F1 Display", sans-serif', fontWeight: 400, fontSize: "11px", letterSpacing: "1px", marginTop: "6px" }}>
-              CLICK &quot;IMPORT FILES&quot; OR DRAG &amp; DROP FILES INTO THIS WINDOW
+            <div style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 700, fontSize: "14px", letterSpacing: "1.5px" }}>导入遥测数据以开始分析</div>
+            <div style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 400, fontSize: "11px", letterSpacing: "1px", marginTop: "6px" }}>
+              点击「导入文件」或将文件拖入本窗口
             </div>
           </div>
         ) : (
@@ -529,17 +529,17 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                   <span style={{ position: "absolute", left: "2px", right: "2px", top: "4px", height: "2px", background: "var(--red)" }} />
                 )}
               </span>
-              <span style={headerCellStyle()}>START TIME</span>
-              <span style={headerCellStyle()}>DRIVER</span>
-              <span style={headerCellStyle()}>CAR</span>
-              <span style={headerCellStyle()}>DURATION</span>
-              <span style={headerCellStyle()}>ACTIONS</span>
+              <span style={headerCellStyle()}>开始时间</span>
+              <span style={headerCellStyle()}>车手</span>
+              <span style={headerCellStyle()}>车辆</span>
+              <span style={headerCellStyle()}>时长</span>
+              <span style={headerCellStyle()}>操作</span>
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
               {visible!.length === 0 ? (
-                <div style={{ padding: "32px", textAlign: "center", color: "var(--dim2)", fontFamily: '"F1 Display", sans-serif', fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px" }}>
-                  NO MATCHING RECORDS
+                <div style={{ padding: "32px", textAlign: "center", color: "var(--dim2)", fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px" }}>
+                  没有匹配的记录
                 </div>
               ) : (
                 visible!.map((record) => {
@@ -548,7 +548,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                       key={record.file_hash}
                       data-testid="library-row"
                       tabIndex={0}
-                      title="DOUBLE-CLICK TO OPEN FOR ANALYSIS"
+                      title="双击打开分析"
                       onDoubleClick={() => onOpen(record.file_hash)}
                       onKeyDown={(e) => e.key === "Enter" && onOpen(record.file_hash)}
                       onContextMenu={(e) => {
@@ -600,7 +600,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                           cursor: "pointer",
                           justifySelf: "center",
                         }}
-                        title="Select to export"
+                        title="勾选以导出"
                       >
                         {selected.has(record.file_hash) && (
                           <span style={{ position: "absolute", inset: "2px", background: "var(--text)" }} />
@@ -609,7 +609,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                       <span
                         className="tnum"
                         style={{ color: "var(--dim)", whiteSpace: "nowrap" }}
-                        title={`File time ${formatDateTime(record.source_mtime_unix)}`}
+                        title={`文件时间 ${formatDateTime(record.source_mtime_unix)}`}
                       >
                         {record.start_time || "—"}
                       </span>
@@ -625,7 +625,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                       <span style={{ display: "flex", gap: "6px", justifyContent: "center", alignItems: "center" }}>
                         <button
                           aria-label={`Export ${record.file_name}`}
-                          title="Export CSV"
+                          title="导出 CSV"
                           onClick={(e) => {
                             e.stopPropagation();
                             onExportOne(record.file_hash);
@@ -643,7 +643,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                         </button>
                         <button
                           aria-label={`Delete ${record.file_name}`}
-                          title="Delete record cache (raw file is unaffected)"
+                          title="删除该记录的缓存(原始文件不受影响)"
                           onClick={(e) => {
                             e.stopPropagation();
                             onDelete(record.file_hash);
@@ -729,11 +729,11 @@ export const LibraryView: React.FC = () => {
       const duplicated = outcomes.filter((o) => o.status === "duplicate");
       const queued = outcomes.filter((o) => o.status === "queued");
       const parts: string[] = [];
-      if (queued.length > 0) parts.push(`${queued.length} file(s) queued for import`);
+      if (queued.length > 0) parts.push(`已排队导入 ${queued.length} 个文件`);
       if (duplicated.length > 0)
-        parts.push(`${duplicated.length} duplicate file(s) skipped (${duplicated.map((d) => d.file_name).join(", ")})`);
+        parts.push(`跳过 ${duplicated.length} 个重复文件(${duplicated.map((d) => d.file_name).join(", ")})`);
       if (failed.length > 0)
-        parts.push(`${failed.length} file(s) failed (${failed.map((f) => `${f.file_name}: ${f.message ?? ""}`).join("; ")})`);
+        parts.push(`导入失败 ${failed.length} 个文件(${failed.map((f) => `${f.file_name}: ${f.message ?? ""}`).join("; ")})`);
       setNotice(parts.length > 0 ? parts.join("; ") : null);
       setReloadTick((t) => t + 1);
     } catch (err: unknown) {
@@ -787,10 +787,10 @@ export const LibraryView: React.FC = () => {
       const miss = outcomes.filter((o) => o.status === "missing");
       const bad = outcomes.filter((o) => o.status === "failed");
       const parts: string[] = [];
-      if (ok.length > 0) parts.push(`${ok.length} record(s) exported to ${dir}`);
-      if (miss.length > 0) parts.push(`${miss.length} legacy record(s) need re-import`);
+      if (ok.length > 0) parts.push(`已导出 ${ok.length} 条记录到 ${dir}`);
+      if (miss.length > 0) parts.push(`${miss.length} 条旧版记录需要重新导入`);
       if (bad.length > 0)
-        parts.push(`${bad.length} file(s) failed (${bad.map((f) => `${f.file_name}: ${f.message ?? ""}`).join("; ")})`);
+        parts.push(`导出失败 ${bad.length} 个文件(${bad.map((f) => `${f.file_name}: ${f.message ?? ""}`).join("; ")})`);
       setNotice(parts.join("; ") || null);
       setSelected(new Set());
     } catch (err: unknown) {
@@ -811,7 +811,7 @@ export const LibraryView: React.FC = () => {
 
   const handleDelete = useCallback(async (fileHash: string) => {
     const confirmed = window.confirm(
-      "Confirm deleting cached data for this record? Raw file is unaffected, but will need to be re-imported to analyze again."
+      "确认删除该记录的缓存数据?原始文件不受影响,但需要重新导入才能再次分析。"
     );
     if (!confirmed) return;
     try {
@@ -838,7 +838,7 @@ export const LibraryView: React.FC = () => {
         .map((r) => r.file_hash);
       if (hashes.length === 0) return;
       const confirmed = window.confirm(
-        `Confirm deleting cached data for ${hashes.length} record(s) of ${dayKey}? Raw files are unaffected, but will need to be re-imported to analyze again.`
+        `确认删除 ${dayKey} 当日 ${hashes.length} 条记录的缓存数据?原始文件不受影响,但需要重新导入才能再次分析。`
       );
       if (!confirmed) return;
       void (async () => {
@@ -859,7 +859,7 @@ export const LibraryView: React.FC = () => {
     const hashes = [...selected];
     if (hashes.length === 0) return;
     const confirmed = window.confirm(
-      `Confirm deleting cached data for ${hashes.length} selected record(s)? Raw files are unaffected, but will need to be re-imported to analyze again.`
+      `确认删除所选 ${hashes.length} 条记录的缓存数据?原始文件不受影响,但需要重新导入才能再次分析。`
     );
     if (!confirmed) return;
     try {
@@ -969,11 +969,11 @@ export const LibraryView: React.FC = () => {
           }}
         >
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontFamily: '"F1 Display", sans-serif', fontWeight: 700, fontSize: "16px", letterSpacing: "2px", color: "#fff" }}>
-              DROP FILES TO IMPORT
+            <div style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 700, fontSize: "16px", letterSpacing: "2px", color: "#fff" }}>
+              拖入文件以导入
             </div>
-            <div style={{ fontFamily: '"F1 Display", sans-serif', fontWeight: 400, marginTop: "6px", fontSize: "11px", letterSpacing: "2px", color: "rgba(255,255,255,0.75)" }}>
-              SUPPORTED FORMATS: .XRK / .CSV / .ZIP
+            <div style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 400, marginTop: "6px", fontSize: "11px", letterSpacing: "2px", color: "rgba(255,255,255,0.75)" }}>
+              支持格式:.XRK / .CSV / .ZIP
             </div>
           </div>
         </div>
