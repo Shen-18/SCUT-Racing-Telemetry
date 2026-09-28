@@ -144,32 +144,30 @@ export const StatsPanel: React.FC = () => {
               key={key}
               onClick={() => setDetailFocusKey(detailFocusKey === key ? null : key)}
               title="点击显示此通道的 MIN/MAX 位置"
-              style={{ padding: "7px 10px", borderBottom: "1px solid rgba(127,127,127,0.35)" }}
+              style={{ padding: "5px 8px", borderBottom: "1px solid rgba(127,127,127,0.35)" }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
                 <span style={{ width: "3px", height: "12px", background: color, display: "inline-block", flex: "none" }} />
                 <span style={{ fontWeight: 700, fontSize: "12px", letterSpacing: "1.5px" }}>{meta.name}</span>
-                <span style={{ marginLeft: "auto", color: "var(--dim2)", fontSize: "11px", fontWeight: 600 }}>
-                  {meta.unit}
+                <span style={{ marginLeft: "auto", display: "flex", alignItems: "baseline", gap: "3px", flex: "none" }}>
+                  <span className="f1 tnum" style={{ fontWeight: 700, fontSize: "16px", lineHeight: 1 }}>
+                    {formatCurrentValue(cursorValues[key])}
+                  </span>
+                  {meta.unit && (
+                    <span
+                      style={{
+                        fontFamily: "Titillium, 'Microsoft YaHei', sans-serif",
+                        fontSize: "9px",
+                        color: "var(--dim)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {meta.unit}
+                    </span>
+                  )}
                 </span>
               </div>
-              <div className="f1 tnum" style={{ fontWeight: 700, fontSize: "20px", lineHeight: 1 }}>
-                {formatCurrentValue(cursorValues[key])}
-                {meta.unit && (
-                  <span
-                    style={{
-                      fontFamily: "Titillium, 'Microsoft YaHei', sans-serif",
-                      fontSize: "10px",
-                      color: "var(--dim)",
-                      fontWeight: 700,
-                      marginLeft: "4px",
-                    }}
-                  >
-                    {meta.unit}
-                  </span>
-                )}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "4px", marginTop: "6px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "2px", marginTop: "4px" }}>
                 {(
                   [
                     ["MIN", formatStat(stat?.min), "var(--green)"],
@@ -177,11 +175,11 @@ export const StatsPanel: React.FC = () => {
                     ["AVG", formatStat(stat?.mean), "var(--text)"],
                   ] as const
                 ).map(([label, value, colorValue]) => (
-                  <div key={label} style={{ background: "var(--bg2)", padding: "4px 6px" }}>
-                    <div style={{ fontSize: "9px", color: "var(--dim2)", letterSpacing: "1.5px", fontWeight: 600 }}>
+                  <div key={label} style={{ background: "var(--bg2)", padding: "3px 5px" }}>
+                    <div style={{ fontSize: "9px", color: "var(--dim2)", letterSpacing: "1px", fontWeight: 600 }}>
                       {label}
                     </div>
-                    <div className="tnum" style={{ fontWeight: 700, fontSize: "13px", marginTop: "2px", color: colorValue }}>
+                    <div className="tnum" style={{ fontWeight: 700, fontSize: "12px", marginTop: "1px", color: colorValue }}>
                       {value}
                     </div>
                   </div>

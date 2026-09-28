@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   SCUT_SYNC_KEY,
+  computeYAxisSize,
   createStackedOptions,
   createPlotOptions,
   frameToAlignedData,
@@ -137,9 +138,19 @@ describe("uPlotFactory", () => {
   it("reserves display room for compact y-axis labels and edge ticks", () => {
     const opts = createStackedOptions({ channel: "Speed", unit: "km/h" });
     const yAxis = opts.axes?.[1];
-    expect(yAxis?.size).toBeGreaterThanOrEqual(86);
+    expect(typeof yAxis?.size).toBe("function");
     expect(opts.padding?.[0]).toBeGreaterThanOrEqual(12);
     expect(opts.padding?.[2]).toBeGreaterThanOrEqual(12);
+  });
+
+  it("sizes the y axis to its widest tick label, compact but untruncated", () => {
+    const narrow = computeYAxisSize(["0 km/h"]);
+    const wide = computeYAxisSize(["-123.45 km/h"]);
+    expect(narrow).toBeGreaterThanOrEqual(24);
+    expect(narrow).toBeLessThan(86);
+    expect(wide).toBeGreaterThan(narrow);
+    expect(wide).toBeLessThanOrEqual(140);
+    expect(computeYAxisSize(["", "  "])).toBe(24);
   });
 
   it("can render a marker at every sample for a short exact window", () => {

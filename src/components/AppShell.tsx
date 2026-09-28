@@ -333,9 +333,6 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
               <GhostButton onRed testId="export-channels" onClick={() => void handleExportCheckedChannels()} title="导出当前勾选通道的数据为 CSV">
                 EXPORT
               </GhostButton>
-              <GhostButton onRed disabled title="双文件对比于 Step 15 启用">
-                ADD COMPARE
-              </GhostButton>
             </>
           )}
           {isCoverVideo && <GhostButton onRed onClick={() => setView("library")} title="返回 DATABASE">BACK</GhostButton>}

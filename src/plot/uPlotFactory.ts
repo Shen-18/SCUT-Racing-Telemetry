@@ -288,6 +288,45 @@ export interface StackedPlotOptionsParams {
  * 堆叠区单张图的 uPlot 配置：单条线、无数据点、缺口直连（spanGaps）。
  * x 域由调用方随后用 setScale 控制（窗口变化时先平移，数据到达再重建）。
  */
+// uPlot 默认坐标轴字体,用于离屏测量刻度文本宽度
+const AXIS_MEASURE_FONT =
+  "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+let axisMeasureCtx: CanvasRenderingContext2D | null | undefined;
+
+function getAxisMeasureCtx(): CanvasRenderingContext2D | null {
+  if (axisMeasureCtx === undefined) {
+    axisMeasureCtx =
+      typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");
+  }
+  return axisMeasureCtx;
+}
+
+/**
+ * y 轴宽度 = 最宽刻度文本的实测宽度 + 少量内边距,并夹在 [24,140] 内。
+ * 固定宽度(86px)对短标签浪费左侧空间,对长标签又可能截断;按内容自适应两者兼顾。
+ */
+export function computeYAxisSize(values: Array<unknown>): number {
+  const ctx = getAxisMeasureCtx();
+  let widest = 0;
+  if (ctx) {
+    ctx.font = AXIS_MEASURE_FONT;
+    for (const value of values) {
+      if (typeof value === "string" && value.trim()) {
+        widest = Math.max(widest, ctx.measureText(value).width);
+      }
+    }
+  } else {
+    // 非浏览器环境(单测)按每字符 ~7px 估算
+    for (const value of values) {
+      if (typeof value === "string" && value.trim()) {
+        widest = Math.max(widest, value.length * 7);
+      }
+    }
+  }
+  if (widest === 0) return 24;
+  return Math.min(140, Math.max(24, Math.ceil(widest) + 12));
+}
+
 export function createStackedOptions({
   channel,
   unit,
@@ -342,8 +381,8 @@ export function createStackedOptions({
       },
       {
         scale: "y",
-        // Compact labels still need room for a sign, value and unit.
-        size: 86,
+        // 按刻度文本实测宽度自适应:紧凑且保证字符完整显示
+        size: (_self, values) => computeYAxisSize(values),
         stroke: theme.textMuted,
         grid: { stroke: theme.borderSubtle, width: 1 },
         ticks: { stroke: theme.border, width: 1 },
