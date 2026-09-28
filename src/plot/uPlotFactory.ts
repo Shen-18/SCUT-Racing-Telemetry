@@ -288,9 +288,10 @@ export interface StackedPlotOptionsParams {
  * 堆叠区单张图的 uPlot 配置：单条线、无数据点、缺口直连（spanGaps）。
  * x 域由调用方随后用 setScale 控制（窗口变化时先平移，数据到达再重建）。
  */
-// uPlot 默认坐标轴字体,用于离屏测量刻度文本宽度
+// uPlot 默认坐标轴字体(uPlot.iife.js:1435)。注意 uPlot 绘制时会用 pxRatioFont
+// 把字号乘上 devicePixelRatio,测量必须同样缩放后测、再折回 CSS px,否则标签被截断。
 const AXIS_MEASURE_FONT =
-  "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+  '12px system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif';
 let axisMeasureCtx: CanvasRenderingContext2D | null | undefined;
 
 function getAxisMeasureCtx(): CanvasRenderingContext2D | null {
@@ -302,8 +303,8 @@ function getAxisMeasureCtx(): CanvasRenderingContext2D | null {
 }
 
 /**
- * y 轴宽度 = 最宽刻度文本的实测宽度 + 少量内边距,并夹在 [24,140] 内。
- * 固定宽度(86px)对短标签浪费左侧空间,对长标签又可能截断;按内容自适应两者兼顾。
+ * y 轴宽度 = 最宽刻度文本的实测宽度(CSS px)+ 刻度线/间距/安全余量,夹在 [24,140]。
+ * 固定宽度对短标签浪费左侧空间,对长标签又可能截断;按内容自适应两者兼顾。
  * uPlot 初始化时会以 values=null 调用 size(uPlot.iife.js:3785),此时返回缺省宽度。
  */
 export function computeYAxisSize(values: Array<unknown> | null): number {
@@ -311,10 +312,11 @@ export function computeYAxisSize(values: Array<unknown> | null): number {
   const ctx = getAxisMeasureCtx();
   let widest = 0;
   if (ctx) {
-    ctx.font = AXIS_MEASURE_FONT;
+    const pxRatio = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+    ctx.font = AXIS_MEASURE_FONT.replace(/(\d+)px/, (_m, p1: string) => `${Math.round(Number(p1) * pxRatio)}px`);
     for (const value of values) {
       if (typeof value === "string" && value.trim()) {
-        widest = Math.max(widest, ctx.measureText(value).width);
+        widest = Math.max(widest, ctx.measureText(value).width / pxRatio);
       }
     }
   } else {

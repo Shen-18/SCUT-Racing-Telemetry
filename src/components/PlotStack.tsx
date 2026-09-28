@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { useAppStore } from "../state/appStore";
 import * as client from "../api/client";
 import type { WindowFrame } from "../api/types";
 import {
+  computeYAxisSize,
   createStackedOptions,
   frameToSingleLine,
   resizePlot,
@@ -53,6 +54,9 @@ interface ChannelChartProps {
   domainStart: number;
   detailFocusKey: string | null;
   minWindowSeconds: number;
+  /** 所有堆叠图共用的 y 轴宽度(CSS px),保证绘图区/游标垂直对齐。 */
+  yAxisWidth: number;
+  onYAxisWidth(key: string, width: number): void;
 }
 
 const ChannelChart: React.FC<ChannelChartProps> = ({
@@ -67,6 +71,8 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
   domainStart,
   detailFocusKey,
   minWindowSeconds,
+  yAxisWidth,
+  onYAxisWidth,
 }) => {
   const window = useAppStore((s) => s.window);
   const generation = useAppStore((s) => s.generation);
@@ -214,6 +220,15 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
       ...options.scales,
       x: { time: false, auto: false, min: window.start, max: window.end },
     };
+    const yAxis = options.axes?.[1];
+    if (yAxis) {
+      // 所有堆叠图共用同一 y 轴宽度,否则各图绘图区左边界不同,游标线垂直对不齐。
+      // 各图在此上报自身所需宽度,PlotStack 取最大值回传(见 yAxisWidth)。
+      yAxis.size = (_self, values) => {
+        if (values) onYAxisWidth(channelKey, computeYAxisSize(values));
+        return yAxisWidth;
+      };
+    }
     if (plotRef.current) {
       plotRef.current.destroy();
       plotRef.current = null;
@@ -225,7 +240,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
       plotRef.current?.destroy();
       plotRef.current = null;
     };
-  }, [frame, channelName, unit, color, isLast, theme]);
+  }, [frame, channelName, unit, color, isLast, theme, yAxisWidth, onYAxisWidth, channelKey]);
 
   // 窗口变化（数据未到时）：先平移 x 域，避免空白
   useEffect(() => {
@@ -446,6 +461,19 @@ export const PlotStack: React.FC = () => {
     duration
   );
 
+  // 各图上报自身 y 轴所需宽度,取最大值共享,保证所有图绘图区/游标对齐
+  const [yAxisWidths, setYAxisWidths] = useState<Record<string, number>>({});
+  const handleYAxisWidth = useCallback((key: string, width: number) => {
+    setYAxisWidths((prev) => (prev[key] === width ? prev : { ...prev, [key]: width }));
+  }, []);
+  const sharedYAxisWidth = useMemo(() => {
+    let width = 48;
+    for (const key of ordered) {
+      width = Math.max(width, yAxisWidths[key] ?? 0);
+    }
+    return width;
+  }, [yAxisWidths, ordered]);
+
   if (!dataset) {
     return (
       <div
@@ -505,6 +533,8 @@ export const PlotStack: React.FC = () => {
             domainStart={domainStart}
             detailFocusKey={detailFocusKey}
             minWindowSeconds={minWindowSeconds}
+            yAxisWidth={sharedYAxisWidth}
+            onYAxisWidth={handleYAxisWidth}
           />
         );
       })}
