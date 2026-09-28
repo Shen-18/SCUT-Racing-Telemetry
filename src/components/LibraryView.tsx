@@ -121,6 +121,7 @@ export interface LibraryHomeViewProps {
   onPickFiles(): void;
   onToggleSelect(fileHash: string): void;
   onToggleSelectAll?(hashes: string[], select: boolean): void;
+  onDeleteSelected?(): void;
   onExportOne(fileHash: string): void;
   onExportSelected(): void;
   onExportDay(dayKey: string): void;
@@ -142,6 +143,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
   onPickFiles,
   onToggleSelect,
   onToggleSelectAll,
+  onDeleteSelected,
   onExportOne,
   onExportSelected,
   onExportDay,
@@ -345,25 +347,6 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                 {selected.size} SELECTED
               </span>
               <button
-                data-testid="toggle-select-all"
-                onClick={handleSelectAllToggle}
-                className="ghost-button"
-                style={{
-                  background: "transparent",
-                  border: "1px solid var(--line)",
-                  color: "var(--text)",
-                  fontFamily: '"F1 Display", sans-serif',
-                  fontWeight: 700,
-                  fontSize: "11px",
-                  letterSpacing: "1px",
-                  padding: "5px 12px",
-                  cursor: "pointer",
-                }}
-                title={allSelected ? "Deselect all visible records" : "Select all visible records"}
-              >
-                {allSelected ? "DESELECT ALL" : "SELECT ALL"}
-              </button>
-              <button
                 data-testid="export-selected"
                 onClick={onExportSelected}
                 className="primary-button"
@@ -380,6 +363,25 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                 }}
               >
                 EXPORT SELECTED
+              </button>
+              <button
+                data-testid="delete-selected"
+                onClick={onDeleteSelected}
+                className="ghost-button"
+                style={{
+                  background: "transparent",
+                  border: "1px solid var(--line)",
+                  color: "var(--dim2)",
+                  fontFamily: '"F1 Display", sans-serif',
+                  fontWeight: 700,
+                  fontSize: "10px",
+                  letterSpacing: "1px",
+                  padding: "5px 10px",
+                  cursor: "pointer",
+                }}
+                title="Delete cached data of all selected records (raw files are unaffected)"
+              >
+                DELETE ALL
               </button>
             </span>
           )}
@@ -776,6 +778,24 @@ export const LibraryView: React.FC = () => {
     }
   }, []);
 
+  const handleDeleteSelected = useCallback(async () => {
+    const hashes = [...selected];
+    if (hashes.length === 0) return;
+    const confirmed = window.confirm(
+      `Confirm deleting cached data for ${hashes.length} selected record(s)? Raw files are unaffected, but will need to be re-imported to analyze again.`
+    );
+    if (!confirmed) return;
+    try {
+      for (const hash of hashes) {
+        await client.purgeCache(hash);
+      }
+      setSelected(new Set());
+      setReloadTick((t) => t + 1);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [selected]);
+
   const handleToggleSelectAll = useCallback((hashes: string[], select: boolean) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -845,6 +865,7 @@ export const LibraryView: React.FC = () => {
           })
         }
         onToggleSelectAll={handleToggleSelectAll}
+        onDeleteSelected={() => void handleDeleteSelected()}
         onExportOne={(hash) => void exportTo([hash])}
         onExportSelected={() => void exportTo([...selected])}
         onExportDay={handleExportDay}
