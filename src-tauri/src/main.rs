@@ -21,7 +21,18 @@ fn make_state(resource_root: Option<PathBuf>, app_data_root: Option<PathBuf>) ->
     let runtime_root = resource_root
         .or_else(|| std::env::current_exe().ok().and_then(|path| path.parent().map(Path::to_path_buf)))
         .unwrap_or_else(|| root.clone());
-    let bundled_aim = runtime_root.join("aim/MatLabXRK-2022-64-ReleaseU.dll");
+    // Tauri installs resources below `<exe>/resources`; a manually copied
+    // portable folder may place the resource directory beside the exe. Accept
+    // both layouts so the executable never falls back to the developer tree.
+    let bundled_aim = [
+        runtime_root.join("MatLabXRK-2022-64-ReleaseU.dll"),
+        runtime_root.join("aim/MatLabXRK-2022-64-ReleaseU.dll"),
+        runtime_root.join("resources/aim/MatLabXRK-2022-64-ReleaseU.dll"),
+        runtime_root.join("../resources/aim/MatLabXRK-2022-64-ReleaseU.dll"),
+    ]
+    .into_iter()
+    .find(|path| path.exists())
+    .unwrap_or_else(|| runtime_root.join("aim/MatLabXRK-2022-64-ReleaseU.dll"));
     let dll = std::env::var_os("SCUT_AIM_DLL")
         .map(PathBuf::from)
         .unwrap_or_else(|| {

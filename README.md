@@ -116,6 +116,8 @@ Create the Windows NSIS installer:
 pnpm tauri build
 ```
 
+Distribute the generated NSIS setup executable. Do not distribute only `target/release/scut-racing-telemetry.exe`: the installer also releases the native AiM DLL dependencies and installs the WebView2 bootstrapper required by the desktop shell.
+
 The generated executable and installer are written below `target/release/` and `target/release/bundle/nsis/`.
 
 The NSIS installer contains the compiled React frontend, the compiled Rust/Tauri backend, the WebView assets, the AiM XRK DLL, and its native dependencies. The installer releases these files into the application directory; a clean Windows machine does not need the repository or development DLL folder. Imported data is stored in the user's application-data directory; set `SCUT_CACHE_ROOT` only when a custom location is required.
