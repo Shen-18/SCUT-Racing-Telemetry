@@ -11,7 +11,7 @@ import {
   resizePlot,
 } from "../plot/uPlotFactory";
 import { buildChannelColorMap, resolveColor } from "../theme/channelColors";
-import { cursorFraction, zoomAtViewport } from "../utils/viewport";
+import { cursorFraction, panViewport, zoomAtViewport } from "../utils/viewport";
 import { useCursorValues } from "../hooks/useCursorValues";
 import { getDatasetDuration } from "../api/dataset";
 
@@ -92,6 +92,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [, setPlotLayoutVersion] = useState(0);
   const draggingRef = useRef(false);
+  const panDraggingRef = useRef(false);
   const lastCursorLeftRef = useRef<number | null>(null);
   const aliveRef = useRef(true);
   const previewLastFireRef = useRef(0);
@@ -270,6 +271,28 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      panDraggingRef.current = true;
+      const startX = e.clientX;
+      const startWindow = { ...window };
+      const onMove = (move: MouseEvent) => {
+        if (!panDraggingRef.current) return;
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect || rect.width <= 0) return;
+        const deltaFraction = -(move.clientX - startX) / rect.width;
+        setZoomWindow(panViewport(startWindow, duration, deltaFraction, domainStart));
+      };
+      const onUp = () => {
+        panDraggingRef.current = false;
+        globalThis.removeEventListener("mousemove", onMove);
+        globalThis.removeEventListener("mouseup", onUp);
+      };
+      globalThis.addEventListener("mousemove", onMove);
+      globalThis.addEventListener("mouseup", onUp);
+      return;
+    }
+    if (e.button !== 0) return;
     e.preventDefault();
     const f = fractionFromEvent(e.clientX);
     if (f < 0) return;
@@ -389,14 +412,14 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
         }}
       >
         <span style={{ width: "3px", height: "11px", background: color, display: "inline-block", flex: "none" }} />
-        <span style={{ fontWeight: 700, fontSize: "10px", letterSpacing: "1px", color: "var(--dim)" }}>
+        <span style={{ fontWeight: 700, fontSize: "11px", letterSpacing: "1px", color: "var(--dim)" }}>
           {channelName}
         </span>
-        <span className="tnum" style={{ fontWeight: 700, fontSize: "11px", color }}>
+        <span className="tnum" style={{ fontWeight: 700, fontSize: "12px", color }}>
           {formatChannelValue(cursorValue, unit)}
         </span>
         {unit && (
-          <span style={{ fontWeight: 600, fontSize: "9px", color: "var(--dim2)" }}>{unit}</span>
+          <span style={{ fontWeight: 600, fontSize: "10px", color: "var(--dim2)" }}>{unit}</span>
         )}
         {loading && <span style={{ fontSize: "9px", color: "var(--dim2)" }}>加载中…</span>}
         {building && <span style={{ fontSize: "9px", color: "var(--orange)", fontWeight: 700 }}>构建中…</span>}

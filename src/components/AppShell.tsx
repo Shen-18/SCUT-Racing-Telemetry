@@ -93,6 +93,25 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
   const view = viewOverride ?? storeView;
 
   const [error, setError] = useState<string | null>(null);
+  const [trackMapHeight, setTrackMapHeight] = useState(300);
+  const trackMapDragRef = useRef<{ y: number; height: number } | null>(null);
+
+  const beginTrackMapResize = (event: React.MouseEvent) => {
+    event.preventDefault();
+    trackMapDragRef.current = { y: event.clientY, height: trackMapHeight };
+    const onMove = (move: MouseEvent) => {
+      const drag = trackMapDragRef.current;
+      if (!drag) return;
+      setTrackMapHeight(Math.max(180, Math.min(520, Math.round(drag.height + move.clientY - drag.y))));
+    };
+    const onUp = () => {
+      trackMapDragRef.current = null;
+      globalThis.removeEventListener("mousemove", onMove);
+      globalThis.removeEventListener("mouseup", onUp);
+    };
+    globalThis.addEventListener("mousemove", onMove);
+    globalThis.addEventListener("mouseup", onUp);
+  };
 
   // 全局屏蔽 WebView2 默认右键菜单：应用内一律用自绘菜单（DATABASE 页）或不弹菜单。
   // 文本输入类元素保留系统菜单（复制/粘贴）。
@@ -440,9 +459,16 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
           data-testid="right-column"
           style={{ display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: "var(--bg)" }}
         >
-          <div style={{ height: "300px", flex: "none", borderBottom: "1px solid var(--line)", overflow: "hidden" }}>
+          <div style={{ height: `${trackMapHeight}px`, flex: "none", overflow: "hidden" }}>
             {TrackMapPanelComponent && <TrackMapPanelComponent />}
           </div>
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="调整 GPS 地图和详情面板比例"
+            onMouseDown={beginTrackMapResize}
+            style={{ height: "6px", flex: "none", cursor: "ns-resize", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)", background: "var(--bg2)" }}
+          />
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             {StatsPanelComponent && <StatsPanelComponent />}
             {CommentsPanelComponent && <CommentsPanelComponent />}

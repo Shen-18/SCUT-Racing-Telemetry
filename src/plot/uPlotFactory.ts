@@ -150,7 +150,8 @@ export function createPlotOptions({
         stroke: theme.textMuted,
         grid: { stroke: theme.borderSubtle, width: 1 },
         ticks: { stroke: theme.border, width: 1 },
-        values: (_u, vals) => formatAxisValues(vals, unit ? ` ${unit}` : ""),
+        // Keep units in the enlarged legend; the axis only carries numeric ticks.
+        values: (_u, vals) => formatAxisValues(vals),
       },
     ],
     cursor: {
