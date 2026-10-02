@@ -14,8 +14,10 @@ import { buildChannelColorMap, resolveColor } from "../theme/channelColors";
 import { cursorFraction, panViewport, zoomAtViewport } from "../utils/viewport";
 import { useCursorValues } from "../hooks/useCursorValues";
 import { getDatasetDuration } from "../api/dataset";
+import { TimeAxisStrip } from "./TimeAxisStrip";
 
-// B.4-P2 rev.5 图表堆叠：每勾选通道一图 flex:1 均分，图间 1px 分隔，左上图例。
+// B.4-P2 rev.5 图表堆叠：每勾选通道一图 flex:1 均分，图间 1px 分隔，左上图例；
+// 底部共用一条 x 轴时间轴（TimeAxisStrip，左键拖动平移选区）。
 // 交互（B.11）：按住拖动 = 移动全局数据游标（禁 hover 跟随）；
 // 滚轮 = 以鼠标横向位置为焦点缩放时间窗（×1.18/÷1.18，最小 2s）。
 
@@ -47,8 +49,6 @@ interface ChannelChartProps {
   channelName: string;
   unit: string;
   color: string;
-  /** 堆叠中最后一张图才画 x 轴刻度。 */
-  isLast: boolean;
   cursorValue: number | undefined;
   duration: number;
   domainStart: number;
@@ -65,7 +65,6 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
   channelName,
   unit,
   color,
-  isLast,
   cursorValue,
   duration,
   domainStart,
@@ -214,7 +213,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
       color,
       width,
       height,
-      xAxisVisible: isLast,
+      // x 轴时间刻度统一画在堆叠底部的 TimeAxisStrip 上，各图不再各自画轴
       showPoints: frame.times.length <= MAX_VISIBLE_SAMPLE_POINTS,
     });
     options.scales = {
@@ -241,7 +240,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
       plotRef.current?.destroy();
       plotRef.current = null;
     };
-  }, [frame, channelName, unit, color, isLast, theme, yAxisWidth, onYAxisWidth, channelKey]);
+  }, [frame, channelName, unit, color, theme, yAxisWidth, onYAxisWidth, channelKey]);
 
   // 窗口变化（数据未到时）：先平移 x 域，避免空白
   useEffect(() => {
@@ -538,7 +537,7 @@ export const PlotStack: React.FC = () => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden", width: "100%" }}>
-      {ordered.map((key, index) => {
+      {ordered.map((key) => {
         const meta = channelByKey.get(key)!;
         const rawColor = colorMap[meta.name] ?? "var(--dim)";
         const color = resolveColor(rawColor);
@@ -550,7 +549,6 @@ export const PlotStack: React.FC = () => {
             channelName={meta.name}
             unit={meta.unit}
             color={color}
-            isLast={index === ordered.length - 1}
             cursorValue={cursorValues[key]}
             duration={duration}
             domainStart={domainStart}
@@ -561,6 +559,7 @@ export const PlotStack: React.FC = () => {
           />
         );
       })}
+      <TimeAxisStrip yAxisWidth={sharedYAxisWidth} />
       {checkedSet.size !== ordered.length && null}
     </div>
   );
