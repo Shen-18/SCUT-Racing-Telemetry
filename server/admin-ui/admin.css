@@ -108,3 +108,13 @@ button:disabled { opacity: .5; cursor: default; }
 .gnote.gnone { color: var(--dim); opacity: .55; }
 .note-editor { padding: 0 14px 10px; background: var(--bg2); border-left: 3px solid var(--red); }
 .note-editor textarea { width: 100%; min-height: 56px; }
+/* 全部视图的日期分节条头（对齐桌面 OVERLAY 选择页） */
+.date-band {
+  display: flex; align-items: center; gap: 8px;
+  margin: 14px 16px 0; padding: 5px 8px;
+  background: var(--bg2); border-bottom: 1px solid var(--line);
+  color: var(--dim); font-size: 11px; font-weight: 700; letter-spacing: 1.2px;
+  font-family: "F1 Display", "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+.date-band-bar { width: 3px; height: 12px; background: var(--red); }
+.date-band-count { margin-left: auto; color: var(--dim); font-size: 10px; }

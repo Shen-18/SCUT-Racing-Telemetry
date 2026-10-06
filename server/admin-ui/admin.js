@@ -203,12 +203,8 @@ function renderRecords(root) {
           <span class="checkbox ${allSelected ? "checked" : state.selected.size > 0 ? "partial" : ""}" id="select-all" title="全选 / 全不选"></span>
           <span>开始时间</span><span>车手</span><span>车辆</span><span>时长</span><span>操作</span>
         </div>
-        <div style="flex: 1; overflow-y: auto; min-height: 0;">
-          ${
-            visible.length === 0
-              ? '<div style="padding: 32px; text-align: center; color: var(--dim); font-weight: 700; letter-spacing: 1.5px;">没有匹配的记录</div>'
-              : visible.map(renderRecordRow).join("")
-          }
+        <div style="flex: 1; overflow-y: auto; min-height: 0;" id="record-rows">
+          ${renderRecordRowsHtml(visible)}
         </div>`
         }
       </section>
@@ -317,6 +313,37 @@ function emptyStateHtml() {
       <div class="f1" style="font-weight: 700; font-size: 14px; letter-spacing: 1.5px;">上传遥测数据以开始</div>
       <div class="f1" style="font-size: 11px; letter-spacing: 1px; margin-top: 6px;">点击「上传文件」选择 .xrk / .xrz 文件</div>
     </div>`;
+}
+
+// 记录行集合：全部视图下按日期分节（条头样式对齐桌面 OVERLAY 选择页）
+function renderRecordRowsHtml(visible) {
+  if (visible.length === 0) {
+    return '<div style="padding: 32px; text-align: center; color: var(--dim); font-weight: 700; letter-spacing: 1.5px;">没有匹配的记录</div>';
+  }
+  if (state.selectedGroup !== null) {
+    return visible.map(renderRecordRow).join("");
+  }
+  // 按日期分节，节内按开始时间正序
+  const buckets = new Map();
+  for (const record of visible) {
+    const key = record.record_date || "未知日期";
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(record);
+  }
+  const sections = [...buckets.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  return sections
+    .map(([date, rows]) => {
+      rows.sort((a, b) => (a.start_time > b.start_time ? 1 : -1));
+      return `
+      <section>
+        <div class="date-band">
+          <span class="date-band-bar"></span><span>${esc(date === "未知日期" ? "未知日期" : date)}</span>
+          <span class="date-band-count">${rows.length} 条</span>
+        </div>
+        ${rows.map(renderRecordRow).join("")}
+      </section>`;
+    })
+    .join("");
 }
 
 function renderRecordRow(record) {
