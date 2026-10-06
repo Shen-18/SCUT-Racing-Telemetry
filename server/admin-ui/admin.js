@@ -18,6 +18,8 @@ let state = {
   editingDate: null,
   selectedReleaseId: null,
   releaseMode: "view",
+  relInstaller: null,
+  relSig: null,
 };
 
 async function api(path, options = {}) {
@@ -666,18 +668,43 @@ function renderReleases(root) {
 }
 
 function newReleaseFormHtml() {
+  const fileChips = [];
+  if (state.relInstaller) fileChips.push({ name: state.relInstaller.name, size: state.relInstaller.size, kind: "安装包" });
+  if (state.relSig) fileChips.push({ name: state.relSig.name, size: state.relSig.size, kind: "签名" });
   return `
-    <div class="card" style="max-width: 760px;">
-      <h3 class="f1">新建发布</h3>
-      <div class="kv"><label>版本号</label><input id="rel-tag" placeholder="例如 1.0.1" /></div>
-      <div class="kv"><label>标题</label><input id="rel-title" placeholder="一句话说明（可选）" /></div>
-      <div class="kv" style="align-items: flex-start;"><label style="margin-top: 6px;">说明</label><textarea id="rel-notes" style="min-height: 96px;" placeholder="更新弹窗里展示给队员的内容（支持换行）"></textarea></div>
-      <div class="kv"><label>安装包 .exe</label><input type="file" id="rel-installer" accept=".exe" style="flex: 1; min-width: 0;" /></div>
-      <div class="kv"><label>签名 .sig</label><input type="file" id="rel-sig" accept=".sig" style="flex: 1; min-width: 0;" /></div>
+    <div class="card new-release">
+      <h1 class="f1" style="margin: 0 0 4px; font-size: 22px;">新建发布</h1>
+      <div class="nr-divider"></div>
+      <div class="nr-tag-row">
+        <span class="nr-tag-pill">🏷 版本号：<input id="rel-tag" placeholder="1.0.1" /></span>
+      </div>
+      <div class="hint" style="margin: 6px 0 18px;">发布时若版本号已存在会被拒绝；队员端按版本号大小判断是否提示更新。</div>
+
+      <div class="nr-label f1">发布标题</div>
+      <input id="rel-title" class="nr-title" placeholder="标题" />
+
+      <div class="nr-label f1" style="margin-top: 16px;">更新说明</div>
+      <div class="nr-editor">
+        <div class="nr-editor-tabs">
+          <button class="nr-tab active" data-notes-tab="write">撰写</button>
+          <button class="nr-tab" data-notes-tab="preview">预览</button>
+        </div>
+        <textarea id="rel-notes" placeholder="描述这个版本改了什么（支持换行）"></textarea>
+        <div id="rel-notes-preview" class="nr-preview" style="display: none;"></div>
+        <div class="nr-editor-foot">纯文本 · 换行会保留展示给队员</div>
+      </div>
+
+      <div class="nr-attach" id="rel-attach">
+        <input type="file" id="rel-files" accept=".exe,.sig" multiple style="display: none;" />
+        <div style="font-size: 20px;">⬇</div>
+        <div>拖入安装包 .exe 与签名 .sig 到这里，或点击选择</div>
+        ${fileChips.length > 0 ? `<div class="nr-files">${fileChips.map((f) => `<span class="nr-file"><b>${esc(f.kind)}</b> ${esc(f.name)}（${(f.size / 1024 / 1024).toFixed(1)} MB）<button data-file-clear="${f.kind}" title="移除">✕</button></span>`).join("")}</div>` : ""}
+      </div>
       <div id="rel-hints" class="hint" style="min-height: 16px;"></div>
-      <div style="display: flex; gap: 8px; justify-content: flex-end;">
-        <button class="line" id="rel-save-draft">保存草稿</button>
+
+      <div class="nr-actions">
         <button class="primary" id="rel-publish">发布</button>
+        <button class="line" id="rel-save-draft">保存草稿</button>
       </div>
     </div>`;
 }
@@ -717,31 +744,69 @@ function renderReleaseDetail(release, latestTag) {
 }
 
 async function bindReleaseForm(root) {
-  const installerInput = document.getElementById("rel-installer");
-  const sigInput = document.getElementById("rel-sig");
+  const attach = document.getElementById("rel-attach");
+  const notesArea = document.getElementById("rel-notes");
+  const notesPreview = document.getElementById("rel-notes-preview");
 
-  if (installerInput && sigInput) {
-    installerInput.addEventListener("change", () => {
-      const f = installerInput.files[0];
-      document.getElementById("rel-hints").textContent = f ? `安装包：${f.name}（${(f.size / 1024 / 1024).toFixed(1)} MB）` : "";
+  // 撰写/预览页签（本地 DOM 切换，不重渲染，避免丢输入）
+  if (attach) {
+    root.querySelectorAll("[data-notes-tab]").forEach((tab) =>
+      tab.addEventListener("click", () => {
+        const preview = tab.dataset.notesTab === "preview";
+        root.querySelectorAll("[data-notes-tab]").forEach((t) => t.classList.toggle("active", t === tab));
+        notesArea.style.display = preview ? "none" : "block";
+        notesPreview.style.display = preview ? "block" : "none";
+        if (preview) notesPreview.textContent = notesArea.value.trim() || "（无内容）";
+      }),
+    );
+
+    const takeFiles = (files) => {
+      for (const file of files) {
+        if (/\.exe$/i.test(file.name)) state.relInstaller = file;
+        else if (/\.sig$/i.test(file.name)) state.relSig = file;
+        else setNotice(`发布附件只接受 .exe / .sig，已忽略 ${file.name}`);
+      }
+      renderShell();
+      renderTab();
+    };
+    attach.addEventListener("click", () => document.getElementById("rel-files").click());
+    document.getElementById("rel-files").addEventListener("change", (e) => takeFiles([...e.target.files]));
+    attach.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      attach.classList.add("dragging");
     });
-    sigInput.addEventListener("change", () => {
-      const f = sigInput.files[0];
-      if (f) document.getElementById("rel-hints").textContent += " · 签名已选";
+    attach.addEventListener("dragleave", () => attach.classList.remove("dragging"));
+    attach.addEventListener("drop", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      attach.classList.remove("dragging");
+      takeFiles([...e.dataTransfer.files]);
     });
+    root.querySelectorAll("[data-file-clear]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        if (btn.dataset.fileClear === "安装包") state.relInstaller = null;
+        else state.relSig = null;
+        renderShell();
+        renderTab();
+      }),
+    );
+  }
+
+  if (attach && notesArea) {
     const submitRelease = async (publish) => {
       const tag = document.getElementById("rel-tag").value.trim();
       const title = document.getElementById("rel-title").value.trim();
-      const notes = document.getElementById("rel-notes").value;
-      const installer = installerInput.files[0];
-      const sig = sigInput.files[0];
+      const notes = notesArea.value;
+      const installer = state.relInstaller;
+      const sig = state.relSig;
       if (!/^v?\d+\.\d+\.\d+(-[\w.]+)?$/i.test(tag)) {
         setNotice("版本号格式应为 1.2.3。");
         renderShell(); renderTab();
         return;
       }
       if (publish && (!installer || !sig)) {
-        setNotice("发布前必须选择安装包 .exe 和签名 .sig 文件。");
+        setNotice("发布前必须提供安装包 .exe 和签名 .sig 文件。");
         renderShell(); renderTab();
         return;
       }
@@ -771,6 +836,8 @@ async function bindReleaseForm(root) {
         } else {
           setNotice(`v${tag} 已保存为草稿。`, true);
         }
+        state.relInstaller = null;
+        state.relSig = null;
         state.selectedReleaseId = id;
         state.releaseMode = "view";
       } catch (error) {
