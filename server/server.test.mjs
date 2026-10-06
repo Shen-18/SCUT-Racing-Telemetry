@@ -215,6 +215,8 @@ test("admin session cookie grants access and logout revokes it", async () => {
 
     assert.equal((await req(srv.port, "/api/v1/admin/tokens")).status, 401);
     assert.equal((await req(srv.port, "/api/v1/admin/tokens", { headers: { cookie } })).status, 200);
+    // 管理员会话也能通过客户端守卫（面板展示数据用）
+    assert.equal((await req(srv.port, "/api/v1/datasets", { headers: { cookie } })).status, 200);
 
     await req(srv.port, "/api/v1/admin/logout", { method: "POST", headers: { cookie } });
     assert.equal((await req(srv.port, "/api/v1/admin/tokens", { headers: { cookie } })).status, 401);

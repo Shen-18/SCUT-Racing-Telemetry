@@ -142,13 +142,12 @@ async function createApp(db, deps = {}) {
       }
       return true;
     };
-    // 客户端接口守卫：需要有效未吊销的访问令牌
+    // 客户端接口守卫：有效令牌或管理员会话均可（管理面板同源展示数据用）
     const guardToken = async () => {
-      if (!(await requireToken(request, db))) {
-        sendError(response, 401, "unauthorized", "需要访问密钥");
-        return false;
-      }
-      return true;
+      if (await requireToken(request, db)) return true;
+      if (await requireAdmin(request, db)) return true;
+      sendError(response, 401, "unauthorized", "需要访问密钥");
+      return false;
     };
 
     try {
