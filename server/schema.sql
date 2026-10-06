@@ -25,3 +25,17 @@ CREATE TABLE IF NOT EXISTS date_notes (
 
 CREATE INDEX IF NOT EXISTS idx_datasets_record_date ON datasets(record_date);
 CREATE INDEX IF NOT EXISTS idx_datasets_updated_at ON datasets(updated_at);
+
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  token_hash TEXT PRIMARY KEY,
+  expires_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS client_tokens (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  token TEXT NOT NULL UNIQUE,
+  created_at BIGINT NOT NULL,
+  last_used_at BIGINT,
+  revoked_at BIGINT
+);

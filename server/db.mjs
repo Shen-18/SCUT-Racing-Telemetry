@@ -124,5 +124,69 @@ export async function createDatabase(databaseUrl) {
       }
       return this.getDateNote(dateKey);
     },
+    async createAdminSession(tokenHash, expiresAt) {
+      await pool.query(
+        "INSERT INTO admin_sessions(token_hash, expires_at) VALUES ($1, $2) ON CONFLICT(token_hash) DO UPDATE SET expires_at = EXCLUDED.expires_at",
+        [tokenHash, expiresAt],
+      );
+    },
+    async getAdminSession(tokenHash) {
+      const result = await pool.query("SELECT token_hash, expires_at FROM admin_sessions WHERE token_hash = $1", [tokenHash]);
+      return result.rows[0] ?? null;
+    },
+    async deleteAdminSession(tokenHash) {
+      await pool.query("DELETE FROM admin_sessions WHERE token_hash = $1", [tokenHash]);
+    },
+    async purgeExpiredAdminSessions(now) {
+      await pool.query("DELETE FROM admin_sessions WHERE expires_at < $1", [now]);
+    },
+    async createClientToken({ name, token }) {
+      const now = Math.floor(Date.now() / 1000);
+      const result = await pool.query(
+        "INSERT INTO client_tokens(name, token, created_at) VALUES ($1, $2, $3) RETURNING id, name, token, created_at, last_used_at, revoked_at",
+        [name, token, now],
+      );
+      return result.rows[0];
+    },
+    async listClientTokens() {
+      const result = await pool.query(
+        "SELECT id, name, token, created_at, last_used_at, revoked_at FROM client_tokens ORDER BY id DESC",
+      );
+      return result.rows;
+    },
+    async revokeClientToken(id) {
+      const result = await pool.query(
+        "UPDATE client_tokens SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL RETURNING id",
+        [id, Math.floor(Date.now() / 1000)],
+      );
+      return result.rows[0] ?? null;
+    },
+    async getClientToken(token) {
+      const result = await pool.query(
+        "SELECT id, name, token, created_at, last_used_at, revoked_at FROM client_tokens WHERE token = $1",
+        [token],
+      );
+      return result.rows[0] ?? null;
+    },
+    async touchClientToken(id) {
+      await pool.query("UPDATE client_tokens SET last_used_at = $2 WHERE id = $1", [id, Math.floor(Date.now() / 1000)]);
+    },
+    async getDatasetByHash(fileHash) {
+      const result = await pool.query(
+        `SELECT file_hash, file_name, file_type, record_date::text AS record_date, start_time, session,
+                vehicle, racer, championship, duration, sample_rate_hz, file_size,
+                source_mtime_unix, storage_key, is_archived, updated_at
+           FROM datasets WHERE file_hash = $1`,
+        [fileHash],
+      );
+      return result.rows[0] ?? null;
+    },
+    async deleteDataset(fileHash) {
+      const result = await pool.query(
+        "DELETE FROM datasets WHERE file_hash = $1 RETURNING file_hash, storage_key",
+        [fileHash],
+      );
+      return result.rows[0] ?? null;
+    },
   };
 }
