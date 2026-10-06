@@ -105,3 +105,6 @@ button:disabled { opacity: .5; cursor: default; }
   transform: skewX(-10deg); display: grid; place-items: center;
 }
 .empty-state .db-logo span { transform: skewX(10deg); font-weight: 700; color: #fff; font-size: 16px; }
+.gnote.gnone { color: var(--dim); opacity: .55; }
+.note-editor { padding: 0 14px 10px; background: var(--bg2); border-left: 3px solid var(--red); }
+.note-editor textarea { width: 100%; min-height: 56px; }

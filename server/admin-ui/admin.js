@@ -12,6 +12,7 @@ let state = {
   selectedGroup: null,
   query: "",
   selected: new Set(),
+  editingDate: null,
 };
 
 async function api(path, options = {}) {
@@ -97,7 +98,6 @@ function renderLogin() {
 function renderShell() {
   const tabs = [
     ["records", "记录"],
-    ["notes", "日期备注"],
     ["settings", "设置 · 密钥分发"],
   ];
   app.innerHTML = `
@@ -130,7 +130,6 @@ function renderShell() {
 function renderTab() {
   const root = document.getElementById("tab-content");
   if (state.tab === "records") renderRecords(root);
-  else if (state.tab === "notes") renderNotes(root);
   else renderSettings(root);
 }
 
@@ -161,12 +160,24 @@ function renderRecords(root) {
           .map((date) => {
             const rows = state.records.filter((r) => r.record_date === date);
             const note = state.notes.get(date) || "";
+            const editing = state.editingDate === date;
             return `
             <div class="group-row ${state.selectedGroup === date ? "active" : ""}" data-group="${esc(date)}">
               <span class="gname f1" title="${esc(date)}">${esc(date)}</span>
-              <span class="gnote" title="${esc(note)}">${esc(notePreview(note, 24))}</span>
+              <span class="gnote ${note ? "" : "gnone"}" data-edit-note="${esc(date)}" title="点击编辑当天备注">${editing ? "编辑中…" : note ? esc(notePreview(note, 24)) : "＋备注"}</span>
               <span class="gcount">${rows.length}</span>
-            </div>`;
+            </div>
+            ${
+              editing
+                ? `<div class="note-editor">
+                     <textarea id="note-editor-text">${esc(note)}</textarea>
+                     <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px;">
+                       <button class="line" data-cancel-note="${esc(date)}">取消</button>
+                       <button class="primary" data-save-note="${esc(date)}">保存</button>
+                     </div>
+                   </div>`
+                : ""
+            }`;
           })
           .join("")}
       </aside>
@@ -238,6 +249,40 @@ function renderRecords(root) {
     }),
   );
   root.querySelectorAll("[data-action]").forEach((button) => button.addEventListener("click", onRecordAction));
+  // 当天备注：点击备注位进入编辑（与桌面右键菜单等价，网页版用点击更顺手）
+  root.querySelectorAll("[data-edit-note]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.editingDate = el.dataset.editNote;
+      renderShell();
+      renderTab();
+    }),
+  );
+  root.querySelectorAll("[data-save-note]").forEach((button) =>
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const date = button.dataset.saveNote;
+      const note = document.getElementById("note-editor-text").value;
+      try {
+        await api(`/api/v1/admin/date-notes/${date}`, { method: "PUT", body: JSON.stringify({ note }) });
+        state.notes.set(date, note);
+        state.editingDate = null;
+        setNotice(`${date} 备注已保存。`, true);
+      } catch (error) {
+        setNotice(`保存失败：${error.message}`);
+      }
+      renderShell();
+      renderTab();
+    }),
+  );
+  root.querySelectorAll("[data-cancel-note]").forEach((button) =>
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.editingDate = null;
+      renderShell();
+      renderTab();
+    }),
+  );
   const deleteSelected = document.getElementById("delete-selected");
   if (deleteSelected)
     deleteSelected.addEventListener("click", async () => {
@@ -314,46 +359,6 @@ async function onRecordAction(event) {
   await reload();
 }
 
-// ===== 日期备注页 =====
-
-function renderNotes(root) {
-  const dates = [...new Set(state.records.map((r) => r.record_date).filter(Boolean))].sort().reverse();
-  root.innerHTML = `
-    <div class="card">
-      <h3 class="f1">日期备注</h3>
-      <div class="hint">备注会同步显示在队员软件的记录列表上；留空保存即清除。</div>
-    </div>
-    ${dates.length === 0 ? '<div class="card hint">还没有任何记录日期。</div>' : ""}
-    ${dates
-      .map(
-        (date) => `
-      <div class="card" data-date="${esc(date)}">
-        <h3 class="f1">${esc(date)}</h3>
-        <textarea data-note>${esc(state.notes.get(date) || "")}</textarea>
-        <div style="margin-top: 8px; text-align: right;"><button class="primary" data-save>保存备注</button></div>
-      </div>`,
-      )
-      .join("")}`;
-  root.querySelectorAll("[data-save]").forEach((button) =>
-    button.addEventListener("click", async (event) => {
-      const card = event.target.closest("[data-date]");
-      const date = card.dataset.date;
-      const note = card.querySelector("[data-note]").value;
-      try {
-        await api(`/api/v1/admin/date-notes/${date}`, { method: "PUT", body: JSON.stringify({ note }) });
-        state.notes.set(date, note);
-        setNotice(`${date} 备注已保存。`, true);
-        renderShell();
-        renderTab();
-      } catch (error) {
-        setNotice(`保存失败：${error.message}`);
-        renderShell();
-        renderTab();
-      }
-    }),
-  );
-}
-
 // ===== 设置页（密钥分发） =====
 
 function renderSettings(root) {
@@ -361,18 +366,16 @@ function renderSettings(root) {
   root.innerHTML = `
     <div class="card copy-pair">
       <h3 class="f1">分发给队员</h3>
-      <div class="hint">把下面两个值发给队员，队员在软件「设置 → 云端服务器」里填好即可连接。</div>
-      <div class="kv"><label>服务器链接</label><input id="pair-link" readonly value="${esc(location.origin)}" /><button class="line" data-copy="pair-link">复制</button></div>
-      <div class="kv"><label>访问密钥</label><select id="pair-token">${active.map((t) => `<option value="${esc(t.token)}">${esc(t.name)}</option>`).join("")}</select><button class="line" data-copy-select="pair-token">复制</button></div>
-      ${active.length === 0 ? '<div class="hint" style="color: var(--red);">还没有可用密钥，先在下方生成。</div>' : ""}
+      <div class="hint">第一步：复制服务器链接；第二步：从下面任选一个有效密钥复制，发给队员。生成的都是可用的，一条密钥给一位队员，吊销某个不影响其他人。</div>
+      <div class="kv"><label>服务器链接</label><input id="pair-link" readonly value="${esc(location.origin)}" /><button class="line" data-copy="pair-link">复制链接</button></div>
     </div>
     <div class="card">
       <h3 class="f1">生成新密钥</h3>
       <div class="kv"><label>名称</label><input id="token-name" placeholder="例如：张三-笔记本" /><button class="primary" id="token-create">生成</button></div>
     </div>
     <div class="card">
-      <h3 class="f1">全部密钥</h3>
-      ${state.tokens.length === 0 ? '<div class="hint">还没有密钥。</div>' : ""}
+      <h3 class="f1">全部密钥（${active.length} 个有效 / ${state.tokens.length} 个）</h3>
+      ${state.tokens.length === 0 ? '<div class="hint">还没有密钥，先在上方生成一个。</div>' : ""}
       ${state.tokens
         .map(
           (t) => `
@@ -381,7 +384,7 @@ function renderSettings(root) {
             <div class="name">${esc(t.name)} ${t.revoked_at ? '<span class="badge archived">已吊销</span>' : '<span class="badge status-ok">有效</span>'}</div>
             <div class="sub mono">${esc(t.token)}</div>
           </div>
-          <button class="line" data-copy-token="${esc(t.token)}">复制</button>
+          <button class="line" data-copy-token="${esc(t.token)}" ${t.revoked_at ? "disabled" : ""}>复制</button>
           ${t.revoked_at ? "" : `<button class="line" data-revoke="${t.id}">吊销</button>`}
         </div>`,
         )
@@ -390,15 +393,7 @@ function renderSettings(root) {
   root.querySelectorAll("[data-copy]").forEach((button) =>
     button.addEventListener("click", async () => {
       const ok = await copyText(document.getElementById(button.dataset.copy).value);
-      setNotice(ok ? "已复制。" : "复制失败，请手动选择文本。", ok);
-      renderShell();
-      renderTab();
-    }),
-  );
-  root.querySelectorAll("[data-copy-select]").forEach((button) =>
-    button.addEventListener("click", async () => {
-      const ok = await copyText(document.getElementById(button.dataset.copySelect).value);
-      setNotice(ok ? "已复制密钥。" : "复制失败，请手动复制。", ok);
+      setNotice(ok ? "链接已复制。" : "复制失败，请手动选择文本。", ok);
       renderShell();
       renderTab();
     }),
@@ -406,7 +401,7 @@ function renderSettings(root) {
   root.querySelectorAll("[data-copy-token]").forEach((button) =>
     button.addEventListener("click", async () => {
       const ok = await copyText(button.dataset.copyToken);
-      setNotice(ok ? "已复制密钥。" : "复制失败。", ok);
+      setNotice(ok ? "密钥已复制，发给队员即可。" : "复制失败，请手动复制。", ok);
       renderShell();
       renderTab();
     }),
@@ -433,7 +428,7 @@ function renderSettings(root) {
     }
     try {
       await api("/api/v1/admin/tokens", { method: "POST", body: JSON.stringify({ name }) });
-      setNotice(`密钥「${name}」已生成，可在列表中复制。`, true);
+      setNotice(`密钥「${name}」已生成，在下方复制发给队员。`, true);
     } catch (error) {
       setNotice(`生成失败：${error.message}`);
     }
