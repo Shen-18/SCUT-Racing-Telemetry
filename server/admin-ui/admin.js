@@ -177,7 +177,7 @@ function renderRecords(root) {
           .join("")}
       </aside>
       <section class="right-pane">
-        <div class="detail-header">
+        <div class="detail-header" style="flex-wrap: wrap;">
           <span class="title f1">数据明细</span>
           ${state.records.length > 0 ? '<input class="search" id="library-search" placeholder="搜索车手 / 车辆…" />' : ""}
           <span class="count f1">${visible.length} 条记录${state.selectedGroup ? ` · ${esc(state.selectedGroup)}` : ""}</span>
@@ -190,12 +190,14 @@ function renderRecords(root) {
           state.records.length === 0
             ? emptyStateHtml()
             : `
+        <div class="grid-scroll">
         <div class="grid-header">
           <span class="checkbox ${allSelected ? "checked" : state.selected.size > 0 ? "partial" : ""}" id="select-all" title="全选 / 全不选"></span>
           <span>开始时间</span><span>车手</span><span>车辆</span><span>操作</span>
         </div>
         <div style="flex: 1; overflow-y: auto; min-height: 0;" id="record-rows">
           ${renderRecordRowsHtml(visible)}
+        </div>
         </div>`
         }
       </section>

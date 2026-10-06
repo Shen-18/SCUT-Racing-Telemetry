@@ -11,9 +11,12 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font-family: "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px; }
+html, body { overflow-x: auto; }
 .f1 { font-family: "F1 Display", "Segoe UI", "Microsoft YaHei", sans-serif; letter-spacing: 2px; }
 
-.topbar { background: var(--red); color: #fff; padding: 10px 18px; display: flex; align-items: center; gap: 14px; }
+.topbar { background: var(--red); color: #fff; padding: 10px 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.topbar .logo { white-space: nowrap; }
+@media (max-width: 700px) { .topbar .logo { font-size: 11px; letter-spacing: 1px; } }
 .topbar .logo { font-weight: 700; font-size: 14px; letter-spacing: 2px; }
 .topbar .tabs { display: flex; gap: 4px; margin-left: 12px; }
 .topbar button.tab {
@@ -64,8 +67,10 @@ button:disabled { opacity: .5; cursor: default; }
 .mono { font-family: Consolas, monospace; }
 
 /* ===== 记录页：复刻桌面端 DATABASE 页布局 ===== */
-.layout { display: flex; height: calc(100vh - 45px); min-height: 0; }
-.left-col { width: 240px; flex: none; border-right: 1px solid var(--line); overflow-y: auto; }
+.layout { display: flex; min-height: calc(100vh - 45px); }
+.left-col { width: 240px; flex: none; border-right: 1px solid var(--line); overflow-y: auto; min-width: 0; }
+@media (max-width: 1100px) { .left-col { width: 200px; } }
+@media (max-width: 860px) { .left-col { width: 168px; } }
 .group-row {
   display: grid; grid-template-columns: minmax(88px, 1fr) minmax(0, 1.5fr) 34px;
   column-gap: 8px; align-items: center; padding: 8px 14px;
@@ -76,7 +81,8 @@ button:disabled { opacity: .5; cursor: default; }
 .group-row .gname { font-weight: 700; font-size: 12px; letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .group-row .gnote { color: var(--dim); font-size: 12px; padding-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .group-row .gcount { font-size: 12px; color: var(--dim); font-weight: 700; text-align: right; }
-.right-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.right-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-x: auto; }
+.grid-scroll { min-width: 560px; }
 .detail-header { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 16px; border-bottom: 1px solid var(--line); flex: none; }
 .detail-header .title { font-weight: 700; font-size: 13px; letter-spacing: 2px; color: var(--dim); }
 .detail-header input.search { width: 220px; border-radius: 2px; padding: 5px 8px; font-size: 11px; letter-spacing: .5px; }
