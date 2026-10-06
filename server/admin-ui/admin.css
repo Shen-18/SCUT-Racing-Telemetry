@@ -137,3 +137,16 @@ button:disabled { opacity: .5; cursor: default; }
 .release-assets { margin-top: 8px; display: flex; align-items: center; gap: 10px; font-size: 11px; flex-wrap: wrap; }
 .release-asset { color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--line); }
 .release-asset:hover { color: var(--red); }
+
+/* 拖拽导入遮罩（记录页） */
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 50; display: none;
+  background: rgba(10, 11, 16, 0.82); place-items: center;
+}
+.drop-overlay.visible { display: grid; }
+.drop-box {
+  padding: 22px 42px; border: 2px dashed var(--red); color: var(--text);
+  font-weight: 700; font-size: 15px; background: var(--bg2); letter-spacing: 2px;
+}
+.release-side.dragging .card { border-color: var(--red); }
+.release-side.dragging::after { content: "松手导入 .exe / .sig"; display: block; margin-top: 8px; color: var(--red); font-weight: 700; font-size: 12px; }

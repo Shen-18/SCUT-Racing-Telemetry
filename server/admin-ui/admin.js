@@ -300,6 +300,11 @@ function renderRecords(root) {
     });
   document.getElementById("upload-button").addEventListener("click", () => document.getElementById("upload-input").click());
   document.getElementById("upload-input").addEventListener("change", onUpload);
+  root.insertAdjacentHTML(
+    "beforeend",
+    '<div class="drop-overlay"><div class="drop-box f1">松手导入 .xrk / .xrz 文件</div></div>',
+  );
+  bindRecordDropZone(root);
 }
 
 function emptyStateHtml() {
@@ -515,29 +520,69 @@ function renderSettings(root) {
 }
 
 async function onUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  setNotice(`正在上传并解析 ${file.name} …`, true);
-  renderShell();
-  renderTab();
-  try {
-    const res = await fetch("/api/v1/admin/uploads", {
-      method: "POST",
-      headers: { "x-file-name": encodeURIComponent(file.name), "content-type": "application/octet-stream" },
-      body: file,
-    });
-    const body = await res.json().catch(() => ({}));
-    if (res.status === 401) {
-      state.loggedIn = false;
-      render();
-      return;
-    }
-    if (!res.ok) throw new Error(body?.error?.message || `上传失败 HTTP ${res.status}`);
-    setNotice(body.duplicate ? `${file.name} 已存在（按内容去重，未重复登记）。` : `${file.name} 上传成功，已生成记录。`, true);
-  } catch (error) {
-    setNotice(`上传失败：${error.message}`);
+  const files = [...event.target.files];
+  event.target.value = "";
+  await uploadFiles(files);
+}
+
+async function uploadFiles(files) {
+  const ok = files.filter((f) => /\.(xrk|xrz)$/i.test(f.name));
+  const skipped = files.length - ok.length;
+  if (ok.length === 0) {
+    setNotice("仅支持 .xrk / .xrz 文件。");
+    renderShell();
+    renderTab();
+    return;
   }
+  const results = [];
+  for (const file of ok) {
+    setNotice(`正在上传并解析 ${file.name} …`, true);
+    renderShell();
+    renderTab();
+    try {
+      const res = await fetch("/api/v1/admin/uploads", {
+        method: "POST",
+        headers: { "x-file-name": encodeURIComponent(file.name), "content-type": "application/octet-stream" },
+        body: file,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        state.loggedIn = false;
+        render();
+        return;
+      }
+      if (!res.ok) throw new Error(body?.error?.message || `HTTP ${res.status}`);
+      results.push(body.duplicate ? `${file.name} 已存在（去重）` : `${file.name} ✓`);
+    } catch (error) {
+      results.push(`${file.name} 失败：${error.message}`);
+    }
+  }
+  const summary = results.join("；");
+  setNotice(skipped > 0 ? `${summary}（另忽略 ${skipped} 个非 xrk/xrz 文件）` : summary, !summary.includes("失败"));
   await reload();
+}
+
+// 记录页拖拽导入（HTML5 拖放，网页端可用）
+function bindRecordDropZone(root) {
+  let depth = 0;
+  root.addEventListener("dragenter", (e) => {
+    if (![...e.dataTransfer.types].includes("Files")) return;
+    e.preventDefault();
+    depth += 1;
+    root.querySelector(".drop-overlay")?.classList.add("visible");
+  });
+  root.addEventListener("dragover", (e) => e.preventDefault());
+  root.addEventListener("dragleave", () => {
+    depth = Math.max(0, depth - 1);
+    if (depth === 0) root.querySelector(".drop-overlay")?.classList.remove("visible");
+  });
+  root.addEventListener("drop", (e) => {
+    e.preventDefault();
+    depth = 0;
+    root.querySelector(".drop-overlay")?.classList.remove("visible");
+    const files = [...(e.dataTransfer?.files || [])];
+    if (files.length > 0) void uploadFiles(files);
+  });
 }
 
 // ===== 软件发布页（GitHub Releases 式：左侧发布列表 + 右侧发布表单） =====
@@ -566,6 +611,30 @@ function renderReleases(root) {
       </aside>
     </div>`;
   bindReleaseForm(root);
+  // 拖拽导入：.exe → 安装包，.sig → 签名
+  const side = root.querySelector(".release-side");
+  const installerInput = document.getElementById("rel-installer");
+  const sigInput = document.getElementById("rel-sig");
+  const setFile = (input, file) => {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change"));
+  };
+  side.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    side.classList.add("dragging");
+  });
+  side.addEventListener("dragleave", () => side.classList.remove("dragging"));
+  side.addEventListener("drop", (e) => {
+    e.preventDefault();
+    side.classList.remove("dragging");
+    for (const file of e.dataTransfer?.files || []) {
+      if (/\.exe$/i.test(file.name)) setFile(installerInput, file);
+      else if (/\.sig$/i.test(file.name)) setFile(sigInput, file);
+      else setNotice(`发布页只接受 .exe / .sig，已忽略 ${file.name}`);
+    }
+  });
 }
 
 function renderReleaseCard(release) {
