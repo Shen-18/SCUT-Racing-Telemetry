@@ -464,7 +464,7 @@ fn write_parallel_chunks(
     started: Instant,
 ) -> Result<(), String> {
     let worker_count = request.workers.clamp(1, 32).min(indices.len().max(1));
-    let chunk_size = (indices.len() + worker_count - 1) / worker_count;
+    let chunk_size = indices.len().div_ceil(worker_count);
     let multiplier = (timeline.fps / timeline.render_fps) as usize;
     let temp_dir = output
         .parent()
@@ -948,7 +948,7 @@ fn verify_alpha_samples(
             return Err("alpha 校验帧尺寸不足".into());
         }
         let mut max_alpha = 0u8;
-        for pixel in output.stdout[..expected_bytes].chunks_exact(4) {
+        for pixel in output.stdout[..expected_bytes].as_chunks::<4>().0 {
             max_alpha = max_alpha.max(pixel[3]);
         }
         let center = ((timeline.height / 2 * timeline.width + timeline.width / 2) * 4 + 3) as usize;

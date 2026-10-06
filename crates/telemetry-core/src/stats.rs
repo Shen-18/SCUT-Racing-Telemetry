@@ -25,7 +25,7 @@ fn interp(s: &ChannelSeries, t: f64) -> Option<f64> {
     let i = times.partition_point(|&x| x < t);
     if i < n && times[i] == t {
         let v = values[i];
-        return if v.is_finite() { Some(v as f64) } else { None };
+        return if v.is_finite() { Some(v) } else { None };
     }
     if i == 0 || i == n {
         return None;
@@ -35,7 +35,7 @@ fn interp(s: &ChannelSeries, t: f64) -> Option<f64> {
     if !v0.is_finite() || !v1.is_finite() || t1 <= t0 {
         return None;
     }
-    Some(v0 as f64 + (v1 - v0) as f64 * (t - t0) / (t1 - t0))
+    Some(v0 + (v1 - v0) * (t - t0) / (t1 - t0))
 }
 /// Compute min, max, mean and population standard deviation, skipping non-finite values.
 pub fn channel_stats(s: &ChannelSeries, w: (f64, f64)) -> ChannelStats {
@@ -44,7 +44,7 @@ pub fn channel_stats(s: &ChannelSeries, w: (f64, f64)) -> ChannelStats {
         .iter()
         .zip(&s.values[..n])
         .filter(|(t, v)| **t >= w.0 && **t <= w.1 && v.is_finite())
-        .map(|(_, v)| *v as f64)
+        .map(|(_, v)| *v)
         .collect();
     if a.is_empty() {
         return ChannelStats {

@@ -3,7 +3,6 @@
 
 use cache_core::{CacheManifest, CacheRoot};
 use rusqlite::{params, Connection, OptionalExtension};
-use serde_json;
 use std::{path::{Path, PathBuf}, sync::Mutex};
 use telemetry_ipc::RecordSummary;
 use uuid::Uuid;

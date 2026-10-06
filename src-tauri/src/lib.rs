@@ -1,4 +1,5 @@
 pub mod batch;
+pub mod cloud;
 pub mod export;
 mod imports;
 pub mod jobs;

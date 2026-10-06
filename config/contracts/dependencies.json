@@ -19,7 +19,11 @@
     "tauri-build": "2",
     "tauri-plugin-window-state": "2",
     "zip": "2",
-    "rfd": "0.15"
+    "rfd": "0.15",
+    "reqwest": "0.12",
+    "uuid": "1",
+    "flate2": "1",
+    "dirs": "6"
   },
   "frontend": {
     "@tauri-apps/api": "^2.11.1",
@@ -38,7 +42,8 @@
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.70.0",
     "vite": "^6.0.0",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "pg": "^8.23.1"
   },
   "members": [
     "crates/telemetry-core",
@@ -50,7 +55,8 @@
     "crates/overlay",
     "src-tauri",
     "crates/migrate-v1",
-    "tests/golden-tests"
+    "tests/golden-tests",
+    "crates/xrk-meta"
   ],
   "edges": {
     "telemetry-core": [],
@@ -65,7 +71,8 @@
     ],
     "telemetry-store": [
       "telemetry-core",
-      "cache-core"
+      "cache-core",
+      "telemetry-ipc"
     ],
     "telemetry-ipc": [
       "telemetry-core",

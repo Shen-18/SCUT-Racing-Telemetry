@@ -150,7 +150,7 @@ fn median(values: impl Iterator<Item = f64>) -> f64 {
     let mut values: Vec<f64> = values.collect();
     values.sort_by(f64::total_cmp);
     let middle = values.len() / 2;
-    if values.len() % 2 == 0 {
+    if values.len().is_multiple_of(2) {
         (values[middle - 1] + values[middle]) / 2.0
     } else {
         values[middle]
@@ -183,7 +183,7 @@ fn logo_source() -> &'static Pixmap {
             .next_frame(&mut buffer)
             .expect("embedded logo decodes");
         let mut pixels = Vec::with_capacity(info.buffer_size());
-        for pixel in buffer[..info.buffer_size()].chunks_exact(4) {
+        for pixel in buffer[..info.buffer_size()].as_chunks::<4>().0 {
             let alpha = pixel[3] as u16;
             pixels.extend([
                 ((pixel[0] as u16 * alpha + 127) / 255) as u8,
@@ -330,7 +330,7 @@ fn render_rgba_with_context_for_demo(
 ) -> Result<Vec<u8>, RenderError> {
     // tiny-skia stores premultiplied RGBA; FFmpeg expects straight RGBA.
     let mut pixels = draw_frame(frame, config, context)?.data().to_vec();
-    for pixel in pixels.chunks_exact_mut(4) {
+    for pixel in pixels.as_chunks_mut::<4>().0 {
         let alpha = pixel[3] as u32;
         if alpha > 0 && alpha < 255 {
             for component in &mut pixel[..3] {
@@ -396,8 +396,8 @@ fn draw_frame(
         s,
         *frame,
         config.width as f32,
-        &reg,
-        &bold,
+        reg,
+        bold,
         context,
     );
     bottom(
@@ -448,6 +448,7 @@ fn rect_outline(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, width: f32, c: 
         }
     }
 }
+#[allow(clippy::too_many_arguments)] // 绘图辅助：坐标+样式参数天然偏多
 fn round(
     pm: &mut Pixmap,
     x: f32,
@@ -534,6 +535,7 @@ fn polyline(pm: &mut Pixmap, points: impl IntoIterator<Item = (f32, f32)>, w: f3
         );
     }
 }
+#[allow(clippy::too_many_arguments)] // 绘图辅助：坐标+样式参数天然偏多
 fn ellipse(pm: &mut Pixmap, cx: f32, cy: f32, rx: f32, ry: f32, c: [u8; 4], fill: bool, w: f32) {
     if let Some(r) = tiny_skia::Rect::from_xywh(cx - rx, cy - ry, rx * 2., ry * 2.) {
         let mut q = PathBuilder::new();
@@ -556,6 +558,7 @@ fn ellipse(pm: &mut Pixmap, cx: f32, cy: f32, rx: f32, ry: f32, c: [u8; 4], fill
         }
     }
 }
+#[allow(clippy::too_many_arguments)] // 绘图辅助：坐标+样式参数天然偏多
 fn arc(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, a0: f32, a1: f32, w: f32, c: [u8; 4]) {
     let mut q = PathBuilder::new();
     let n = ((a1 - a0).abs() / 10.).ceil() as usize;
@@ -582,7 +585,7 @@ fn arc(pm: &mut Pixmap, cx: f32, cy: f32, r: f32, a0: f32, a1: f32, w: f32, c: [
     }
 }
 #[derive(Clone, Copy)]
-enum A {
+enum PathOp {
     LA,
     LS,
     LM,
@@ -639,6 +642,7 @@ fn finite_or_zero(value: f32) -> f32 {
         0.
     }
 }
+#[allow(clippy::too_many_arguments)] // 绘图辅助：坐标+样式参数天然偏多
 fn text(
     pm: &mut Pixmap,
     f: &FontArc,
@@ -647,19 +651,19 @@ fn text(
     x: f32,
     y: f32,
     c: [u8; 4],
-    a: A,
+    a: PathOp,
     shadow: bool,
 ) {
     let s = f.as_scaled(PxScale::from(z));
     let w = tw(f, t, z);
     let xx = match a {
-        A::LA | A::LS | A::LM => x,
-        A::MA | A::MM | A::MT => x - w / 2.,
-        A::RA | A::RM => x - w,
+        PathOp::LA | PathOp::LS | PathOp::LM => x,
+        PathOp::MA | PathOp::MM | PathOp::MT => x - w / 2.,
+        PathOp::RA | PathOp::RM => x - w,
     };
     let base = match a {
-        A::LS => y,
-        A::LA | A::MA | A::RA | A::MT => y + s.ascent(),
+        PathOp::LS => y,
+        PathOp::LA | PathOp::MA | PathOp::RA | PathOp::MT => y + s.ascent(),
         _ => y + (s.ascent() + s.descent()) / 2.,
     };
     if shadow {
@@ -751,7 +755,7 @@ fn timing(
         x + 22. * s,
         y + 10. * s,
         col(255, 132.),
-        A::LA,
+        PathOp::LA,
         true,
     );
     line(
@@ -769,7 +773,7 @@ fn timing(
         x + w - 22. * s,
         y + 15. * s,
         col(255, 197.),
-        A::RA,
+        PathOp::RA,
         true,
     );
     text(
@@ -780,7 +784,7 @@ fn timing(
         x + w - 22. * s,
         y + 37. * s,
         col(255, 150.),
-        A::RA,
+        PathOp::RA,
         true,
     );
     let clock = fmt_clock(f.time_seconds);
@@ -792,10 +796,11 @@ fn timing(
         x + 22. * s,
         y + h / 2. + 8. * s,
         WHITE,
-        A::LM,
+        PathOp::LM,
         true,
     )
 }
+#[allow(clippy::too_many_arguments)] // 绘图辅助：坐标+样式参数天然偏多
 fn bottom(
     pm: &mut Pixmap,
     s: f32,
@@ -870,7 +875,7 @@ fn bottom(
             bx + (k % 2) as f32 * cw,
             top + 10. * s + (k / 2) as f32 * rh,
             col(138, 242.),
-            A::LA,
+            PathOp::LA,
             true,
         )
     }
@@ -883,7 +888,7 @@ fn bottom(
     for (k, (v, u)) in values.iter().enumerate() {
         let x = bx + (k % 2) as f32 * cw;
         let y = top + 10. * s + (k / 2) as f32 * rh;
-        text(pm, bold, v, 26. * s, x, y + 15. * s, WHITE, A::LA, true);
+        text(pm, bold, v, 26. * s, x, y + 15. * s, WHITE, PathOp::LA, true);
         text(
             pm,
             reg,
@@ -892,7 +897,7 @@ fn bottom(
             x + tw(bold, v, 26. * s) + 6. * s,
             y + 27. * s,
             col(142, 242.),
-            A::LS,
+            PathOp::LS,
             true,
         )
     }
@@ -904,7 +909,7 @@ fn bottom(
         (x0 + x1) / 2.,
         ty,
         col(152, 145.),
-        A::MA,
+        PathOp::MA,
         true,
     );
     // steer
@@ -932,7 +937,7 @@ fn bottom(
         cx - r - 6. * s,
         cy,
         col(124, 242.),
-        A::RM,
+        PathOp::RM,
         true,
     );
     text(
@@ -943,7 +948,7 @@ fn bottom(
         cx + r + 6. * s,
         cy,
         col(124, 242.),
-        A::LM,
+        PathOp::LM,
         true,
     );
     text(
@@ -954,7 +959,7 @@ fn bottom(
         cx,
         ty,
         col(152, 145.),
-        A::MA,
+        PathOp::MA,
         true,
     );
     let steer = finite_or_zero(f.steer_deg);
@@ -980,7 +985,7 @@ fn bottom(
         cx,
         cy + 2. * s,
         WHITE,
-        A::MM,
+        PathOp::MM,
         true,
     );
     // speed
@@ -999,7 +1004,7 @@ fn bottom(
         bx0,
         top + 44. * s,
         col(157, 242.),
-        A::LS,
+        PathOp::LS,
         true,
     );
     rect(pm, bx0, by - 7. * s, bx1 - bx0, 14. * s, col(52, 242.));
@@ -1014,7 +1019,7 @@ fn bottom(
             x,
             by + 17. * s,
             col(147, 242.),
-            A::MA,
+            PathOp::MA,
             true,
         )
     }
@@ -1026,7 +1031,7 @@ fn bottom(
         x0 + p + 10. * s,
         top + ch / 2. + 5. * s,
         WHITE,
-        A::LM,
+        PathOp::LM,
         true,
     );
     rect(
@@ -1045,7 +1050,7 @@ fn bottom(
         (x0 + x1) / 2.,
         ty,
         col(152, 145.),
-        A::MA,
+        PathOp::MA,
         true,
     );
     // pedals
@@ -1082,7 +1087,7 @@ fn bottom(
             bx + bw + 5. * s,
             by - bh / 2. + 9. * s,
             col(138, 242.),
-            A::LM,
+            PathOp::LM,
             false,
         );
         text(
@@ -1093,7 +1098,7 @@ fn bottom(
             bx + bw + 5. * s,
             by - bh / 2. - 9. * s,
             WHITE,
-            A::LM,
+            PathOp::LM,
             false,
         );
         text(
@@ -1104,7 +1109,7 @@ fn bottom(
             bx + bw / 2.,
             ty,
             col(152, 145.),
-            A::MA,
+            PathOp::MA,
             true,
         )
     }
@@ -1136,7 +1141,7 @@ fn bottom(
         cx,
         cy - r - 7. * s,
         col(255, 195.),
-        A::MA,
+        PathOp::MA,
         true,
     );
     text(
@@ -1147,7 +1152,7 @@ fn bottom(
         cx - r - 22. * s,
         cy - 11. * s,
         col(255, 195.),
-        A::MA,
+        PathOp::MA,
         true,
     );
     text(
@@ -1158,7 +1163,7 @@ fn bottom(
         cx - r - 22. * s,
         cy,
         WHITE,
-        A::MT,
+        PathOp::MT,
         true,
     );
     text(
@@ -1169,7 +1174,7 @@ fn bottom(
         (e(5) + 10. * s + e(6)) / 2. + 2. * s,
         ty,
         col(152, 145.),
-        A::MA,
+        PathOp::MA,
         true,
     );
     // torque
@@ -1223,7 +1228,7 @@ fn bottom(
             gx + bw + 5. * s,
             by - bh / 2. - 9. * s,
             WHITE,
-            A::LM,
+            PathOp::LM,
             true,
         );
         text(
@@ -1234,7 +1239,7 @@ fn bottom(
             gx + bw + 5. * s,
             by - bh / 2. + 9. * s,
             col(138, 242.),
-            A::LM,
+            PathOp::LM,
             true,
         );
         text(
@@ -1245,7 +1250,7 @@ fn bottom(
             gx + bw / 2.,
             ty,
             col(152, 145.),
-            A::MA,
+            PathOp::MA,
             true,
         )
     }

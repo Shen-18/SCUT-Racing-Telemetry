@@ -46,7 +46,7 @@ pub fn integrate_distance(times: &[f64], speed: &[f64]) -> Vec<f64> {
         let dt = times[i] - times[i - 1];
         d[i] = d[i - 1]
             + if dt.is_finite() && dt > 0.0 && speed[i - 1].is_finite() {
-                dt * speed[i - 1] as f64
+                dt * speed[i - 1]
             } else {
                 0.0
             };

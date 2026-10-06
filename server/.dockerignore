@@ -6,4 +6,3 @@ data/
 Dockerfile
 .dockerignore
 .env
-bin/

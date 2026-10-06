@@ -23,8 +23,8 @@ impl RenderConfig {
     pub fn validate(self) -> bool {
         self.width > 0
             && self.height > 0
-            && self.width % 2 == 0
-            && self.height % 2 == 0
+            && self.width.is_multiple_of(2)
+            && self.height.is_multiple_of(2)
             && ((self.width as f64 / self.height as f64) - 16. / 9.).abs() <= 0.001
     }
 }

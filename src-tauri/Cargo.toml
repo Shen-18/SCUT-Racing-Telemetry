@@ -19,7 +19,8 @@ serde.workspace=true
 serde_json.workspace=true
 zip.workspace=true
 rfd.workspace=true
-dirs = "6"
+reqwest.workspace=true
+dirs.workspace=true
 tauri-plugin-window-state.workspace=true
 
 [features]

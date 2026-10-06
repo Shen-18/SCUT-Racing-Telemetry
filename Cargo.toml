@@ -21,5 +21,8 @@ tauri = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 rfd = "0.15"
 sha2 = "0.10"
+reqwest = "0.12"
+flate2 = "1"
+dirs = "6"
 tauri-build = "2"
 tauri-plugin-window-state = "2"

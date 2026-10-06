@@ -236,11 +236,10 @@ impl CacheRoot {
 fn readable_component(value: &str, fallback: &str) -> String {
     let mut out = String::new();
     for ch in value.trim().chars() {
-        if ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') {
-            if !out.ends_with('_') {
-                out.push('_');
-            }
-        } else if ch.is_whitespace() {
+        if ch.is_control()
+            || ch.is_whitespace()
+            || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+        {
             if !out.ends_with('_') {
                 out.push('_');
             }

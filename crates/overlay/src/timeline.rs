@@ -81,7 +81,7 @@ pub enum TimelineError {
 
 impl TimelineConfig {
     pub fn validate(&self) -> Result<(), TimelineError> {
-        if self.width == 0 || self.height == 0 || self.width % 2 != 0 || self.height % 2 != 0 {
+        if self.width == 0 || self.height == 0 || !self.width.is_multiple_of(2) || !self.height.is_multiple_of(2) {
             return Err(TimelineError::InvalidDimensions);
         }
         if ((self.width as f64 / self.height as f64) - 16. / 9.).abs() > 0.001 {
@@ -90,7 +90,7 @@ impl TimelineConfig {
         if !(1..=240).contains(&self.fps) {
             return Err(TimelineError::InvalidFps);
         }
-        if self.render_fps == 0 || self.render_fps > self.fps || self.fps % self.render_fps != 0 {
+        if self.render_fps == 0 || self.render_fps > self.fps || !self.fps.is_multiple_of(self.render_fps) {
             return Err(TimelineError::InvalidRenderFps);
         }
         if !self.timeline_fps.is_finite() || self.timeline_fps <= 0. {
@@ -262,7 +262,7 @@ pub fn solve_alignment(config: &TimelineConfig) -> Result<Alignment, TimelineErr
 
 pub fn build_timeline(config: &TimelineConfig) -> Result<OutputTimeline, TimelineError> {
     let alignment = solve_alignment(config)?;
-    let length = config.duration.unwrap_or_else(|| {
+    let length = config.duration.unwrap_or({
         alignment.scale * config.source_end + alignment.offset_seconds - config.output_start
     });
     if !length.is_finite() || length <= 0. {
@@ -291,7 +291,7 @@ pub fn render_indices(
     output_fps: u32,
     render_fps: u32,
 ) -> Result<Vec<usize>, TimelineError> {
-    if render_fps == 0 || output_fps == 0 || output_fps % render_fps != 0 {
+    if render_fps == 0 || output_fps == 0 || !output_fps.is_multiple_of(render_fps) {
         return Err(TimelineError::InvalidRenderFps);
     }
     let step = (output_fps / render_fps) as usize;

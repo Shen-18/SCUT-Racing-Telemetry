@@ -27,7 +27,7 @@ fn renderer_accepts_configured_canvas_sizes_and_raw_rgba_frames() {
     };
     let rgba = render_rgba(&frame, config).unwrap();
     assert_eq!(rgba.len(), 1920 * 1080 * 4);
-    assert!(rgba.chunks_exact(4).any(|pixel| pixel[3] > 0));
+    assert!(rgba.as_chunks::<4>().0.iter().any(|pixel| pixel[3] > 0));
 
     let path = std::env::temp_dir().join(format!("overlay-configured-{}.png", std::process::id()));
     let report = render_png_with_config(&path, DemoFrame::sample(), config).unwrap();

@@ -607,6 +607,7 @@ fn main() {
             overlay_export::overlay_export_status,
             overlay_export::cancel_overlay_export,
             overlay_export::open_overlay_folder,
+            cloud::cloud_download_file,
             list_records,
             save_record_note,
             save_date_note,

@@ -136,8 +136,8 @@ fn generate_overlay_demo_inner(
                         (f64::INFINITY, f64::NEG_INFINITY),
                         |(minimum, maximum), value| (minimum.min(value), maximum.max(value)),
                     );
-                    if minimum.is_finite() && maximum.is_finite() {
-                        if frame.brake_percent.is_finite() {
+                    if minimum.is_finite() && maximum.is_finite()
+                        && frame.brake_percent.is_finite() {
                             frame.brake_percent = if (maximum - minimum).abs() <= f64::EPSILON {
                                 0.
                             } else {
@@ -145,7 +145,6 @@ fn generate_overlay_demo_inner(
                                     * 100.) as f32
                             };
                         }
-                    }
                 }
             }
             for (index, wheel) in ["FL", "FR", "RL", "RR"].iter().enumerate() {
@@ -160,7 +159,7 @@ fn generate_overlay_demo_inner(
             Some((frame, render_context))
         })
         .unwrap_or_else(|| (overlay::DemoFrame::blank(0.0), RenderContext::default()));
-    let report = overlay::render_png_with_context(&path, frame, render_config, &render_context)
+    let report = overlay::render_png_with_context(path, frame, render_config, &render_context)
         .map_err(|error| command_error("overlay_render", error))?;
     Ok(OverlayDemoResult {
         path: path.to_string(),
