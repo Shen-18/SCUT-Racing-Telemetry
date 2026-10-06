@@ -82,7 +82,7 @@ button:disabled { opacity: .5; cursor: default; }
 .detail-header input.search { width: 220px; border-radius: 2px; padding: 5px 8px; font-size: 11px; letter-spacing: .5px; }
 .detail-header .count { font-size: 11px; letter-spacing: 1px; color: var(--dim); }
 .grid-header, .grid-row {
-  display: grid; grid-template-columns: 28px 104px minmax(140px, 1.25fr) minmax(140px, 1fr) 120px 132px;
+  display: grid; grid-template-columns: 28px 104px minmax(160px, 1.3fr) minmax(160px, 1.1fr) 132px;
   gap: 0 8px; align-items: center; text-align: center; margin: 0 16px; padding: 9px 8px;
 }
 .grid-header { min-height: 32px; padding: 0 8px; border-bottom: 1px solid var(--line); flex: none; }

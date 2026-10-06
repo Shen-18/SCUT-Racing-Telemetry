@@ -49,15 +49,6 @@ function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-// 与桌面端一致：m:ss.d
-function fmtDuration(t) {
-  const n = Number(t);
-  if (!Number.isFinite(n) || n < 0) return "--:--.-";
-  const m = Math.floor(n / 60);
-  const s = n - m * 60;
-  return `${m}:${s.toFixed(1).padStart(4, "0")}`;
-}
-
 function notePreview(note, maxLength = 72) {
   const compact = String(note || "").replace(/\s+/g, " ").trim();
   return compact.length > maxLength ? `${compact.slice(0, maxLength - 1)}…` : compact;
@@ -201,7 +192,7 @@ function renderRecords(root) {
             : `
         <div class="grid-header">
           <span class="checkbox ${allSelected ? "checked" : state.selected.size > 0 ? "partial" : ""}" id="select-all" title="全选 / 全不选"></span>
-          <span>开始时间</span><span>车手</span><span>车辆</span><span>时长</span><span>操作</span>
+          <span>开始时间</span><span>车手</span><span>车辆</span><span>操作</span>
         </div>
         <div style="flex: 1; overflow-y: auto; min-height: 0;" id="record-rows">
           ${renderRecordRowsHtml(visible)}
@@ -354,7 +345,6 @@ function renderRecordRow(record) {
       <span class="dim" title="文件时间 ${esc(new Date((record.source_mtime_unix || 0) * 1000).toLocaleString())}">${esc(record.start_time || "—")}</span>
       <span class="cell" title="${esc(record.racer || "")}">${esc(record.racer || "—")}</span>
       <span class="dim" title="${esc(record.vehicle || "")}">${esc(record.vehicle || "—")}</span>
-      <span>${fmtDuration(record.duration)}</span>
       <span class="row-actions">
         <button class="icon-btn" data-action="download" data-hash="${esc(record.file_hash)}" ${record.storage_key ? "" : "disabled"} title="下载原始文件">⬇</button>
         <button class="icon-btn danger" data-action="delete" data-hash="${esc(record.file_hash)}" title="删除记录与文件">✕</button>
