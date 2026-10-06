@@ -45,7 +45,7 @@
     "vite": "^6.0.0",
     "vitest": "^3.2.7",
     "pg": "^8.23.1",
-    "@tauri-apps/plugin-updater": "^2.13.1"
+    "@tauri-apps/plugin-updater": "^2.12.0"
   },
   "members": [
     "crates/telemetry-core",

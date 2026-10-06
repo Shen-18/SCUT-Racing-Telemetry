@@ -429,3 +429,41 @@ export function selectActiveChannel(
   const mostRecentlyChecked = [...checkedChannels].reverse().find((key) => available.has(key));
   return mostRecentlyChecked ?? selectDefaultSpeedChannel(channels) ?? channels[0].key;
 }
+
+// ===== 软件更新（tauri-plugin-updater；IPC 收口在此文件）=====
+
+export async function getAppVersion(): Promise<string> {
+  const { getVersion } = await import("@tauri-apps/api/app");
+  return getVersion();
+}
+
+export async function checkForUpdate(): Promise<{ version: string; notes: string } | null> {
+  const { check } = await import("@tauri-apps/plugin-updater");
+  const update = await check();
+  if (!update) return null;
+  return { version: update.version, notes: update.body ?? "" };
+}
+
+export type UpdateProgress =
+  | { event: "started"; contentLength: number | null }
+  | { event: "progress"; downloaded: number; contentLength: number | null }
+  | { event: "finished" };
+
+export async function downloadAndInstallUpdate(onProgress?: (p: UpdateProgress) => void): Promise<void> {
+  const { check } = await import("@tauri-apps/plugin-updater");
+  const update = await check();
+  if (!update) throw new Error("没有可用更新");
+  await update.downloadAndInstall((event) => {
+    switch (event.event) {
+      case "Started":
+        onProgress?.({ event: "started", contentLength: event.data.contentLength ?? null });
+        break;
+      case "Progress":
+        onProgress?.({ event: "progress", downloaded: event.data.chunkLength, contentLength: null });
+        break;
+      case "Finished":
+        onProgress?.({ event: "finished" });
+        break;
+    }
+  });
+}
