@@ -180,6 +180,24 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
     return filterRecords(base, query);
   }, [records, groups, selectedGroup, query]);
 
+  // 「全部」视图下按日期分节展示（与管理面板一致）：节从新到旧，节内按记录时间新→旧
+  const dateSections = useMemo(() => {
+    if (records === null || visible === null || selectedGroup !== null) return null;
+    const buckets = new Map<string, RecordSummary[]>();
+    for (const record of visible) {
+      const key = record.record_date?.trim() || "UNKNOWN DATE";
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(record);
+      else buckets.set(key, [record]);
+    }
+    const sections = [...buckets.entries()].map(([key, recs]) => ({
+      key,
+      records: [...recs].sort((a, b) => b.source_mtime_unix - a.source_mtime_unix),
+    }));
+    sections.sort((a, b) => (a.key < b.key ? 1 : -1));
+    return sections;
+  }, [records, visible, selectedGroup]);
+
   const allSelected = useMemo(
     () => Boolean(visible && visible.length > 0 && visible.every((r) => selected.has(r.file_hash))),
     [visible, selected]
@@ -198,6 +216,145 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
     { id: "time", label: "按日期", en: "BY DATE" },
     { id: "vehicle", label: "按车辆", en: "BY CAR" },
   ];
+
+  const renderRow = (record: RecordSummary) => {
+                  return (
+                    <div
+                      key={record.file_hash}
+                      data-testid="library-row"
+                      tabIndex={0}
+                      title="双击打开分析"
+                      onDoubleClick={() => onOpen(record.file_hash)}
+                      onKeyDown={(e) => e.key === "Enter" && onOpen(record.file_hash)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const hash = record.file_hash;
+                        setMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          items: [
+                            ...(onUseForOverlay
+                              ? [{ key: "overlay", label: "用于 Overlay", onSelect: () => onUseForOverlay(hash) }]
+                              : []),
+                            { key: "reveal", label: "打开文件目录", onSelect: () => onReveal?.(hash) },
+                            { key: "export", label: "导出此记录", onSelect: () => onExportOne(hash) },
+                            { key: "delete", label: "删除此记录", danger: true, onSelect: () => onDelete(hash) },
+                            {
+                              key: "toggle-select",
+                              label: selected.has(hash) ? "取消勾选" : "勾选",
+                              onSelect: () => onToggleSelect(hash),
+                            },
+                          ],
+                        });
+                      }}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: GRID_COLUMNS,
+                        gap: "0 8px",
+                        alignItems: "center",
+                        textAlign: "center",
+                        margin: "0 16px",
+                        padding: "9px 8px",
+                        borderBottom: "1px solid var(--line)",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        background: selected.has(record.file_hash) ? "var(--bg2)" : undefined,
+                      }}
+                      className="library-row"
+                    >
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleSelect(record.file_hash);
+                        }}
+                        style={{
+                          width: "14px",
+                          height: "14px",
+                          border: `1.5px solid ${selected.has(record.file_hash) ? "var(--text)" : "var(--dim2)"}`,
+                          flex: "none",
+                          position: "relative",
+                          display: "inline-block",
+                          cursor: "pointer",
+                          justifySelf: "center",
+                        }}
+                        title="勾选以导出"
+                      >
+                        {selected.has(record.file_hash) && (
+                          <span style={{ position: "absolute", inset: "2px", background: "var(--text)" }} />
+                        )}
+                      </span>
+                      <span
+                        className="tnum"
+                        style={{ color: "var(--dim)", whiteSpace: "nowrap" }}
+                        title={`文件时间 ${formatDateTime(record.source_mtime_unix)}`}
+                      >
+                        {record.start_time || "—"}
+                      </span>
+                      <span
+                        data-testid="record-note"
+                        title={record.record_note?.trim() || undefined}
+                        style={{
+                          minWidth: 0,
+                          color: "var(--dim)",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          textAlign: "center",
+                        }}
+                      >
+                        {record.record_note?.trim() ? notePreview(record.record_note, 48) : "—"}
+                      </span>
+                      <span style={{ color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {record.racer || "—"}
+                      </span>
+                      <span style={{ color: "var(--dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={record.vehicle}>
+                        {record.vehicle || "—"}
+                      </span>
+                      <span className="tnum" style={{ color: "var(--text)" }}>
+                        {formatDurationShort(record.duration)}
+                      </span>
+                      <span style={{ display: "flex", gap: "6px", justifyContent: "center", alignItems: "center" }}>
+                        <button
+                          aria-label={`Export ${record.file_name}`}
+                          title="导出 CSV"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onExportOne(record.file_hash);
+                          }}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "var(--dim)",
+                            cursor: "pointer",
+                            fontSize: "14px",
+                            padding: "2px 6px",
+                          }}
+                        >
+                          ⬇
+                        </button>
+                        <button
+                          aria-label={`Delete ${record.file_name}`}
+                          title="删除该记录的缓存(原始文件不受影响)"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete(record.file_hash);
+                          }}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "var(--dim2)",
+                            cursor: "pointer",
+                            fontSize: "14px",
+                            padding: "2px 6px",
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    </div>
+                  );
+  };
 
   return (
     <div style={{ display: "flex", width: "100%", height: "100%", flex: 1, minHeight: 0, color: "var(--text)" }}>
@@ -571,144 +728,35 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                   没有匹配的记录
                 </div>
               ) : (
-                visible!.map((record) => {
-                  return (
-                    <div
-                      key={record.file_hash}
-                      data-testid="library-row"
-                      tabIndex={0}
-                      title="双击打开分析"
-                      onDoubleClick={() => onOpen(record.file_hash)}
-                      onKeyDown={(e) => e.key === "Enter" && onOpen(record.file_hash)}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const hash = record.file_hash;
-                        setMenu({
-                          x: e.clientX,
-                          y: e.clientY,
-                          items: [
-                            ...(onUseForOverlay
-                              ? [{ key: "overlay", label: "用于 Overlay", onSelect: () => onUseForOverlay(hash) }]
-                              : []),
-                            { key: "reveal", label: "打开文件目录", onSelect: () => onReveal?.(hash) },
-                            { key: "export", label: "导出此记录", onSelect: () => onExportOne(hash) },
-                            { key: "delete", label: "删除此记录", danger: true, onSelect: () => onDelete(hash) },
-                            {
-                              key: "toggle-select",
-                              label: selected.has(hash) ? "取消勾选" : "勾选",
-                              onSelect: () => onToggleSelect(hash),
-                            },
-                          ],
-                        });
-                      }}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: GRID_COLUMNS,
-                        gap: "0 8px",
-                        alignItems: "center",
-                        textAlign: "center",
-                        margin: "0 16px",
-                        padding: "9px 8px",
-                        borderBottom: "1px solid var(--line)",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                        background: selected.has(record.file_hash) ? "var(--bg2)" : undefined,
-                      }}
-                      className="library-row"
-                    >
-                      <span
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleSelect(record.file_hash);
-                        }}
-                        style={{
-                          width: "14px",
-                          height: "14px",
-                          border: `1.5px solid ${selected.has(record.file_hash) ? "var(--text)" : "var(--dim2)"}`,
-                          flex: "none",
-                          position: "relative",
-                          display: "inline-block",
-                          cursor: "pointer",
-                          justifySelf: "center",
-                        }}
-                        title="勾选以导出"
-                      >
-                        {selected.has(record.file_hash) && (
-                          <span style={{ position: "absolute", inset: "2px", background: "var(--text)" }} />
-                        )}
-                      </span>
-                      <span
-                        className="tnum"
-                        style={{ color: "var(--dim)", whiteSpace: "nowrap" }}
-                        title={`文件时间 ${formatDateTime(record.source_mtime_unix)}`}
-                      >
-                        {record.start_time || "—"}
-                      </span>
-                      <span
-                        data-testid="record-note"
-                        title={record.record_note?.trim() || undefined}
-                        style={{
-                          minWidth: 0,
-                          color: "var(--dim)",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          textAlign: "center",
-                        }}
-                      >
-                        {record.record_note?.trim() ? notePreview(record.record_note, 48) : "—"}
-                      </span>
-                      <span style={{ color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {record.racer || "—"}
-                      </span>
-                      <span style={{ color: "var(--dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={record.vehicle}>
-                        {record.vehicle || "—"}
-                      </span>
-                      <span className="tnum" style={{ color: "var(--text)" }}>
-                        {formatDurationShort(record.duration)}
-                      </span>
-                      <span style={{ display: "flex", gap: "6px", justifyContent: "center", alignItems: "center" }}>
-                        <button
-                          aria-label={`Export ${record.file_name}`}
-                          title="导出 CSV"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onExportOne(record.file_hash);
-                          }}
+                dateSections
+                  ? dateSections.map((group) => (
+                      <section key={group.key}>
+                        <div
                           style={{
-                            background: "transparent",
-                            border: "none",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            margin: "14px 16px 0",
+                            padding: "5px 8px",
+                            background: "var(--bg2)",
+                            borderBottom: "1px solid var(--line)",
                             color: "var(--dim)",
-                            cursor: "pointer",
-                            fontSize: "14px",
-                            padding: "2px 6px",
+                            fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            letterSpacing: "1.2px",
                           }}
                         >
-                          ⬇
-                        </button>
-                        <button
-                          aria-label={`Delete ${record.file_name}`}
-                          title="删除该记录的缓存(原始文件不受影响)"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete(record.file_hash);
-                          }}
-                          style={{
-                            background: "transparent",
-                            border: "none",
-                            color: "var(--dim2)",
-                            cursor: "pointer",
-                            fontSize: "14px",
-                            padding: "2px 6px",
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    </div>
-                  );
-                })
+                          <span style={{ width: "3px", height: "12px", background: "var(--red)" }} />
+                          <span>{group.key === "UNKNOWN DATE" ? "未知日期" : group.key}</span>
+                          <span className="tnum" style={{ marginLeft: "auto", color: "var(--dim2)", fontSize: "10px" }}>
+                            {group.records.length} 条
+                          </span>
+                        </div>
+                        {group.records.map(renderRow)}
+                      </section>
+                    ))
+                  : visible!.map(renderRow)
               )}
             </div>
           </>
