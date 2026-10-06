@@ -197,7 +197,7 @@ function renderRecords(root) {
             : `
         <div class="grid-header">
           <span class="checkbox ${allSelected ? "checked" : state.selected.size > 0 ? "partial" : ""}" id="select-all" title="全选 / 全不选"></span>
-          <span>开始时间</span><span>备注</span><span>车手</span><span>车辆</span><span>时长</span><span>操作</span>
+          <span>开始时间</span><span>车手</span><span>车辆</span><span>时长</span><span>操作</span>
         </div>
         <div style="flex: 1; overflow-y: auto; min-height: 0;">
           ${
@@ -321,13 +321,11 @@ function renderRecordRow(record) {
     <div class="grid-row" data-hash="${esc(record.file_hash)}">
       <span class="checkbox ${checked ? "checked" : ""}" data-check="${esc(record.file_hash)}" title="勾选以批量删除"></span>
       <span class="dim" title="文件时间 ${esc(new Date((record.source_mtime_unix || 0) * 1000).toLocaleString())}">${esc(record.start_time || "—")}</span>
-      <span class="dim" title="云端索引暂无单条备注">—</span>
       <span class="cell" title="${esc(record.racer || "")}">${esc(record.racer || "—")}</span>
       <span class="dim" title="${esc(record.vehicle || "")}">${esc(record.vehicle || "—")}</span>
       <span>${fmtDuration(record.duration)}</span>
       <span class="row-actions">
         <button class="icon-btn" data-action="download" data-hash="${esc(record.file_hash)}" ${record.storage_key ? "" : "disabled"} title="下载原始文件">⬇</button>
-        <button class="icon-btn" data-action="archive" data-hash="${esc(record.file_hash)}" title="${record.is_archived ? "恢复" : "归档"}">${record.is_archived ? "▲" : "▼"}</button>
         <button class="icon-btn danger" data-action="delete" data-hash="${esc(record.file_hash)}" title="删除记录与文件">✕</button>
       </span>
     </div>`;
@@ -342,10 +340,6 @@ async function onRecordAction(event) {
     if (action === "download") {
       window.open(`/api/v1/admin/files/${record.storage_key}?name=${encodeURIComponent(record.file_name)}`);
       return;
-    }
-    if (action === "archive") {
-      await api(`/api/v1/admin/datasets/${hash}`, { method: "PATCH", body: JSON.stringify({ is_archived: !record.is_archived }) });
-      setNotice(record.is_archived ? "已恢复。" : "已归档。", true);
     }
     if (action === "delete") {
       if (!window.confirm(`确认删除 ${record.file_name}？记录与服务器文件会一起删除，不可恢复。`)) return;
