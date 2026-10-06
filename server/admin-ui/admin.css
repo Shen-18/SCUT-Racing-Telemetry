@@ -18,6 +18,7 @@ html, body { overflow-x: auto; }
 .topbar .logo { white-space: nowrap; }
 @media (max-width: 700px) { .topbar .logo { font-size: 11px; letter-spacing: 1px; } }
 .topbar .logo { font-weight: 700; font-size: 14px; letter-spacing: 2px; }
+.topbar .logo-img { height: 22px; width: auto; flex: none; display: block; }
 .topbar .tabs { display: flex; gap: 4px; margin-left: 12px; }
 .topbar button.tab {
   background: transparent; border: none; border-bottom: 3px solid transparent;
