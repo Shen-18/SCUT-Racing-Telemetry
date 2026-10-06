@@ -10,5 +10,6 @@ export function resolveServerConfig(env = process.env) {
     port: positiveInt(env.SCUT_SYNC_PORT, 8787),
     databaseUrl: String(env.SCUT_DATABASE_URL || DEFAULT_DATABASE_URL),
     host: String(env.SCUT_SYNC_HOST || "127.0.0.1"),
+    adminPassword: String(env.SCUT_ADMIN_PASSWORD || ""),
   };
 }
