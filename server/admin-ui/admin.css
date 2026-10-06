@@ -153,3 +153,49 @@ button:disabled { opacity: .5; cursor: default; }
 .rel-asset-row + .rel-asset-row { border-top: 1px solid var(--line); }
 .release-asset { color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--line); }
 .release-asset:hover { color: var(--red); }
+
+/* ===== 新建发布表单（GitHub New release 式） ===== */
+.new-release { max-width: 900px; }
+.nr-divider { height: 1px; background: var(--line); margin: 12px 0 16px; }
+.nr-tag-row { display: flex; }
+.nr-tag-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 8px 12px; font-size: 13px; color: var(--dim);
+}
+.nr-tag-pill input {
+  background: transparent; border: none; outline: none; color: var(--text);
+  font-size: 13px; width: 140px; padding: 0;
+}
+.nr-label { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+.nr-title { width: 100%; max-width: 560px; box-sizing: border-box; }
+.nr-editor { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.nr-editor-tabs { display: flex; gap: 2px; background: var(--bg2); border-bottom: 1px solid var(--line); padding: 4px 6px 0; }
+.nr-tab {
+  background: transparent; border: none; border-radius: 6px 6px 0 0; color: var(--dim);
+  padding: 7px 16px; font: inherit; cursor: pointer;
+}
+.nr-tab.active { background: var(--bg); color: var(--text); }
+.nr-editor textarea {
+  display: block; width: 100%; box-sizing: border-box; min-height: 220px;
+  border: none; outline: none; resize: vertical; background: var(--bg);
+  padding: 12px 14px; font: inherit; color: var(--text);
+}
+.nr-preview { display: none; min-height: 220px; padding: 12px 14px; white-space: pre-wrap; font-size: 13px; line-height: 1.8; background: var(--bg); }
+.nr-editor-foot { padding: 6px 12px; border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; }
+.nr-attach {
+  margin-top: 16px; border: 1px dashed var(--line); border-radius: 6px;
+  padding: 26px 16px; text-align: center; color: var(--dim); font-size: 13px;
+  cursor: pointer;
+}
+.nr-attach.dragging { border-color: var(--red); color: var(--text); }
+.nr-files { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.nr-file {
+  display: inline-flex; align-items: center; gap: 6px; justify-content: center;
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 10px; font-size: 12px;
+}
+.nr-file button { background: transparent; border: none; color: var(--dim); cursor: pointer; }
+.nr-file button:hover { color: var(--red); }
+.nr-actions { display: flex; gap: 10px; margin-top: 16px; }
+.nr-actions .primary { background: var(--ok); border-color: var(--ok); }

@@ -618,16 +618,20 @@ function latestPublishedTag(list) {
 }
 
 function suggestNextTag(list) {
-  // 两位版本号规范（1.0 → 1.1 → 1.2）：取现有最高版本 minor +1
+  // 三段式版本号规范（1.0.1 → 1.0.2）：取现有最高版本 patch +1
   let best = null;
   for (const r of list) {
     const parts = String(r.tag).replace(/^v/i, "").split("-")[0].split(".");
-    if (parts.length !== 2) continue;
-    const v = [Number.parseInt(parts[0], 10) || 0, Number.parseInt(parts[1], 10) || 0];
-    if (!best || v[0] > best[0] || (v[0] === best[0] && v[1] > best[1])) best = v;
+    if (parts.length !== 3) continue;
+    const v = parts.map((n) => Number.parseInt(n, 10) || 0);
+    const gt =
+      !best ||
+      v[0] > best[0] ||
+      (v[0] === best[0] && (v[1] > best[1] || (v[1] === best[1] && v[2] > best[2])));
+    if (gt) best = v;
   }
-  if (!best) return "1.0";
-  return `${best[0]}.${best[1] + 1}`;
+  if (!best) return "1.0.0";
+  return `${best[0]}.${best[1]}.${best[2] + 1}`;
 }
 
 function renderReleases(root) {
@@ -698,7 +702,7 @@ function newReleaseFormHtml() {
       <div class="nr-tag-row">
         <span class="nr-tag-pill">🏷 版本号：<input id="rel-tag" value="${esc(state.relForm.tag)}" placeholder="留空自动递增" /></span>
       </div>
-      <div class="hint" style="margin: 6px 0 18px;">留空则自动取现有最高版本 +1（如 1.0 → 1.1）；两位数字，重复发布会被拒绝。</div>
+      <div class="hint" style="margin: 6px 0 18px;">留空则自动取现有最高版本 +1（如 1.0.1 → 1.0.2）；三段式，重复发布会被拒绝。</div>
 
       <div class="nr-label f1">发布标题</div>
       <input id="rel-title" class="nr-title" value="${esc(state.relForm.title)}" placeholder="标题" />
@@ -827,8 +831,8 @@ async function bindReleaseForm(root) {
       const notes = form.notes;
       const installer = state.relInstaller;
       const sig = state.relSig;
-      if (!/^\d+\.\d+(-[\w.]+)?$/.test(tag)) {
-        setNotice("版本号格式应为两位数字，如 1.0、1.2。");
+      if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(tag)) {
+        setNotice("版本号格式应为三段式，如 1.2.0。");
         renderShell(); renderTab();
         return;
       }
