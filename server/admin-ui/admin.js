@@ -491,6 +491,32 @@ function renderSettings(root) {
   );
 }
 
+async function onUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  setNotice(`正在上传并解析 ${file.name} …`, true);
+  renderShell();
+  renderTab();
+  try {
+    const res = await fetch("/api/v1/admin/uploads", {
+      method: "POST",
+      headers: { "x-file-name": encodeURIComponent(file.name), "content-type": "application/octet-stream" },
+      body: file,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      state.loggedIn = false;
+      render();
+      return;
+    }
+    if (!res.ok) throw new Error(body?.error?.message || `上传失败 HTTP ${res.status}`);
+    setNotice(body.duplicate ? `${file.name} 已存在（按内容去重，未重复登记）。` : `${file.name} 上传成功，已生成记录。`, true);
+  } catch (error) {
+    setNotice(`上传失败：${error.message}`);
+  }
+  await reload();
+}
+
 // ===== 数据加载 =====
 
 async function reload() {
