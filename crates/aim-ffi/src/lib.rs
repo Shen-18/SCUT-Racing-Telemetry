@@ -104,7 +104,14 @@ impl AimDll {
                 path.display()
             )));
         }
-        let dep = path.parent().and_then(Path::parent).map(|p| p.join("64"));
+        // 依赖目录两套布局都认：开发树 = <DLL 的上一级>/64/；安装树 = 依赖与 DLL 同目录
+        let dep = path.parent().and_then(|dir| {
+            let legacy = dir.parent().map(|p| p.join("64"));
+            match legacy {
+                Some(dir) if dir.is_dir() => Some(dir),
+                _ => Some(dir.to_path_buf()),
+            }
+        });
         if let Some(dep) = dep {
             set_dll_directory(&dep)?;
         }

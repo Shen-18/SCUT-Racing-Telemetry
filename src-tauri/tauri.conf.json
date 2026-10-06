@@ -31,11 +31,11 @@
       "../Data/SCUTRacing.ico"
     ],
     "resources": {
-      "../TestMatLabXRK/DLL-2022/MatLabXRK-2022-64-ReleaseU.dll": "MatLabXRK-2022-64-ReleaseU.dll",
-      "../TestMatLabXRK/64/libiconv-2.dll": "libiconv-2.dll",
-      "../TestMatLabXRK/64/libxml2-2.dll": "libxml2-2.dll",
-      "../TestMatLabXRK/64/libz.dll": "libz.dll",
-      "../TestMatLabXRK/64/pthreadVC2_x64.dll": "pthreadVC2_x64.dll"
+      "../TestMatLabXRK/DLL-2022/MatLabXRK-2022-64-ReleaseU.dll": "aim/MatLabXRK-2022-64-ReleaseU.dll",
+      "../TestMatLabXRK/64/libiconv-2.dll": "aim/libiconv-2.dll",
+      "../TestMatLabXRK/64/libxml2-2.dll": "aim/libxml2-2.dll",
+      "../TestMatLabXRK/64/libz.dll": "aim/libz.dll",
+      "../TestMatLabXRK/64/pthreadVC2_x64.dll": "aim/pthreadVC2_x64.dll"
     },
     "windows": {
       "webviewInstallMode": {
@@ -49,7 +49,8 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVERUJDRjRBMUNCNEE2MkMKUldRc3ByUWNTcy9yN2ZMQjdyNHFWKzRYSzBvUUt2YXRXcXRmcTlGMHVPWEZpM1lKd1o2MVNjbHYK",
       "endpoints": [
         "http://8.134.196.199:8787/api/v1/updates/latest"
-      ]
+      ],
+      "dangerousInsecureTransportProtocol": true
     }
   }
 }
