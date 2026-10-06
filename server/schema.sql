@@ -48,3 +48,17 @@ CREATE TABLE IF NOT EXISTS admin_accounts (
 );
 
 ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS account_id INTEGER;
+
+CREATE TABLE IF NOT EXISTS releases (
+  id SERIAL PRIMARY KEY,
+  tag TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  installer_key TEXT,
+  installer_name TEXT NOT NULL DEFAULT '',
+  installer_hash TEXT,
+  signature TEXT NOT NULL DEFAULT '',
+  draft BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at BIGINT NOT NULL,
+  published_at BIGINT
+);

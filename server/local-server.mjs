@@ -481,6 +481,153 @@ async function createApp(db, deps = {}) {
         return;
       }
 
+      // ===== 软件发布（releases）=====
+      if (url.pathname === "/api/v1/admin/releases" && request.method === "GET") {
+        if (!(await guardAdmin())) return;
+        sendJson(response, 200, { releases: await db.listReleases() });
+        return;
+      }
+
+      if (url.pathname === "/api/v1/admin/releases" && request.method === "POST") {
+        if (!(await guardAdmin())) return;
+        const body = await readBody(request);
+        const tag = String(body.tag ?? "").trim();
+        if (!/^v?\d+\.\d+\.\d+(-[\w.]+)?$/i.test(tag)) {
+          sendError(response, 400, "invalid_tag", "版本号格式应为 1.2.3（可带 v 前缀与 -后缀）");
+          return;
+        }
+        const normalizedTag = tag.replace(/^v/i, "");
+        if (await db.getReleaseByTag(normalizedTag)) {
+          sendError(response, 409, "tag_taken", `版本 ${normalizedTag} 已存在`);
+          return;
+        }
+        const release = await db.createRelease({
+          tag: normalizedTag,
+          title: String(body.title ?? "").trim(),
+          notes: String(body.notes ?? ""),
+          draft: body.draft !== false,
+        });
+        sendJson(response, 201, { release });
+        return;
+      }
+
+      // 上传安装包（.exe 原始字节流，复用内容寻址存储）
+      const releaseInstaller = url.pathname.match(/^\/api\/v1\/admin\/releases\/(\d+)\/installer$/);
+      if (releaseInstaller && request.method === "PUT") {
+        if (!(await guardAdmin())) return;
+        const release = await db.getRelease(Number(releaseInstaller[1]));
+        if (!release) {
+          sendError(response, 404, "release_not_found", "找不到该发布记录");
+          return;
+        }
+        const uploadName = safeUploadName(request.headers["x-file-name"]);
+        if (!uploadName.toLowerCase().endsWith(".exe")) {
+          sendError(response, 415, "unsupported_type", "安装包必须是 .exe 文件");
+          return;
+        }
+        const upload = await saveUpload(request, uploadRoot);
+        await db.setReleaseInstaller(release.id, {
+          installerKey: upload.storage_key,
+          installerName: upload.file_name,
+          installerHash: upload.file_hash,
+        });
+        sendJson(response, 201, { ok: true, installer_hash: upload.file_hash, file_size: upload.file_size });
+        return;
+      }
+
+      // 上传签名（.sig 文本内容）
+      const releaseSignature = url.pathname.match(/^\/api\/v1\/admin\/releases\/(\d+)\/signature$/);
+      if (releaseSignature && request.method === "PUT") {
+        if (!(await guardAdmin())) return;
+        const release = await db.getRelease(Number(releaseSignature[1]));
+        if (!release) {
+          sendError(response, 404, "release_not_found", "找不到该发布记录");
+          return;
+        }
+        const signature = (await readBody(request)).signature ?? "";
+        const text = String(signature).trim();
+        if (text.length < 32 || !/^[\w+/=\s.-]+$/.test(text)) {
+          sendError(response, 400, "invalid_signature", "签名内容不是合法的 .sig 文本");
+          return;
+        }
+        await db.setReleaseSignature(release.id, text);
+        sendJson(response, 200, { ok: true });
+        return;
+      }
+
+      const patchRelease = url.pathname.match(/^\/api\/v1\/admin\/releases\/(\d+)$/);
+      if (patchRelease && request.method === "PATCH") {
+        if (!(await guardAdmin())) return;
+        const release = await db.getRelease(Number(patchRelease[1]));
+        if (!release) {
+          sendError(response, 404, "release_not_found", "找不到该发布记录");
+          return;
+        }
+        const body = await readBody(request);
+        // 发布前置校验：安装包和签名必须齐备
+        if (body.draft === false && (!release.installer_hash || !release.signature)) {
+          sendError(response, 400, "release_incomplete", "发布前必须上传安装包和签名文件");
+          return;
+        }
+        const updated = await db.updateRelease(release.id, {
+          title: body.title !== undefined ? String(body.title).trim() : undefined,
+          notes: body.notes !== undefined ? String(body.notes) : undefined,
+          draft: body.draft !== undefined ? Boolean(body.draft) : undefined,
+        });
+        sendJson(response, 200, { release: updated });
+        return;
+      }
+
+      const deleteReleaseRoute = url.pathname.match(/^\/api\/v1\/admin\/releases\/(\d+)$/);
+      if (deleteReleaseRoute && request.method === "DELETE") {
+        if (!(await guardAdmin())) return;
+        const removed = await db.deleteRelease(Number(deleteReleaseRoute[1]));
+        if (!removed) {
+          sendError(response, 404, "release_not_found", "找不到该发布记录");
+          return;
+        }
+        // 安装包是内容寻址存储，删除记录后文件留存在 uploads（同名重传会复用），不阻塞
+        sendJson(response, 200, { ok: true });
+        return;
+      }
+
+      // ===== 队员端更新检查（公开：版本号与签名不敏感，包本身有签名防篡改）=====
+      if (url.pathname === "/api/v1/updates/latest" && request.method === "GET") {
+        const release = await db.latestPublishedRelease();
+        if (!release) {
+          sendError(response, 404, "no_release", "暂无可用更新");
+          return;
+        }
+        sendJson(response, 200, {
+          version: release.tag,
+          notes: release.notes || release.title,
+          pub_date: new Date((release.published_at || 0) * 1000).toISOString(),
+          platforms: {
+            "windows-x86_64": {
+              signature: release.signature,
+              url: `${url.origin}/api/v1/updates/files/${release.installer_hash}`,
+            },
+          },
+        });
+        return;
+      }
+
+      // 更新包公开下载（hash 不可猜；内容签名防篡改）
+      const updateFile = url.pathname.match(/^\/api\/v1\/updates\/files\/([0-9a-f]{64})$/);
+      if (updateFile && request.method === "GET") {
+        const release = await db.getReleaseByInstallerHash(updateFile[1]);
+        if (!release || !release.installer_key) {
+          sendError(response, 404, "file_not_found", "安装包不存在");
+          return;
+        }
+        await sendFile(
+          response,
+          resolve(uploadRoot || uploadRootDir(), release.installer_key),
+          release.installer_name || release.installer_key,
+        );
+        return;
+      }
+
       sendError(response, 404, "not_found", "接口不存在");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

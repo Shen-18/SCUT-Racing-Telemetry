@@ -9,6 +9,7 @@ let state = {
   tokens: [],
   adminAccounts: [],
   currentAdminId: null,
+  releases: [],
   notice: null,
   // 记录页状态（对齐本地 DATABASE 页）
   selectedGroup: null,
@@ -425,6 +426,18 @@ function renderSettings(root) {
         )
         .join("")}
       <div class="hint" style="margin-top: 8px;">每位管理员都能登录本面板；删除账号会立即吊销其所有登录会话。</div>
+    </div>
+    <div class="card">
+      <h3 class="f1">软件发布</h3>
+      <div class="kv"><label>版本号</label><input id="rel-tag" placeholder="例如 1.0.1" /><label style="width: 50px;">标题</label><input id="rel-title" placeholder="一句话说明（可选）" /></div>
+      <div class="kv"><label>更新说明</label><textarea id="rel-notes" style="min-height: 48px;" placeholder="弹窗里展示给队员看的内容"></textarea></div>
+      <div class="kv"><label>安装包 .exe</label><input type="file" id="rel-installer" accept=".exe" style="flex: 1;" /><span id="rel-installer-hint" class="hint"></span></div>
+      <div class="kv"><label>签名 .sig</label><input type="file" id="rel-sig" accept=".sig" style="flex: 1;" /><span id="rel-sig-hint" class="hint"></span></div>
+      <div style="display: flex; gap: 8px; justify-content: flex-end;">
+        <button class="line" id="rel-save-draft">保存草稿</button>
+        <button class="primary" id="rel-publish">发布</button>
+      </div>
+      ${state.releases.length === 0 ? "" : `<div style="margin-top: 12px;">${state.releases.map(renderReleaseRow).join("")}</div>`}
     </div>`;
 
   root.querySelectorAll("[data-copy]").forEach((button) =>
@@ -508,6 +521,7 @@ function renderSettings(root) {
       await reload();
     }),
   );
+  bindReleaseForm(root);
 }
 
 async function onUpload(event) {
@@ -544,17 +558,19 @@ async function reload() {
     return;
   }
   try {
-    const [datasetsBody, notesBody, tokensBody, accountsBody] = await Promise.all([
+    const [datasetsBody, notesBody, tokensBody, accountsBody, releasesBody] = await Promise.all([
       api("/api/v1/datasets?include_archived=true"),
       api("/api/v1/date-notes"),
       api("/api/v1/admin/tokens"),
       api("/api/v1/admin/accounts"),
+      api("/api/v1/admin/releases"),
     ]);
     state.records = datasetsBody.datasets || [];
     state.notes = new Map((notesBody.date_notes || []).map((item) => [item.date_key, item.note]));
     state.tokens = tokensBody.tokens || [];
     state.adminAccounts = accountsBody.accounts || [];
     state.currentAdminId = accountsBody.current;
+    state.releases = releasesBody.releases || [];
     setNotice(null);
   } catch (error) {
     setNotice(`加载失败：${error.message}`);
@@ -578,4 +594,125 @@ async function restoreSession() {
     // 网络异常时留在登录视图
   }
   render();
+}
+
+
+function renderReleaseRow(release) {
+  const status = release.draft
+    ? '<span class="badge">草稿</span>'
+    : '<span class="badge status-ok">已发布</span>';
+  const asset = release.installer_hash
+    ? `${esc(release.installer_name)}${release.signature ? " + 签名" : "（缺签名）"}`
+    : "（未上传安装包）";
+  const date = new Date((release.published_at || release.created_at || 0) * 1000).toLocaleDateString();
+  return `
+    <div class="row" data-release="${release.id}">
+      <div class="meta">
+        <div class="name">v${esc(release.tag)} ${status}</div>
+        <div class="sub">${esc(release.title || "")} · ${esc(asset)} · ${esc(date)}</div>
+      </div>
+      ${release.draft
+        ? `<button class="line" data-rel-publish="${release.id}">发布</button>`
+        : `<button class="line" data-rel-unpublish="${release.id}">撤下</button>`}
+      <button class="line" data-rel-delete="${release.id}">删除</button>
+    </div>`;
+}
+
+async function bindReleaseForm(root) {
+  const installerInput = document.getElementById("rel-installer");
+  const sigInput = document.getElementById("rel-sig");
+  if (!installerInput) return;
+  installerInput.addEventListener("change", () => {
+    const f = installerInput.files[0];
+    document.getElementById("rel-installer-hint").textContent = f ? `${f.name}（${(f.size / 1024 / 1024).toFixed(1)} MB）` : "";
+  });
+  sigInput.addEventListener("change", () => {
+    const f = sigInput.files[0];
+    document.getElementById("rel-sig-hint").textContent = f ? f.name : "";
+  });
+
+  const submitRelease = async (publish) => {
+    const tag = document.getElementById("rel-tag").value.trim();
+    const title = document.getElementById("rel-title").value.trim();
+    const notes = document.getElementById("rel-notes").value;
+    const installer = installerInput.files[0];
+    const sig = sigInput.files[0];
+    if (!/^v?\d+\.\d+\.\d+(-[\w.]+)?$/i.test(tag)) {
+      setNotice("版本号格式应为 1.2.3。");
+      renderShell(); renderTab();
+      return;
+    }
+    if (publish && (!installer || !sig)) {
+      setNotice("发布前必须选择安装包 .exe 和签名 .sig 文件。");
+      renderShell(); renderTab();
+      return;
+    }
+    setNotice(`正在${publish ? "发布" : "保存"} v${tag} …`, true);
+    renderShell(); renderTab();
+    try {
+      const created = await api("/api/v1/admin/releases", {
+        method: "POST",
+        body: JSON.stringify({ tag, title, notes, draft: true }),
+      });
+      const id = created.release.id;
+      if (installer) {
+        const res = await fetch(`/api/v1/admin/releases/${id}/installer`, {
+          method: "PUT",
+          headers: { "x-file-name": encodeURIComponent(installer.name), "content-type": "application/octet-stream" },
+          body: installer,
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error?.message || "安装包上传失败");
+      }
+      if (sig) {
+        const sigText = await sig.text();
+        await api(`/api/v1/admin/releases/${id}/signature`, { method: "PUT", body: JSON.stringify({ signature: sigText }) });
+      }
+      if (publish) {
+        await api(`/api/v1/admin/releases/${id}`, { method: "PATCH", body: JSON.stringify({ draft: false }) });
+        setNotice(`v${tag} 已发布，队员端下次检查更新即可收到。`, true);
+      } else {
+        setNotice(`v${tag} 已保存为草稿。`, true);
+      }
+    } catch (error) {
+      setNotice(`发布失败：${error.message}`);
+    }
+    await reload();
+  };
+  document.getElementById("rel-save-draft").addEventListener("click", () => submitRelease(false));
+  document.getElementById("rel-publish").addEventListener("click", () => submitRelease(true));
+
+  root.querySelectorAll("[data-rel-publish]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      try {
+        await api(`/api/v1/admin/releases/${b.dataset.relPublish}`, { method: "PATCH", body: JSON.stringify({ draft: false }) });
+        setNotice("已发布。", true);
+      } catch (error) {
+        setNotice(`发布失败：${error.message}`);
+      }
+      await reload();
+    }),
+  );
+  root.querySelectorAll("[data-rel-unpublish]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      try {
+        await api(`/api/v1/admin/releases/${b.dataset.relUnpublish}`, { method: "PATCH", body: JSON.stringify({ draft: true }) });
+        setNotice("已撤下为草稿。", true);
+      } catch (error) {
+        setNotice(`撤下失败：${error.message}`);
+      }
+      await reload();
+    }),
+  );
+  root.querySelectorAll("[data-rel-delete]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!window.confirm("删除该发布记录？（已下载到队员电脑的软件不受影响）")) return;
+      try {
+        await api(`/api/v1/admin/releases/${b.dataset.relDelete}`, { method: "DELETE" });
+        setNotice("已删除。", true);
+      } catch (error) {
+        setNotice(`删除失败：${error.message}`);
+      }
+      await reload();
+    }),
+  );
 }

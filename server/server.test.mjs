@@ -94,6 +94,7 @@ function makeFakeDb() {
   const tokens = new Map();
   const datasets = new Map();
   const accounts = new Map();
+  const releases = [];
   let idSeq = 1;
   return {
     sessions,
@@ -217,6 +218,64 @@ function makeFakeDb() {
       if (!row) return null;
       datasets.delete(hash);
       return { ...row };
+    },
+    async createRelease({ tag, title, notes, draft }) {
+      const row = { id: idSeq++, tag, title, notes, installer_key: null, installer_name: "", installer_hash: null, signature: "", draft: Boolean(draft), created_at: 0, published_at: draft ? null : 0 };
+      releases.push(row);
+      return { ...row };
+    },
+    async listReleases() {
+      return releases.map((r) => ({ ...r }));
+    },
+    async getRelease(id) {
+      return releases.find((r) => r.id === id) ?? null;
+    },
+    async getReleaseByTag(tag) {
+      return releases.find((r) => r.tag === tag) ?? null;
+    },
+    async getReleaseByInstallerHash(hash) {
+      return releases.find((r) => r.installer_hash === hash) ?? null;
+    },
+    async updateRelease(id, { title, notes, draft }) {
+      const row = releases.find((r) => r.id === id);
+      if (!row) return null;
+      if (title !== undefined) row.title = title;
+      if (notes !== undefined) row.notes = notes;
+      if (draft !== undefined) {
+        row.draft = draft;
+        row.published_at = draft ? null : 0;
+      }
+      return { ...row };
+    },
+    async setReleaseInstaller(id, { installerKey, installerName, installerHash }) {
+      const row = releases.find((r) => r.id === id);
+      if (!row) return null;
+      row.installer_key = installerKey;
+      row.installer_name = installerName;
+      row.installer_hash = installerHash;
+      return { id };
+    },
+    async setReleaseSignature(id, signature) {
+      const row = releases.find((r) => r.id === id);
+      if (!row) return null;
+      row.signature = signature;
+      return { id };
+    },
+    async deleteRelease(id) {
+      const i = releases.findIndex((r) => r.id === id);
+      if (i < 0) return null;
+      return releases.splice(i, 1)[0];
+    },
+    async latestPublishedRelease() {
+      const ok = releases.filter((r) => !r.draft && r.installer_hash && r.signature);
+      if (ok.length === 0) return null;
+      ok.sort((a, b) => {
+        const pa = a.tag.split(".").map(Number);
+        const pb = b.tag.split(".").map(Number);
+        for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pb[i] - pa[i];
+        return b.published_at - a.published_at;
+      });
+      return ok[0];
     },
   };
 }
@@ -576,6 +635,130 @@ test("session check endpoint validates existing cookies without re-login", async
     const body = await res.json();
     assert.equal(body.ok, true);
     assert.equal(body.username, "admin");
+  } finally {
+    srv.close();
+  }
+});
+
+// ===== 软件发布（releases）与更新检查 =====
+
+const SIG = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZQ==" + "x".repeat(64);
+
+async function publishFullRelease(port, cookie, tag, uploadRoot, { draft = false } = {}) {
+  const created = await req(port, "/api/v1/admin/releases", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify({ tag, title: `rel ${tag}`, notes: "修复若干问题", draft: true }),
+  });
+  const id = (await created.json()).release.id;
+  await req(port, `/api/v1/admin/releases/${id}/installer`, {
+    method: "PUT",
+    headers: { cookie, "x-file-name": `setup-${tag}.exe` },
+    body: Buffer.from(`installer-${tag}`),
+  });
+  await req(port, `/api/v1/admin/releases/${id}/signature`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify({ signature: SIG }),
+  });
+  if (!draft) {
+    const pub = await req(port, `/api/v1/admin/releases/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ draft: false }),
+    });
+    assert.equal(pub.status, 200);
+  }
+  return id;
+}
+
+test("release publish flow: create, attach assets, publish, latest.json shape", async () => {
+  const srv = await startServer({
+    adminPassword: "secret",
+    uploadRoot: fs.mkdtempSync(path.join(os.tmpdir(), "scut-rel-")),
+    runExtractor: okExtractor,
+  });
+  try {
+    const cookie = (await login(srv.port, "secret")).headers.get("set-cookie").split(";")[0];
+
+    // 无发布时 latest 404
+    assert.equal((await req(srv.port, "/api/v1/updates/latest")).status, 404);
+
+    // tag 格式校验
+    assert.equal(
+      (
+        await req(srv.port, "/api/v1/admin/releases", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie },
+          body: JSON.stringify({ tag: "not-a-version" }),
+        })
+      ).status,
+      400,
+    );
+    // 重复 tag 409
+    await publishFullRelease(srv.port, cookie, "1.0.1", srv.uploadRoot, { draft: true });
+    assert.equal(
+      (
+        await req(srv.port, "/api/v1/admin/releases", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie },
+          body: JSON.stringify({ tag: "v1.0.1" }),
+        })
+      ).status,
+      409,
+    );
+
+    // 未带资产的草稿不能发布
+    const bare = await req(srv.port, "/api/v1/admin/releases", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ tag: "1.0.2" }),
+    });
+    const bareId = (await bare.json()).release.id;
+    assert.equal(
+      (await req(srv.port, `/api/v1/admin/releases/${bareId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ draft: false }),
+      })).status,
+      400,
+    );
+
+    // 把之前的 1.0.1 草稿发布；再完整发布 1.0.3 → latest 应取 1.0.3
+    const draftList = await (await req(srv.port, "/api/v1/admin/releases", { headers: { cookie } })).json();
+    const draft101 = draftList.releases.find((r) => r.tag === "1.0.1");
+    await req(srv.port, `/api/v1/admin/releases/${draft101.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ draft: false }),
+    });
+    await publishFullRelease(srv.port, cookie, "1.0.3", srv.uploadRoot);
+
+    const latest = await req(srv.port, "/api/v1/updates/latest");
+    assert.equal(latest.status, 200);
+    const body = await latest.json();
+    assert.equal(body.version, "1.0.3");
+    assert.match(body.notes, /修复若干问题/);
+    const platform = body.platforms["windows-x86_64"];
+    assert.match(platform.signature, /^dW50cnVzdGVk/);
+    assert.match(platform.url, /\/api\/v1\/updates\/files\/[0-9a-f]{64}$/);
+
+    // 公开下载安装包且内容正确
+    const hash = platform.url.split("/").pop();
+    const dl = await req(srv.port, `/api/v1/updates/files/${hash}`);
+    assert.equal(dl.status, 200);
+    assert.equal(await dl.text(), "installer-1.0.3");
+
+    // 撤下 1.0.2 → latest 回退到 1.0.1
+    const rel = await (await req(srv.port, "/api/v1/admin/releases", { headers: { cookie } })).json();
+    const rel2 = rel.releases.find((r) => r.tag === "1.0.3");
+    await req(srv.port, `/api/v1/admin/releases/${rel2.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ draft: true }),
+    });
+    const latest2 = await (await req(srv.port, "/api/v1/updates/latest")).json();
+    assert.equal(latest2.version, "1.0.1"); // 撤下 1.0.3 后回退到已发布的 1.0.1
   } finally {
     srv.close();
   }

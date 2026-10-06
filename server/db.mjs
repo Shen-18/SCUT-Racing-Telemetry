@@ -192,6 +192,105 @@ export async function createDatabase(databaseUrl) {
       );
       return result.rows[0] ?? null;
     },
+    async createRelease({ tag, title, notes, draft }) {
+      const now = Math.floor(Date.now() / 1000);
+      const result = await pool.query(
+        `INSERT INTO releases(tag, title, notes, draft, created_at, published_at)
+         VALUES ($1, $2, $3, $4, $5, CASE WHEN $4 THEN NULL ELSE $5 END)
+         RETURNING id, tag, title, notes, installer_key, installer_name, installer_hash, signature, draft, created_at, published_at`,
+        [tag, title, notes, Boolean(draft), now],
+      );
+      return result.rows[0];
+    },
+    async listReleases() {
+      const result = await pool.query(
+        "SELECT id, tag, title, notes, installer_key, installer_name, installer_hash, signature, draft, created_at, published_at FROM releases ORDER BY created_at DESC",
+      );
+      return result.rows;
+    },
+    async getRelease(id) {
+      const result = await pool.query(
+        "SELECT id, tag, title, notes, installer_key, installer_name, installer_hash, signature, draft, created_at, published_at FROM releases WHERE id = $1",
+        [id],
+      );
+      return result.rows[0] ?? null;
+    },
+    async getReleaseByTag(tag) {
+      const result = await pool.query(
+        "SELECT id, tag FROM releases WHERE tag = $1",
+        [tag],
+      );
+      return result.rows[0] ?? null;
+    },
+    async getReleaseByInstallerHash(hash) {
+      const result = await pool.query(
+        "SELECT id, tag, installer_key, installer_name, installer_hash FROM releases WHERE installer_hash = $1",
+        [hash],
+      );
+      return result.rows[0] ?? null;
+    },
+    async updateRelease(id, { title, notes, draft }) {
+      const sets = [];
+      const params = [id];
+      if (title !== undefined) {
+        params.push(title);
+        sets.push(`title = $${params.length}`);
+      }
+      if (notes !== undefined) {
+        params.push(notes);
+        sets.push(`notes = $${params.length}`);
+      }
+      if (draft !== undefined) {
+        params.push(Boolean(draft));
+        sets.push(`draft = $${params.length}`);
+        params.push(draft ? null : Math.floor(Date.now() / 1000));
+        sets.push(`published_at = $${params.length}`);
+      }
+      if (sets.length === 0) return this.getRelease(id);
+      const result = await pool.query(
+        `UPDATE releases SET ${sets.join(", ")} WHERE id = $1
+         RETURNING id, tag, title, notes, installer_key, installer_name, installer_hash, signature, draft, created_at, published_at`,
+        params,
+      );
+      return result.rows[0] ?? null;
+    },
+    async setReleaseInstaller(id, { installerKey, installerName, installerHash }) {
+      const result = await pool.query(
+        "UPDATE releases SET installer_key = $2, installer_name = $3, installer_hash = $4 WHERE id = $1 RETURNING id",
+        [id, installerKey, installerName, installerHash],
+      );
+      return result.rows[0] ?? null;
+    },
+    async setReleaseSignature(id, signature) {
+      const result = await pool.query("UPDATE releases SET signature = $2 WHERE id = $1 RETURNING id", [id, signature]);
+      return result.rows[0] ?? null;
+    },
+    async deleteRelease(id) {
+      const result = await pool.query("DELETE FROM releases WHERE id = $1 RETURNING id, installer_key", [id]);
+      return result.rows[0] ?? null;
+    },
+    async latestPublishedRelease() {
+      const result = await pool.query(
+        "SELECT id, tag, title, notes, installer_hash, installer_name, signature, published_at FROM releases WHERE draft = FALSE AND installer_hash IS NOT NULL AND signature <> ''",
+      );
+      const semver = (tag) =>
+        String(tag)
+          .replace(/^v/i, "")
+          .split("-")[0]
+          .split(".")
+          .map((n) => Number.parseInt(n, 10) || 0);
+      const candidates = result.rows.filter((row) => semver(row.tag).length === 3);
+      if (candidates.length === 0) return null;
+      candidates.sort((a, b) => {
+        const va = semver(a.tag);
+        const vb = semver(b.tag);
+        for (let i = 0; i < 3; i++) {
+          if (va[i] !== vb[i]) return vb[i] - va[i];
+        }
+        return b.published_at - a.published_at;
+      });
+      return candidates[0];
+    },
     async createClientToken({ name, token }) {
       const now = Math.floor(Date.now() / 1000);
       const result = await pool.query(
