@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import * as client from "../api/client";
-import { listRemoteDateNotes, normalizeRemoteBaseUrl, syncDatasetIndex } from "../api/remote";
+import { listRemoteDateNotes, normalizeRemoteBaseUrl } from "../api/remote";
 import type { RecordSummary } from "../api/client";
 import { LEFT_WIDTH_RANGE, useAppStore } from "../state/appStore";
 import { ColumnSplitter } from "./ColumnSplitter";
@@ -128,8 +128,6 @@ export interface LibraryHomeViewProps {
   onDelete(fileHash: string): void;
   onRetry(): void;
   onPickFiles(): void;
-  onSyncIndex?(): void;
-  syncingIndex?: boolean;
   onToggleSelect(fileHash: string): void;
   onToggleSelectAll?(hashes: string[], select: boolean): void;
   onDeleteSelected?(): void;
@@ -155,8 +153,6 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
   onDelete,
   onRetry,
   onPickFiles,
-  onSyncIndex,
-  syncingIndex,
   onToggleSelect,
   onToggleSelectAll,
   onDeleteSelected,
@@ -461,29 +457,6 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
               </button>
             </span>
           )}
-          {onSyncIndex && (
-            <button
-              data-testid="sync-index"
-              onClick={onSyncIndex}
-              className="ghost-button"
-              disabled={syncingIndex}
-              style={{
-                background: "transparent",
-                border: "1px solid var(--line)",
-                color: syncingIndex ? "var(--dim2)" : "var(--text)",
-                fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
-                fontWeight: 700,
-                fontSize: "11px",
-                letterSpacing: "1px",
-                padding: "5px 12px",
-                cursor: syncingIndex ? "default" : "pointer",
-                whiteSpace: "nowrap",
-              }}
-              title="把本地记录索引同步到云端服务器"
-            >
-              {syncingIndex ? "同步中…" : "同步索引"}
-            </button>
-          )}
           <button
             data-testid="pick-files"
             onClick={onPickFiles}
@@ -761,40 +734,6 @@ export const LibraryView: React.FC = () => {
   const [notice, setNotice] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [syncingIndex, setSyncingIndex] = useState(false);
-  const lastSyncedCountRef = useRef(0);
-
-  // 全量索引推云端（file_hash 幂等）；未配置云端地址时返回空串
-  const runCloudSync = useCallback(async (): Promise<string> => {
-    const baseUrl = normalizeRemoteBaseUrl(localStorage.getItem("scut.remote-server-url") || "");
-    if (!baseUrl) return "";
-    const list = await client.listRecords("");
-    const result = await syncDatasetIndex(baseUrl, list);
-    lastSyncedCountRef.current = result.synced;
-    return result.skipped > 0
-      ? `已同步 ${result.synced} 条记录索引到云端（跳过 ${result.skipped} 条日期无法解析的记录）`
-      : `已同步 ${result.synced} 条记录索引到云端`;
-  }, []);
-
-  // 记录列表出现变化（导入完成、首次加载）时自动同步一次；失败只提示，不影响本地使用
-  useEffect(() => {
-    if (records === null || records.length === 0 || records.length === lastSyncedCountRef.current) return;
-    if (!normalizeRemoteBaseUrl(localStorage.getItem("scut.remote-server-url") || "")) return;
-    setSyncingIndex(true);
-    runCloudSync()
-      .then((message) => setNotice(message))
-      .catch((err: unknown) => setNotice(`云端同步失败：${err instanceof Error ? err.message : String(err)}`))
-      .finally(() => setSyncingIndex(false));
-  }, [records, runCloudSync]);
-
-  const handleSyncIndex = useCallback(() => {
-    setSyncingIndex(true);
-    runCloudSync()
-      .then((message) => setNotice(message || "未配置云端服务器地址（设置 → 云端服务器）"))
-      .catch((err: unknown) => setNotice(`云端同步失败：${err instanceof Error ? err.message : String(err)}`))
-      .finally(() => setSyncingIndex(false));
-  }, [runCloudSync]);
-
   // 导入未完成时轮询记录列表，让新记录自动出现
   useEffect(() => {
     if (!importing) return;
@@ -1057,8 +996,6 @@ export const LibraryView: React.FC = () => {
         onDeleteDay={handleDeleteDay}
         onRetry={() => setReloadTick((t) => t + 1)}
         onPickFiles={() => void handlePickFiles()}
-        onSyncIndex={handleSyncIndex}
-        syncingIndex={syncingIndex}
         onToggleSelect={(hash) =>
           setSelected((prev) => {
             const next = new Set(prev);
