@@ -194,11 +194,13 @@ export async function createDatabase(databaseUrl) {
     },
     async createRelease({ tag, title, notes, draft }) {
       const now = Math.floor(Date.now() / 1000);
+      // published_at 在 JS 里算好再传：SQL 内 CASE 推断参数类型会报 inconsistent types
+      const isDraft = Boolean(draft);
       const result = await pool.query(
         `INSERT INTO releases(tag, title, notes, draft, created_at, published_at)
-         VALUES ($1, $2, $3, $4, $5, CASE WHEN $4 THEN NULL ELSE $5 END)
+         VALUES ($1, $2, $3, $4::boolean, $5::bigint, $6::bigint)
          RETURNING id, tag, title, notes, installer_key, installer_name, installer_hash, signature, draft, created_at, published_at`,
-        [tag, title, notes, Boolean(draft), now],
+        [tag, title, notes, isDraft, now, isDraft ? null : now],
       );
       return result.rows[0];
     },
