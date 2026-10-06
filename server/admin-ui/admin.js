@@ -16,6 +16,8 @@ let state = {
   query: "",
   selected: new Set(),
   editingDate: null,
+  selectedReleaseId: null,
+  releaseMode: "view",
 };
 
 async function api(path, options = {}) {
@@ -105,7 +107,7 @@ function renderShell() {
       <span class="spacer"></span>
       <button class="ghost" id="logout">登出</button>
     </div>
-    <div class="wrap${state.tab === "records" ? " wrap-full" : ""}">
+    <div class="wrap${state.tab === "records" || state.tab === "releases" ? " wrap-full" : ""}">
       ${state.notice ? `<div class="banner ${state.notice.ok ? "ok" : ""}">${esc(state.notice.text)}</div>` : ""}
       <div id="tab-content"></div>
     </div>`;
@@ -593,69 +595,105 @@ function renderKeys(root) {
   });
 }
 
-// ===== 软件发布页（GitHub Releases 式：左侧发布列表 + 右侧发布表单） =====
+// ===== 软件发布页（GitHub Releases 式：左列表 + 右详情/表单） =====
 
-function renderReleases(root) {
-  root.innerHTML = `
-    <div class="release-page">
-      <div class="release-main">
-        <h3 class="f1" style="margin: 4px 0 12px;">全部发布（${state.releases.length}）</h3>
-        ${state.releases.length === 0 ? '<div class="card hint">还没有发布记录。在右侧创建第一个版本。</div>' : state.releases.map(renderReleaseCard).join("")}
-      </div>
-      <aside class="release-side">
-        <div class="card">
-          <h3 class="f1">新建发布</h3>
-          <div class="kv"><label>版本号</label><input id="rel-tag" placeholder="例如 1.0.1" /></div>
-          <div class="kv"><label>标题</label><input id="rel-title" placeholder="一句话说明（可选）" /></div>
-          <div class="kv" style="align-items: flex-start;"><label style="margin-top: 6px;">说明</label><textarea id="rel-notes" style="min-height: 72px;" placeholder="更新弹窗里展示给队员的内容（支持换行）"></textarea></div>
-          <div class="kv"><label>安装包 .exe</label><input type="file" id="rel-installer" accept=".exe" style="flex: 1; min-width: 0;" /></div>
-          <div class="kv"><label>签名 .sig</label><input type="file" id="rel-sig" accept=".sig" style="flex: 1; min-width: 0;" /></div>
-          <div id="rel-hints" class="hint" style="min-height: 16px;"></div>
-          <div style="display: flex; gap: 8px; justify-content: flex-end;">
-            <button class="line" id="rel-save-draft">保存草稿</button>
-            <button class="primary" id="rel-publish">发布</button>
-          </div>
-        </div>
-      </aside>
-    </div>`;
-  bindReleaseForm(root);
-  // 拖拽导入：.exe → 安装包，.sig → 签名
-  const side = root.querySelector(".release-side");
-  const installerInput = document.getElementById("rel-installer");
-  const sigInput = document.getElementById("rel-sig");
-  const setFile = (input, file) => {
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    input.files = dt.files;
-    input.dispatchEvent(new Event("change"));
-  };
-  side.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    side.classList.add("dragging");
+function latestPublishedTag(list) {
+  const semver = (tag) => String(tag).replace(/^v/i, "").split("-")[0].split(".").map(Number);
+  const ok = list.filter((r) => !r.draft);
+  if (ok.length === 0) return null;
+  ok.sort((a, b) => {
+    const va = semver(a.tag);
+    const vb = semver(b.tag);
+    for (let i = 0; i < 3; i++) if (va[i] !== vb[i]) return vb[i] - va[i];
+    return b.published_at - a.published_at;
   });
-  side.addEventListener("dragleave", () => side.classList.remove("dragging"));
-  side.addEventListener("drop", (e) => {
-    e.preventDefault();
-    side.classList.remove("dragging");
-    for (const file of e.dataTransfer?.files || []) {
-      if (/\.exe$/i.test(file.name)) setFile(installerInput, file);
-      else if (/\.sig$/i.test(file.name)) setFile(sigInput, file);
-      else setNotice(`发布页只接受 .exe / .sig，已忽略 ${file.name}`);
-    }
-  });
+  return ok[0].tag;
 }
 
-function renderReleaseCard(release) {
+function renderReleases(root) {
+  const list = state.releases;
+  if (state.selectedReleaseId === null && list.length > 0) state.selectedReleaseId = list[0].id;
+  const selected = list.find((r) => r.id === state.selectedReleaseId) || null;
+  const latestTag = latestPublishedTag(list);
+
+  root.innerHTML = `
+    <div class="relpage">
+      <aside class="rel-side">
+        <div class="rel-side-head f1">发布列表</div>
+        ${list.length === 0 ? '<div class="hint" style="padding: 8px 14px;">还没有发布记录</div>' : list.map((r) => `
+          <div class="rel-item ${r.id === state.selectedReleaseId ? "active" : ""}" data-rel-sel="${r.id}">
+            <span class="rel-item-tag f1">v${esc(r.tag)}</span>
+            ${r.draft ? '<span class="badge">草稿</span>' : r.tag === latestTag ? '<span class="badge status-ok">Latest</span>' : ""}
+          </div>`).join("")}
+      </aside>
+      <section class="rel-main">
+        <div class="rel-actions">
+          ${state.releaseMode === "new"
+            ? '<button class="line" id="rel-cancel">取消</button>'
+            : '<button class="primary" id="rel-new">新建发布</button>'}
+        </div>
+        ${state.releaseMode === "new"
+          ? newReleaseFormHtml()
+          : selected
+            ? renderReleaseDetail(selected, latestTag)
+            : '<div class="card hint" style="margin-top: 8px;">还没有发布记录，点右上「新建发布」创建第一个版本。</div>'}
+      </section>
+    </div>`;
+
+  root.querySelectorAll("[data-rel-sel]").forEach((item) =>
+    item.addEventListener("click", () => {
+      state.selectedReleaseId = Number(item.dataset.relSel);
+      state.releaseMode = "view";
+      renderShell();
+      renderTab();
+    }),
+  );
+  const newBtn = document.getElementById("rel-new");
+  if (newBtn)
+    newBtn.addEventListener("click", () => {
+      state.releaseMode = "new";
+      renderShell();
+      renderTab();
+    });
+  const cancelBtn = document.getElementById("rel-cancel");
+  if (cancelBtn)
+    cancelBtn.addEventListener("click", () => {
+      state.releaseMode = "view";
+      renderShell();
+      renderTab();
+    });
+  bindReleaseForm(root);
+}
+
+function newReleaseFormHtml() {
+  return `
+    <div class="card" style="max-width: 760px;">
+      <h3 class="f1">新建发布</h3>
+      <div class="kv"><label>版本号</label><input id="rel-tag" placeholder="例如 1.0.1" /></div>
+      <div class="kv"><label>标题</label><input id="rel-title" placeholder="一句话说明（可选）" /></div>
+      <div class="kv" style="align-items: flex-start;"><label style="margin-top: 6px;">说明</label><textarea id="rel-notes" style="min-height: 96px;" placeholder="更新弹窗里展示给队员的内容（支持换行）"></textarea></div>
+      <div class="kv"><label>安装包 .exe</label><input type="file" id="rel-installer" accept=".exe" style="flex: 1; min-width: 0;" /></div>
+      <div class="kv"><label>签名 .sig</label><input type="file" id="rel-sig" accept=".sig" style="flex: 1; min-width: 0;" /></div>
+      <div id="rel-hints" class="hint" style="min-height: 16px;"></div>
+      <div style="display: flex; gap: 8px; justify-content: flex-end;">
+        <button class="line" id="rel-save-draft">保存草稿</button>
+        <button class="primary" id="rel-publish">发布</button>
+      </div>
+    </div>`;
+}
+
+function renderReleaseDetail(release, latestTag) {
   const status = release.draft
     ? '<span class="badge">草稿</span>'
-    : '<span class="badge status-ok">已发布</span>';
+    : release.tag === latestTag
+      ? '<span class="badge status-ok">Latest</span>'
+      : "";
   const date = new Date((release.published_at || release.created_at || 0) * 1000).toLocaleDateString();
   const notes = String(release.notes || "").trim();
   return `
-    <div class="card release-card" data-release="${release.id}">
-      <div class="release-head">
-        <span class="release-tag f1">v${esc(release.tag)}</span>
-        <span class="release-title">${esc(release.title || "")}</span>
+    <div class="card release-detail">
+      <div class="rel-detail-head">
+        <h1 class="f1" style="margin: 0; font-size: 22px;">v${esc(release.tag)}</h1>
         ${status}
         <span style="flex: 1;"></span>
         ${release.draft
@@ -663,126 +701,86 @@ function renderReleaseCard(release) {
           : `<button class="line" data-rel-unpublish="${release.id}">撤下</button>`}
         <button class="line" data-rel-delete="${release.id}">删除</button>
       </div>
-      ${notes ? `<div class="release-notes">${esc(notes)}</div>` : ""}
-      <div class="release-assets">
+      <div class="rel-meta">${esc(release.title || "")} · 发布于 ${esc(date)}</div>
+      <div class="rel-notes">${notes ? esc(notes) : "（没有填写更新说明）"}</div>
+      <div class="rel-assets">
+        <div class="rel-assets-head f1">Assets</div>
         ${release.installer_name
-          ? `<a class="release-asset mono" href="/api/v1/admin/files/${esc(release.installer_key)}?name=${encodeURIComponent(release.installer_name)}">⬇ ${esc(release.installer_name)}</a>`
-          : '<span class="hint">未上传安装包</span>'}
-        <span class="hint">${release.installer_hash ? (release.signature ? "签名 ✓" : "缺签名") : ""}</span>
-        <span class="hint" style="margin-left: auto;">${esc(date)}</span>
+          ? `<div class="rel-asset-row">
+               <a class="release-asset mono" href="/api/v1/admin/files/${esc(release.installer_key)}?name=${encodeURIComponent(release.installer_name)}">⬇ ${esc(release.installer_name)}</a>
+               <span class="hint">${release.signature ? "签名 ✓" : "缺签名"}</span>
+               <span class="hint" style="margin-left: auto;">${esc(date)}</span>
+             </div>`
+          : '<div class="rel-asset-row"><span class="hint">未上传安装包</span></div>'}
       </div>
     </div>`;
 }
 
-// ===== 数据加载 =====
-
-async function reload() {
-  if (!state.loggedIn) {
-    render();
-    return;
-  }
-  try {
-    const [datasetsBody, notesBody, tokensBody, accountsBody, releasesBody] = await Promise.all([
-      api("/api/v1/datasets?include_archived=true"),
-      api("/api/v1/date-notes"),
-      api("/api/v1/admin/tokens"),
-      api("/api/v1/admin/accounts"),
-      api("/api/v1/admin/releases"),
-    ]);
-    state.records = datasetsBody.datasets || [];
-    state.notes = new Map((notesBody.date_notes || []).map((item) => [item.date_key, item.note]));
-    state.tokens = tokensBody.tokens || [];
-    state.adminAccounts = accountsBody.accounts || [];
-    state.currentAdminId = accountsBody.current;
-    state.releases = releasesBody.releases || [];
-    setNotice(null);
-  } catch (error) {
-    setNotice(`加载失败：${error.message}`);
-  }
-  render();
-}
-
-render();
-restoreSession();
-
-// 页面加载先用已有 Cookie 问服务器会话是否有效——有效则直接进主界面（不主动登出就保持 7 天）
-async function restoreSession() {
-  try {
-    const response = await fetch("/api/v1/admin/session", { headers: { "content-type": "application/json" } });
-    if (response.ok) {
-      state.loggedIn = true;
-      await reload();
-      return;
-    }
-  } catch {
-    // 网络异常时留在登录视图
-  }
-  render();
-}
-
-
 async function bindReleaseForm(root) {
   const installerInput = document.getElementById("rel-installer");
   const sigInput = document.getElementById("rel-sig");
-  if (!installerInput) return;
-  installerInput.addEventListener("change", () => {
-    const f = installerInput.files[0];
-    document.getElementById("rel-hints").textContent = f ? `安装包：${f.name}（${(f.size / 1024 / 1024).toFixed(1)} MB）` : "";
-  });
-  sigInput.addEventListener("change", () => {
-    const f = sigInput.files[0];
-    if (f) document.getElementById("rel-hints").textContent += " · 签名已选";
-  });
 
-  const submitRelease = async (publish) => {
-    const tag = document.getElementById("rel-tag").value.trim();
-    const title = document.getElementById("rel-title").value.trim();
-    const notes = document.getElementById("rel-notes").value;
-    const installer = installerInput.files[0];
-    const sig = sigInput.files[0];
-    if (!/^v?\d+\.\d+\.\d+(-[\w.]+)?$/i.test(tag)) {
-      setNotice("版本号格式应为 1.2.3。");
+  if (installerInput && sigInput) {
+    installerInput.addEventListener("change", () => {
+      const f = installerInput.files[0];
+      document.getElementById("rel-hints").textContent = f ? `安装包：${f.name}（${(f.size / 1024 / 1024).toFixed(1)} MB）` : "";
+    });
+    sigInput.addEventListener("change", () => {
+      const f = sigInput.files[0];
+      if (f) document.getElementById("rel-hints").textContent += " · 签名已选";
+    });
+    const submitRelease = async (publish) => {
+      const tag = document.getElementById("rel-tag").value.trim();
+      const title = document.getElementById("rel-title").value.trim();
+      const notes = document.getElementById("rel-notes").value;
+      const installer = installerInput.files[0];
+      const sig = sigInput.files[0];
+      if (!/^v?\d+\.\d+\.\d+(-[\w.]+)?$/i.test(tag)) {
+        setNotice("版本号格式应为 1.2.3。");
+        renderShell(); renderTab();
+        return;
+      }
+      if (publish && (!installer || !sig)) {
+        setNotice("发布前必须选择安装包 .exe 和签名 .sig 文件。");
+        renderShell(); renderTab();
+        return;
+      }
+      setNotice(`正在${publish ? "发布" : "保存"} v${tag} …`, true);
       renderShell(); renderTab();
-      return;
-    }
-    if (publish && (!installer || !sig)) {
-      setNotice("发布前必须选择安装包 .exe 和签名 .sig 文件。");
-      renderShell(); renderTab();
-      return;
-    }
-    setNotice(`正在${publish ? "发布" : "保存"} v${tag} …`, true);
-    renderShell(); renderTab();
-    try {
-      const created = await api("/api/v1/admin/releases", {
-        method: "POST",
-        body: JSON.stringify({ tag, title, notes, draft: true }),
-      });
-      const id = created.release.id;
-      if (installer) {
-        const res = await fetch(`/api/v1/admin/releases/${id}/installer`, {
-          method: "PUT",
-          headers: { "x-file-name": encodeURIComponent(installer.name), "content-type": "application/octet-stream" },
-          body: installer,
+      try {
+        const created = await api("/api/v1/admin/releases", {
+          method: "POST",
+          body: JSON.stringify({ tag, title, notes, draft: true }),
         });
-        if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error?.message || "安装包上传失败");
+        const id = created.release.id;
+        if (installer) {
+          const res = await fetch(`/api/v1/admin/releases/${id}/installer`, {
+            method: "PUT",
+            headers: { "x-file-name": encodeURIComponent(installer.name), "content-type": "application/octet-stream" },
+            body: installer,
+          });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error?.message || "安装包上传失败");
+        }
+        if (sig) {
+          const sigText = await sig.text();
+          await api(`/api/v1/admin/releases/${id}/signature`, { method: "PUT", body: JSON.stringify({ signature: sigText }) });
+        }
+        if (publish) {
+          await api(`/api/v1/admin/releases/${id}`, { method: "PATCH", body: JSON.stringify({ draft: false }) });
+          setNotice(`v${tag} 已发布，队员端下次检查更新即可收到。`, true);
+        } else {
+          setNotice(`v${tag} 已保存为草稿。`, true);
+        }
+        state.selectedReleaseId = id;
+        state.releaseMode = "view";
+      } catch (error) {
+        setNotice(`发布失败：${error.message}`);
       }
-      if (sig) {
-        const sigText = await sig.text();
-        await api(`/api/v1/admin/releases/${id}/signature`, { method: "PUT", body: JSON.stringify({ signature: sigText }) });
-      }
-      if (publish) {
-        await api(`/api/v1/admin/releases/${id}`, { method: "PATCH", body: JSON.stringify({ draft: false }) });
-        setNotice(`v${tag} 已发布，队员端下次检查更新即可收到。`, true);
-      } else {
-        setNotice(`v${tag} 已保存为草稿。`, true);
-      }
-    } catch (error) {
-      setNotice(`发布失败：${error.message}`);
-    }
-    await reload();
-  };
-  document.getElementById("rel-save-draft").addEventListener("click", () => submitRelease(false));
-  document.getElementById("rel-publish").addEventListener("click", () => submitRelease(true));
+      await reload();
+    };
+    document.getElementById("rel-save-draft").addEventListener("click", () => submitRelease(false));
+    document.getElementById("rel-publish").addEventListener("click", () => submitRelease(true));
+  }
 
   root.querySelectorAll("[data-rel-publish]").forEach((b) =>
     b.addEventListener("click", async () => {
@@ -811,6 +809,7 @@ async function bindReleaseForm(root) {
       if (!window.confirm("删除该发布记录？（已下载到队员电脑的软件不受影响）")) return;
       try {
         await api(`/api/v1/admin/releases/${b.dataset.relDelete}`, { method: "DELETE" });
+        if (state.selectedReleaseId === Number(b.dataset.relDelete)) state.selectedReleaseId = null;
         setNotice("已删除。", true);
       } catch (error) {
         setNotice(`删除失败：${error.message}`);
