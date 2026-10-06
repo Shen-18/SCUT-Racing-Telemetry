@@ -1,8 +1,9 @@
 pub mod batch;
-pub mod cover_video;
 pub mod export;
 mod imports;
 pub mod jobs;
+pub mod overlay;
+pub mod overlay_export;
 pub mod records;
 pub mod state;
 pub mod stats_cmd;

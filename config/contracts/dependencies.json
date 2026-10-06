@@ -47,7 +47,7 @@
     "crates/csv-parser",
     "crates/telemetry-store",
     "crates/telemetry-ipc",
-    "crates/cover-video",
+    "crates/overlay",
     "src-tauri",
     "crates/migrate-v1",
     "tests/golden-tests"
@@ -72,7 +72,7 @@
       "telemetry-store",
       "cache-core"
     ],
-    "cover-video": [],
+    "overlay": [],
     "scut-racing-telemetry": [
       "telemetry-core",
       "cache-core",
@@ -80,7 +80,7 @@
       "csv-parser",
       "telemetry-store",
       "telemetry-ipc",
-      "cover-video"
+      "overlay"
     ],
     "migrate-v1": [
       "telemetry-core",

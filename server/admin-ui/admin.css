@@ -1,0 +1,37 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  background: #11121a;
+  color: #f6f7fb;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: #11121a; }
+.page { width: min(1180px, calc(100vw - 40px)); margin: 0 auto; padding: 28px 0 48px; }
+.topbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 18px 20px; background: #e10600; }
+.eyebrow { font-size: 11px; letter-spacing: 2px; opacity: .76; }
+h1 { margin: 5px 0 0; font-size: 24px; letter-spacing: 1px; }
+.server-state { font-size: 12px; padding: 8px 10px; border: 1px solid rgba(255,255,255,.4); }
+.panel { margin-top: 16px; padding: 18px; border: 1px solid #303240; background: #1a1b26; }
+.panel-title { display: flex; align-items: center; gap: 9px; color: #bdc0d0; font-weight: 700; letter-spacing: 1.5px; }
+.panel-title span { width: 3px; height: 15px; background: #e10600; }
+.hint { color: #85899c; font-size: 12px; line-height: 1.6; }
+.upload-row { display: flex; gap: 8px; margin-top: 12px; }
+.upload-row input { flex: 1; }
+form { display: grid; gap: 8px; }
+.note-form { grid-template-columns: 150px minmax(0, 1fr) auto; margin-top: 14px; }
+.dataset-form { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 14px; }
+input, button { min-height: 34px; border: 1px solid #3a3c4c; background: #11121a; color: #f6f7fb; padding: 7px 9px; font: inherit; }
+button { cursor: pointer; font-weight: 700; }
+button:hover { border-color: #e10600; }
+.note-list, .dataset-list { margin-top: 14px; display: grid; gap: 6px; }
+.note-row, .dataset-row { display: grid; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid #2c2e3b; background: #151620; font-size: 12px; }
+.note-row { grid-template-columns: 120px minmax(0, 1fr) auto; }
+.dataset-row { grid-template-columns: 110px minmax(150px, 1fr) 130px 90px auto; }
+.muted { color: #85899c; }
+.message { position: fixed; right: 24px; bottom: 24px; padding: 10px 14px; border: 1px solid #3a3c4c; background: #1a1b26; }
+.message.error { border-color: #e10600; }
+@media (max-width: 800px) {
+  .note-form, .dataset-form, .note-row, .dataset-row { grid-template-columns: 1fr; }
+  .topbar { align-items: flex-start; flex-direction: column; }
+}

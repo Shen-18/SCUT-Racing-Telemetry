@@ -27,6 +27,7 @@ skills-lock.json
 cache/
 temp/
 *.tmp
+server/data/
 
 # Operating System & IDE
 .DS_Store
@@ -55,3 +56,4 @@ design-demos/fonts/
 .agent/agy-*.md
 
 # TestMatLabXRK is intentionally retained as the complete official example.
+server/.env

@@ -35,7 +35,7 @@ impl DatasetCache {
         let entry = self.entry(key)?;
         // u32::MAX is the explicit exact/raw mode used by analysis charts.
         // It bypasses pyramid buckets and returns every raw sample in range.
-        if pixels == u32::MAX {
+        if pixels == u32::MAX || entry.pyramid.is_none() {
             let mut reader = open_raw(&self.path, entry)?;
             let left = storage::lower_bound(&mut reader, 16, 8, entry.full_count, start)?;
             let right = storage::upper_bound(&mut reader, 16, 8, entry.full_count, end)?;

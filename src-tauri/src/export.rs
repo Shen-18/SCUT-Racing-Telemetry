@@ -52,7 +52,10 @@ pub fn raw_grid(
     end: f64,
 ) -> CommandResult<telemetry_core::csv_io::Gridded> {
     if channels.is_empty() {
-        return Err(command_error("no_channels_selected", "记录没有可导出的数值通道"));
+        return Err(command_error(
+            "no_channels_selected",
+            "记录没有可导出的数值通道",
+        ));
     }
     let mut selected: Vec<(&cache_core::CachedChannelMeta, ChannelSeries)> = Vec::new();
     for key in channels {
@@ -99,11 +102,13 @@ pub fn raw_grid(
     let gridded_channels = selected
         .iter()
         .enumerate()
-        .map(|(channel_index, (meta, _))| telemetry_core::csv_io::GriddedChannel {
-            name: meta.name.clone(),
-            unit: meta.unit.clone(),
-            values: std::mem::take(&mut values[channel_index]),
-        })
+        .map(
+            |(channel_index, (meta, _))| telemetry_core::csv_io::GriddedChannel {
+                name: meta.name.clone(),
+                unit: meta.unit.clone(),
+                values: std::mem::take(&mut values[channel_index]),
+            },
+        )
         .collect();
     Ok(telemetry_core::csv_io::Gridded {
         grid_hz: infer_grid_hz(&times),
@@ -177,18 +182,17 @@ pub fn export_records(
             .iter()
             .map(|entry| entry.meta.key.clone())
             .collect();
-        match raw_grid(&dataset, &channels, f64::NEG_INFINITY, f64::INFINITY)
-            .and_then(|grid| {
-                let mut buffer = Vec::new();
-                telemetry_core::csv_io::write_aim_csv(
-                    &mut buffer,
-                    &dataset.manifest().meta,
-                    &grid,
-                    dataset.manifest().laps.len(),
-                )
-                .map_err(|error| command_error("csv_error", error))?;
-                std::fs::write(&dest, buffer).map_err(io_err)
-            }) {
+        match raw_grid(&dataset, &channels, f64::NEG_INFINITY, f64::INFINITY).and_then(|grid| {
+            let mut buffer = Vec::new();
+            telemetry_core::csv_io::write_aim_csv(
+                &mut buffer,
+                &dataset.manifest().meta,
+                &grid,
+                dataset.manifest().laps.len(),
+            )
+            .map_err(|error| command_error("csv_error", error))?;
+            std::fs::write(&dest, buffer).map_err(io_err)
+        }) {
             Ok(()) => outcomes.push(ExportOutcome {
                 file_hash: hash.clone(),
                 file_name,
@@ -201,7 +205,10 @@ pub fn export_records(
                 file_name,
                 status: "missing".into(),
                 path: None,
-                message: Some(format!("无法从 raw 缓存导出，请重新导入：{}", error.message)),
+                message: Some(format!(
+                    "无法从 raw 缓存导出，请重新导入：{}",
+                    error.message
+                )),
             }),
         }
     }
@@ -227,7 +234,9 @@ pub fn export_channels(
             "请先勾选要导出的通道",
         ));
     }
-    let dataset = cache.dataset(hash).map_err(|error| command_error("dataset_missing", error))?;
+    let dataset = cache
+        .dataset(hash)
+        .map_err(|error| command_error("dataset_missing", error))?;
     let known: std::collections::HashSet<&str> = dataset
         .manifest()
         .channels

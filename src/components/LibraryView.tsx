@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as client from "../api/client";
+import { listRemoteDateNotes, normalizeRemoteBaseUrl, syncDatasetIndex } from "../api/remote";
 import type { RecordSummary } from "../api/client";
 import { LEFT_WIDTH_RANGE, useAppStore } from "../state/appStore";
 import { ColumnSplitter } from "./ColumnSplitter";
@@ -9,7 +10,7 @@ import { formatDateTime, formatDurationShort } from "../utils/time";
 // 资料库主页（2026-09-16 负责人重构）：
 // 一级栏（AppShell 红栏）之下是分类 + 数据详情双栏；
 // 左侧 = 分类切换（按日期/按赛车）+ 分组统计列表（组名 + 条数，点击过滤）；
-// 右侧 = 选中分组的记录明细（开始时间/车手/车辆/时长/操作）；赛道字段后续补充。
+// 右侧 = 选中分组的记录明细（开始时间/备注/车手/车辆/时长/操作）；赛道字段后续补充。
 // 导入入口位于数据详情标题行右上角，另支持原生拖入。
 
 export type LibraryCategory = "time" | "vehicle";
@@ -87,7 +88,13 @@ const PANEL_TITLE_STYLE: React.CSSProperties = {
   flex: "none",
 };
 
-const GRID_COLUMNS = "28px 120px 112px minmax(120px,1fr) 92px 72px";
+// 备注独立占一列，操作列保留足够空间显示下载和删除。
+const GRID_COLUMNS = "28px 104px minmax(128px, 1.25fr) minmax(132px, 1fr) 120px 88px 132px";
+
+function notePreview(note: string, maxLength = 72): string {
+  const compact = note.replace(/\s+/g, " ").trim();
+  return compact.length > maxLength ? `${compact.slice(0, maxLength - 1)}…` : compact;
+}
 
 // 表头与数据行必须共用同一套网格几何：同样的 margin(16px)+水平 padding(8px),
 // 单元格自身不再加横向补差 padding —— 否则两套网格原点差 8px,
@@ -117,9 +124,12 @@ export interface LibraryHomeViewProps {
   onCategoryChange(category: LibraryCategory): void;
   onGroupChange(group: string | null): void;
   onOpen(fileHash: string): void;
+  onUseForOverlay?(fileHash: string): void;
   onDelete(fileHash: string): void;
   onRetry(): void;
   onPickFiles(): void;
+  onSyncIndex?(): void;
+  syncingIndex?: boolean;
   onToggleSelect(fileHash: string): void;
   onToggleSelectAll?(hashes: string[], select: boolean): void;
   onDeleteSelected?(): void;
@@ -141,9 +151,12 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
   onCategoryChange,
   onGroupChange,
   onOpen,
+  onUseForOverlay,
   onDelete,
   onRetry,
   onPickFiles,
+  onSyncIndex,
+  syncingIndex,
   onToggleSelect,
   onToggleSelectAll,
   onDeleteSelected,
@@ -260,6 +273,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
           </div>
           {groups.map((group) => {
             const active = group.key === selectedGroup;
+            const dateNote = group.records.find((record) => record.date_note?.trim())?.date_note?.trim() ?? "";
             // 日期分组右键：导出/删除该日记录（负责人 2026-09-28 指定，替代 EXPORT DAY 按钮）
             const groupMenu =
               category === "time"
@@ -283,9 +297,10 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                 onClick={() => onGroupChange(active ? null : group.key)}
                 onContextMenu={groupMenu}
                 style={{
-                  display: "flex",
+                  display: "grid",
+                  gridTemplateColumns: "minmax(88px, 1fr) minmax(0, 1.5fr) 34px",
                   alignItems: "center",
-                  gap: "8px",
+                  columnGap: "8px",
                   padding: "8px 14px",
                   cursor: "pointer",
                   background: active ? "var(--bg2)" : "transparent",
@@ -294,6 +309,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
               >
                 <span
                   style={{
+                    minWidth: 0,
                     fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
                     fontWeight: 700,
                     fontSize: "12px",
@@ -306,7 +322,23 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                 >
                   {group.key}
                 </span>
-                <span className="tnum" style={{ marginLeft: "auto", fontSize: "12px", color: "var(--dim2)", fontWeight: 700, flex: "none" }}>
+                <span
+                  title={dateNote || undefined}
+                  style={{
+                    minWidth: 0,
+                    color: "var(--dim)",
+                    fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
+                    fontSize: "12px",
+                    letterSpacing: "0.5px",
+                    paddingLeft: "8px",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {category === "time" && dateNote ? notePreview(dateNote) : ""}
+                </span>
+                <span className="tnum" style={{ fontSize: "12px", color: "var(--dim2)", fontWeight: 700, textAlign: "right" }}>
                   {group.records.length}
                 </span>
               </div>
@@ -429,6 +461,29 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
               </button>
             </span>
           )}
+          {onSyncIndex && (
+            <button
+              data-testid="sync-index"
+              onClick={onSyncIndex}
+              className="ghost-button"
+              disabled={syncingIndex}
+              style={{
+                background: "transparent",
+                border: "1px solid var(--line)",
+                color: syncingIndex ? "var(--dim2)" : "var(--text)",
+                fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif',
+                fontWeight: 700,
+                fontSize: "11px",
+                letterSpacing: "1px",
+                padding: "5px 12px",
+                cursor: syncingIndex ? "default" : "pointer",
+                whiteSpace: "nowrap",
+              }}
+              title="把本地记录索引同步到云端服务器"
+            >
+              {syncingIndex ? "同步中…" : "同步索引"}
+            </button>
+          )}
           <button
             data-testid="pick-files"
             onClick={onPickFiles}
@@ -530,6 +585,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                 )}
               </span>
               <span style={headerCellStyle()}>开始时间</span>
+              <span style={headerCellStyle()}>备注</span>
               <span style={headerCellStyle()}>车手</span>
               <span style={headerCellStyle()}>车辆</span>
               <span style={headerCellStyle()}>时长</span>
@@ -559,6 +615,9 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                           x: e.clientX,
                           y: e.clientY,
                           items: [
+                            ...(onUseForOverlay
+                              ? [{ key: "overlay", label: "用于 Overlay", onSelect: () => onUseForOverlay(hash) }]
+                              : []),
                             { key: "reveal", label: "打开文件目录", onSelect: () => onReveal?.(hash) },
                             { key: "export", label: "导出此记录", onSelect: () => onExportOne(hash) },
                             { key: "delete", label: "删除此记录", danger: true, onSelect: () => onDelete(hash) },
@@ -612,6 +671,20 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                         title={`文件时间 ${formatDateTime(record.source_mtime_unix)}`}
                       >
                         {record.start_time || "—"}
+                      </span>
+                      <span
+                        data-testid="record-note"
+                        title={record.record_note?.trim() || undefined}
+                        style={{
+                          minWidth: 0,
+                          color: "var(--dim)",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          textAlign: "center",
+                        }}
+                      >
+                        {record.record_note?.trim() ? notePreview(record.record_note, 48) : "—"}
                       </span>
                       <span style={{ color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {record.racer || "—"}
@@ -677,6 +750,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
 export const LibraryView: React.FC = () => {
   const openDataset = useAppStore((s) => s.openDataset);
   const trackImport = useAppStore((s) => s.trackImport);
+  const enterOverlay = useAppStore((s) => s.enterOverlay);
   const [records, setRecords] = useState<RecordSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -687,6 +761,39 @@ export const LibraryView: React.FC = () => {
   const [notice, setNotice] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [syncingIndex, setSyncingIndex] = useState(false);
+  const lastSyncedCountRef = useRef(0);
+
+  // 全量索引推云端（file_hash 幂等）；未配置云端地址时返回空串
+  const runCloudSync = useCallback(async (): Promise<string> => {
+    const baseUrl = normalizeRemoteBaseUrl(localStorage.getItem("scut.remote-server-url") || "");
+    if (!baseUrl) return "";
+    const list = await client.listRecords("");
+    const result = await syncDatasetIndex(baseUrl, list);
+    lastSyncedCountRef.current = result.synced;
+    return result.skipped > 0
+      ? `已同步 ${result.synced} 条记录索引到云端（跳过 ${result.skipped} 条日期无法解析的记录）`
+      : `已同步 ${result.synced} 条记录索引到云端`;
+  }, []);
+
+  // 记录列表出现变化（导入完成、首次加载）时自动同步一次；失败只提示，不影响本地使用
+  useEffect(() => {
+    if (records === null || records.length === 0 || records.length === lastSyncedCountRef.current) return;
+    if (!normalizeRemoteBaseUrl(localStorage.getItem("scut.remote-server-url") || "")) return;
+    setSyncingIndex(true);
+    runCloudSync()
+      .then((message) => setNotice(message))
+      .catch((err: unknown) => setNotice(`云端同步失败：${err instanceof Error ? err.message : String(err)}`))
+      .finally(() => setSyncingIndex(false));
+  }, [records, runCloudSync]);
+
+  const handleSyncIndex = useCallback(() => {
+    setSyncingIndex(true);
+    runCloudSync()
+      .then((message) => setNotice(message || "未配置云端服务器地址（设置 → 云端服务器）"))
+      .catch((err: unknown) => setNotice(`云端同步失败：${err instanceof Error ? err.message : String(err)}`))
+      .finally(() => setSyncingIndex(false));
+  }, [runCloudSync]);
 
   // 导入未完成时轮询记录列表，让新记录自动出现
   useEffect(() => {
@@ -700,9 +807,23 @@ export const LibraryView: React.FC = () => {
     setError(null);
     client
       .listRecords("")
-      .then((list) => {
+      .then(async (list) => {
+        let merged = list;
+        try {
+          const baseUrl = normalizeRemoteBaseUrl(localStorage.getItem("scut.remote-server-url") || "");
+          if (baseUrl) {
+            const notes = await listRemoteDateNotes(baseUrl);
+            const byDate = new Map(notes.map((item) => [item.date_key, item.note]));
+            merged = list.map((record) => ({
+              ...record,
+              date_note: byDate.get(record.record_date.trim()) ?? record.date_note,
+            }));
+          }
+        } catch {
+          // 云端不可用时继续显示本地索引，离线分析不受影响。
+        }
         if (!cancelled) {
-          setRecords(list);
+          setRecords(merged);
           setImporting(false);
         }
       })
@@ -930,11 +1051,14 @@ export const LibraryView: React.FC = () => {
             setError(err instanceof Error ? err.message : String(err))
           );
         }}
+        onUseForOverlay={(hash) => enterOverlay(hash)}
         onDelete={(hash) => void handleDelete(hash)}
         onReveal={handleReveal}
         onDeleteDay={handleDeleteDay}
         onRetry={() => setReloadTick((t) => t + 1)}
         onPickFiles={() => void handlePickFiles()}
+        onSyncIndex={handleSyncIndex}
+        syncingIndex={syncingIndex}
         onToggleSelect={(hash) =>
           setSelected((prev) => {
             const next = new Set(prev);

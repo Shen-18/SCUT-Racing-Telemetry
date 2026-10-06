@@ -5,7 +5,7 @@ export const STAGE_LABELS: Record<ImportStage, string> = {
   ReadingMetadata: "读取元数据",
   ReadingChannels: "读取通道数据",
   BuildingRawCache: "构建原始缓存",
-  BuildingPyramid: "构建金字塔索引",
+  BuildingPyramid: "整理原始缓存",
   Ready: "就绪",
   Failed: "导入失败",
   Cancelled: "已取消",

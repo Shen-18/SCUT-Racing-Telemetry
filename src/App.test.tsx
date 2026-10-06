@@ -12,7 +12,7 @@ describe("foundation shell (B.2 rev.5)", () => {
     expect(html).toContain("logo_white");
     expect(html).toContain("SCUT Racing Telemetry");
     expect(html).toContain("DATABASE");
-    expect(html).toContain("TELEMETRY VIDEO");
+    expect(html).toContain("OVERLAY");
     expect(html).toContain("WIFI DOWNLOAD");
     expect(html).not.toContain("library-secondary-bar");
     expect(html).toContain("pick-files");
@@ -29,6 +29,15 @@ describe("foundation shell (B.2 rev.5)", () => {
     expect(html).toContain('role="separator"');
     expect(html).toContain("statusbar-cursor");
     expect(html).toContain("statusbar-cache");
+  });
+
+  it("keeps the navigation visible and switches the top bar to the video blue", () => {
+    const html = renderToStaticMarkup(<AppShell viewOverride="overlay" />);
+    expect(html).toContain("data-testid=\"library-nav\"");
+    expect(html).toContain("DATABASE");
+    expect(html).toContain("OVERLAY");
+    expect(html).toContain("background:#2A4A98");
+    expect(html).not.toContain('title="返回 DATABASE"');
   });
 
   it("renders with F1 design token variables", () => {

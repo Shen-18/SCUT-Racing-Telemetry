@@ -51,8 +51,7 @@ pub struct SampleRange {
 }
 
 /// One library-home row: a cached dataset summarized from its manifest.
-/// No DB row yet (Step 9A moves this to telemetry.db); the cache manifest
-/// is the source of truth so the interface can stay stable.
+/// 数据库页面使用的记录摘要；缓存 manifest 仍是遥测内容的校验来源。
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 pub struct RecordSummary {
     pub file_hash: String,
@@ -71,6 +70,10 @@ pub struct RecordSummary {
     pub source_mtime_unix: u64,
     /// cache-core CacheState debug name, e.g. "Ready".
     pub cache_state: String,
+    #[serde(default)]
+    pub record_note: String,
+    #[serde(default)]
+    pub date_note: String,
 }
 
 /// 单条记录导出结果（导出四件套：单条/多选/当日共用）。

@@ -82,7 +82,7 @@ impl DatasetCache {
         let _lock = storage::WriterLock::acquire(&self.path)?;
         self.refresh()?;
         self.manifest.update_state();
-        if self.manifest.state != CacheState::Ready {
+        if !matches!(self.manifest.state, CacheState::Ready | CacheState::RawReady) {
             return Err(CacheError::InvalidRequest("channels incomplete".into()));
         }
         storage::publish_manifest(&self.path, &self.manifest)

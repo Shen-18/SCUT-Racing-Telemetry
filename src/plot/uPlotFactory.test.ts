@@ -83,6 +83,14 @@ describe("uPlotFactory", () => {
     expect(opts.series?.[1]?.spanGaps).toBe(false);
   });
 
+  it("keeps units out of stacked plot y-axis tick labels", () => {
+    const opts = createStackedOptions({ channel: "Speed", unit: "km/h" });
+    const formatter = opts.axes?.[1]?.values;
+    expect(typeof formatter).toBe("function");
+    const labels = (formatter as ((u: uPlot, values: number[]) => string[]))(null as unknown as uPlot, [0, 25, 50]);
+    expect(labels).toEqual(["0", "25", "50"]);
+  });
+
   it("rebuilds plot options when channel identity or unit changes", () => {
     expect(requiresPlotRebuild(null, { channel: "Speed", unit: "km/h" })).toBe(true);
     expect(

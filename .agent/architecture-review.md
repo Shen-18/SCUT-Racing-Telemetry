@@ -1,14 +1,14 @@
 # SCUT Racing Telemetry architecture review
 
-> Initial read-only repository inventory captured 2026-09-24. The working tree was already dirty before this report; the current Cover Video demo is recorded in the addendum below.
+> Initial read-only repository inventory captured 2026-09-24. The working tree was already dirty before this report; the current Overlay demo is recorded in the addendum below.
 
 ## Demo addendum (2026-09-24)
 
-The first Cover Video vertical slice is now present:
+The first Overlay vertical slice is now present:
 
-- `crates/cover-video` is a standalone Rust renderer using `tiny-skia`, `ab_glyph`, and `png`. It embeds the SCUT logo and Formula 1 fonts and emits one transparent `2560×1440` RGBA PNG from a fixed demo frame.
-- `src-tauri/src/cover_video.rs` is the adapter seam. It owns the save dialog, file writing, and the `{ path, width, height, bytes }` command result; pixel layout stays in the crate.
-- `src/components/CoverVideoView.tsx` is a new `cover-video` view reached from the former disabled `TELEMETRY VIDEO` navigation item. It previews the returned bytes over a checkerboard using the existing F1/SCUT visual tokens.
+- `crates/overlay` is a standalone Rust renderer using `tiny-skia`, `ab_glyph`, and `png`. It embeds the SCUT logo and Formula 1 fonts and emits one transparent `2560×1440` RGBA PNG from a fixed demo frame.
+- `src-tauri/src/overlay.rs` is the adapter seam. It owns the save dialog, file writing, and the `{ path, width, height, bytes }` command result; pixel layout stays in the crate.
+- `src/components/OverlayView.tsx` is a new `overlay` view reached from the former disabled `OVERLAY` navigation item. It previews the returned bytes over a checkerboard using the existing F1/SCUT visual tokens.
 - The demo deliberately does not read a dataset, encode MOV, or compose with a camera video. Those are follow-up stages after the renderer and entry point are accepted.
 
 ## Scope and repository state
@@ -43,7 +43,7 @@ The first Cover Video vertical slice is now present:
 4. `csv-parser`
 5. `telemetry-store`
 6. `telemetry-ipc`
-7. `cover-video`
+7. `overlay`
 8. `src-tauri` (package `scut-racing-telemetry`)
 9. `crates/migrate-v1`
 10. `tests/golden-tests`
@@ -55,7 +55,7 @@ Observed dependency roles:
 - **`csv-parser`**: parses the canonical telemetry CSV format into `telemetry-core` values.
 - **`cache-core`**: persistent metadata-first cache over `datasets/<sha256>/`. It writes `manifest.json`, raw channel blobs, and pyramid blobs with checksums/atomic publication; states progress from metadata through raw/pyramid to `Ready`/`Failed`. It exposes range/overlap, cursor, raw, and window-frame reads.
 - **`telemetry-ipc`**: shared DTOs, import-stage transitions, command errors, JSON helpers, and `SXK1` binary frame encode/decode. It depends on `telemetry-core`; frontend types mirror these structures in `src/api/types.ts` and `src/api/frame.ts`.
-- **`cover-video`**: independent transparent PNG renderer. It embeds the overlay assets and exposes a fixed demo-frame renderer; it has no telemetry or Tauri dependency.
+- **`overlay`**: independent transparent PNG renderer. It embeds the overlay assets and exposes a fixed demo-frame renderer; it has no telemetry or Tauri dependency.
 - **`src-tauri`**: host/orchestrator. `AppState` owns `CacheRoot`, one `AimActor`, open dataset handles, import jobs, and temporary ZIP directories. `imports.rs` performs XRK/CSV/ZIP import, publishes metadata first, then raw and pyramids. `main.rs` registers import, dataset, window, stats, export, record, comments/layout, and cache commands.
 - **`telemetry-store`**: foundation crate only (`src/lib.rs` is a documentation comment). It is listed as a Tauri dependency but has no observed Rust imports in `src-tauri`; treat as dormant scaffolding.
 - **`migrate-v1`**: workspace member with only `println!("migrate-v1 placeholder")`; no migration implementation or call sites.

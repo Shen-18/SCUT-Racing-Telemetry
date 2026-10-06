@@ -5,7 +5,8 @@ import { TimelineBar } from "./TimelineBar";
 import { ColumnSplitter } from "./ColumnSplitter";
 import { FileCard } from "./FileCard";
 import { LibraryView } from "./LibraryView";
-import { CoverVideoView } from "./CoverVideoView";
+import { OverlayView } from "./OverlayView";
+import { SettingsView, type SettingsScope } from "./SettingsView";
 import { PANELS } from "../panels/registry";
 import * as client from "../api/client";
 import { getDatasetFileName } from "../api/dataset";
@@ -68,7 +69,7 @@ function GhostButton({
 
 export interface AppShellProps {
   /** 测试缝隙：SSR 渲染下 zustand 恒返回初始状态，用覆盖值验证另一视图 */
-  viewOverride?: "library" | "analysis" | "cover-video";
+  viewOverride?: "library" | "analysis" | "overlay" | "settings";
 }
 
 export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
@@ -86,11 +87,15 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
   const rightWidth = useAppStore((s) => s.rightWidth);
   const setLeftWidth = useAppStore((s) => s.setLeftWidth);
   const setRightWidth = useAppStore((s) => s.setRightWidth);
+  const trackMapSplitterEnabled = useAppStore((s) => s.trackMapSplitterEnabled);
   const storeView = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
+  const enterOverlay = useAppStore((s) => s.enterOverlay);
   const playing = useAppStore((s) => s.playing);
   const setPlaying = useAppStore((s) => s.setPlaying);
   const view = viewOverride ?? storeView;
+  const [navHover, setNavHover] = useState<"overlay" | "database" | null>(null);
+  const [settingsScope, setSettingsScope] = useState<SettingsScope>("database");
 
   const [error, setError] = useState<string | null>(null);
   const [trackMapHeight, setTrackMapHeight] = useState(300);
@@ -135,7 +140,6 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
   const PlotStackPanel = panelById["plot-stack"];
   const TrackMapPanelComponent = panelById["track-map"];
   const StatsPanelComponent = panelById["stats"];
-  const CommentsPanelComponent = panelById["comments"];
 
   // Active import job if any
   const latestJob = Object.values(importJobs).at(-1) || null;
@@ -191,7 +195,17 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
 
   const datasetFileName = getDatasetFileName(dataset);
   const isLibrary = view === "library";
-  const isCoverVideo = view === "cover-video";
+  const isOverlay = view === "overlay";
+  const isSettings = view === "settings";
+  const isOverlaySettings = isSettings && settingsScope === "overlay";
+  const topbarIsOverlay = isOverlay || isOverlaySettings;
+  const databaseNavActive = isLibrary || (isSettings && settingsScope === "database");
+  const overlayNavActive = isOverlay || isOverlaySettings;
+
+  const openSettings = () => {
+    setSettingsScope(isSettings ? settingsScope : isOverlay ? "overlay" : "database");
+    setView("settings");
+  };
 
   // 播放（B.9 rev.5）：按真实帧间隔推进游标，到窗口末端回到起点；离开分析页自动暂停
   const windowRef = useRef(window);
@@ -285,9 +299,10 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
           alignItems: "center",
           gap: "16px",
           padding: "0 16px",
-          background: "var(--red)",
+          background: topbarIsOverlay ? "#2A4A98" : "var(--red)",
           flex: "none",
           userSelect: "none",
+          transition: "background-color 360ms cubic-bezier(0.22, 1, 0.36, 1)",
         }}
       >
         {/* Logo：白色 logo 图（负责人 2026-09-16 指定） */}
@@ -298,30 +313,43 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
         />
 
         {/* 中部：资料库导航（英文 tab）/ 分析页副标题（文件名在状态栏已有，不重复） */}
-        {isLibrary ? (
+        {isLibrary || isOverlay || isSettings ? (
           <nav
             data-testid="library-nav"
-            style={{ display: "flex", alignItems: "stretch", height: "100%", marginLeft: "16px" }}
+            style={{ display: "flex", alignItems: "stretch", height: "100%", marginLeft: "16px", transition: "opacity 160ms ease" }}
           >
-            <span className="nav-tab nav-tab--active" data-testid="nav-database">
+            <span
+              className={`nav-tab${databaseNavActive ? " nav-tab--active" : ""}`}
+              data-testid="nav-database"
+              onClick={() => setView("library")}
+              onMouseEnter={() => setNavHover("database")}
+              onMouseLeave={() => setNavHover(null)}
+              style={{
+                color: databaseNavActive ? "#FFFFFF" : navHover === "database" ? "#E33B32" : "rgba(255,255,255,0.72)",
+                cursor: databaseNavActive ? "default" : "pointer",
+                transition: "color 300ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
+            >
               DATABASE
             </span>
             <span
-              className="nav-tab"
-              data-testid="nav-cover-video"
-              onClick={() => setView("cover-video")}
-              title="生成透明 HUD PNG demo"
+              className={`nav-tab${overlayNavActive ? " nav-tab--active" : ""}`}
+              data-testid="nav-overlay"
+              onClick={() => enterOverlay()}
+              title="选择记录并生成透明 HUD"
+              onMouseEnter={() => setNavHover("overlay")}
+              onMouseLeave={() => setNavHover(null)}
+              style={{
+                color: overlayNavActive ? "#FFFFFF" : navHover === "overlay" ? "#8EA8F2" : "rgba(255,255,255,0.82)",
+                transition: "color 300ms cubic-bezier(0.22, 1, 0.36, 1), background-color 300ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
             >
-              TELEMETRY VIDEO
+              OVERLAY
             </span>
-            <span className="nav-tab nav-tab--disabled" title="WiFi 设备下载于后续版本提供">
+            <span className="nav-tab nav-tab--disabled" title="WiFi 设备下载于后续版本提供" style={{ color: "rgba(255,255,255,0.42)" }}>
               WIFI DOWNLOAD
             </span>
           </nav>
-        ) : isCoverVideo ? (
-          <span className="app-shell__dataset-title" style={{ color: "#FFFFFF", fontFamily: '"F1 Display", sans-serif', fontWeight: 700, fontSize: "16px", letterSpacing: "2px", marginLeft: "20px", lineHeight: 1, whiteSpace: "nowrap" }}>
-            TELEMETRY VIDEO
-          </span>
         ) : (
           <span
             className="app-shell__dataset-title"
@@ -344,7 +372,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
 
         {/* 右侧按钮组 */}
         <div className="app-shell__tools" style={{ display: "flex", alignItems: "center", gap: "10px", flex: "none" }}>
-          {!isLibrary && !isCoverVideo && (
+          {!isLibrary && !isOverlay && !isSettings && (
             <>
               <GhostButton onRed testId="open-library" onClick={() => setView("library")} title="返回 DATABASE">
                 BACK
@@ -362,7 +390,11 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
               </GhostButton>
             </>
           )}
-          {isCoverVideo && <GhostButton onRed onClick={() => setView("library")} title="返回 DATABASE">BACK</GhostButton>}
+          {(isLibrary || isOverlay || isSettings) && (
+            <GhostButton onRed testId="open-settings" onClick={openSettings} title="打开当前页面的设置">
+              SETTINGS
+            </GhostButton>
+          )}
           <GhostButton onRed onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title="切换主题">
             {theme === "dark" ? "☾ Dark" : "☀ Light"}
           </GhostButton>
@@ -404,8 +436,10 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
       <main className="app-shell__main" style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
         {isLibrary ? (
           <LibraryView />
-        ) : isCoverVideo ? (
-          <CoverVideoView />
+        ) : isOverlay ? (
+          <OverlayView />
+        ) : isSettings ? (
+          <SettingsView scope={settingsScope} />
         ) : (
           <div
             style={{
@@ -459,19 +493,20 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
           data-testid="right-column"
           style={{ display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: "var(--bg)" }}
         >
-          <div style={{ height: `${trackMapHeight}px`, flex: "none", overflow: "hidden" }}>
+          <div style={{ height: `${trackMapSplitterEnabled ? trackMapHeight : 300}px`, flex: "none", overflow: "hidden" }}>
             {TrackMapPanelComponent && <TrackMapPanelComponent />}
           </div>
-          <div
-            role="separator"
-            aria-orientation="horizontal"
-            aria-label="调整 GPS 地图和详情面板比例"
-            onMouseDown={beginTrackMapResize}
-            style={{ height: "6px", flex: "none", cursor: "ns-resize", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)", background: "var(--bg2)" }}
-          />
+          {trackMapSplitterEnabled && (
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="调整 GPS 地图和详情面板比例"
+              onMouseDown={beginTrackMapResize}
+              style={{ height: "4px", flex: "none", cursor: "ns-resize", borderTop: "1px solid var(--line)", background: "transparent" }}
+            />
+          )}
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             {StatsPanelComponent && <StatsPanelComponent />}
-            {CommentsPanelComponent && <CommentsPanelComponent />}
           </div>
         </section>
           </div>
@@ -479,7 +514,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
       </main>
 
       {/* 状态栏 24px（B.2 保留）：--bg2 底 + 1px --line 上边线（分析视图） */}
-      {!isLibrary && !isCoverVideo && (
+      {!isLibrary && !isOverlay && !isSettings && (
       <footer
         className="app-shell__statusbar"
         style={{

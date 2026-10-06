@@ -1,0 +1,27 @@
+CREATE TABLE IF NOT EXISTS datasets (
+  file_hash TEXT PRIMARY KEY,
+  file_name TEXT NOT NULL,
+  file_type TEXT NOT NULL,
+  record_date DATE NOT NULL,
+  start_time TEXT NOT NULL,
+  session TEXT NOT NULL,
+  vehicle TEXT NOT NULL,
+  racer TEXT NOT NULL,
+  championship TEXT NOT NULL,
+  duration DOUBLE PRECISION NOT NULL DEFAULT 0,
+  sample_rate_hz DOUBLE PRECISION NOT NULL DEFAULT 0,
+  file_size BIGINT NOT NULL DEFAULT 0,
+  source_mtime_unix BIGINT NOT NULL DEFAULT 0,
+  storage_key TEXT,
+  is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS date_notes (
+  date_key DATE PRIMARY KEY,
+  note TEXT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_datasets_record_date ON datasets(record_date);
+CREATE INDEX IF NOT EXISTS idx_datasets_updated_at ON datasets(updated_at);

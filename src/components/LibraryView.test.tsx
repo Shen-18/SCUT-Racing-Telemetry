@@ -72,6 +72,32 @@ describe("cacheStateLabel", () => {
 });
 
 describe("LibraryHomeView", () => {
+  it("shows record and date note text outside the edit control", () => {
+    const html = renderToStaticMarkup(
+      <LibraryHomeView
+        records={[record({ file_hash: "noted", record_note: "检查刹车温度", date_note: "雨天测试" })]}
+        error={null}
+        query=""
+        category="time"
+        selectedGroup={null}
+        selected={new Set<string>()}
+        onQueryChange={() => {}}
+        onCategoryChange={() => {}}
+        onGroupChange={() => {}}
+        onOpen={() => {}}
+        onDelete={() => {}}
+        onRetry={() => {}}
+        onPickFiles={() => {}}
+        onToggleSelect={() => {}}
+        onExportOne={() => {}}
+        onExportSelected={() => {}}
+        onExportDay={() => {}}
+      />
+    );
+    expect(html).toContain("检查刹车温度");
+    expect(html).toContain("雨天测试");
+  });
+
   it("renders the compact detail columns without filename or cache state", () => {
     const html = renderToStaticMarkup(
       <LibraryHomeView

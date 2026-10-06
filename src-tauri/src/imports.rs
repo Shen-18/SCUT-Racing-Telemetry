@@ -263,7 +263,7 @@ impl AppState {
         }
     }
 
-    /// xrk/xrz：DLL 解析 → 全通道样本 → 网格化生成 raw/pyramid 缓存，并保留原始文件。
+    /// xrk/xrz：DLL 解析 → 全通道样本 → 生成 raw 缓存，并保留原始文件。
     async fn run_import_xrk(
         &self,
         id: u64,
@@ -336,7 +336,10 @@ impl AppState {
             }
         }
         for loaded_channel in loaded.channels {
-            if let Some(channel) = channels.iter_mut().find(|channel| channel.key == loaded_channel.key) {
+            if let Some(channel) = channels
+                .iter_mut()
+                .find(|channel| channel.key == loaded_channel.key)
+            {
                 channel.sample_rate_hz = loaded_channel.sample_rate_hz;
             }
         }
@@ -383,10 +386,19 @@ impl AppState {
                     "库内已存在相同数据的记录，未重复导入",
                 ));
             }
+            let directory_name = cache_core::CacheRoot::logical_dataset_name(&meta, &identity.hash);
             let mut cache = root
-                .publish_metadata(identity.clone(), meta, channels, laps)
+                .publish_metadata_named(
+                    identity.clone(),
+                    meta,
+                    channels,
+                    laps,
+                    Some(&directory_name),
+                )
                 .map_err(cache_error)?;
-            let dataset_dir = root.path().join("datasets").join(&identity.hash);
+            let dataset_dir = root
+                .dataset_path_for_hash(&identity.hash)
+                .map_err(cache_error)?;
             std::fs::copy(
                 &original_path,
                 dataset_dir.join(format!("source.{original_ext}")),
@@ -405,8 +417,7 @@ impl AppState {
                 if series.is_empty() {
                     continue;
                 }
-                cache.build_overview(key, series).map_err(cache_error)?;
-                cache.build_pyramid(key).map_err(cache_error)?;
+                cache.write_raw(key, series).map_err(cache_error)?;
             }
             cache.mark_ready().map_err(cache_error)?;
             Ok(identity.hash)
@@ -416,6 +427,7 @@ impl AppState {
         let hash = build.inspect_err(|error| {
             fail_job(self, id, &error.message);
         })?;
+        self.index_dataset(&hash)?;
         if let Some(mut job) = self.jobs.get_mut(&id) {
             if job.status.stage.is_terminal() {
                 return Ok(());
@@ -448,6 +460,7 @@ impl AppState {
             return Ok(());
         }
         let source = path.clone();
+        let hash = identity.hash.clone();
         let parsed = tauri::async_runtime::spawn_blocking(move || {
             csv_parser::parse_csv(&source).map_err(|e| command_error("csv_error", e))
         })
@@ -465,11 +478,21 @@ impl AppState {
             job.transition(ImportStage::BuildingRawCache)?;
         }
         let root = self.cache.clone();
+        let directory_name =
+            cache_core::CacheRoot::logical_dataset_name(&parsed.meta, &identity.hash);
         let build = tauri::async_runtime::spawn_blocking(move || -> Result<(), CmdError> {
             let mut cache = root
-                .publish_metadata(identity.clone(), parsed.meta, parsed.channels, parsed.laps)
+                .publish_metadata_named(
+                    identity.clone(),
+                    parsed.meta,
+                    parsed.channels,
+                    parsed.laps,
+                    Some(&directory_name),
+                )
                 .map_err(cache_error)?;
-            let dataset_dir = root.path().join("datasets").join(&identity.hash);
+            let dataset_dir = root
+                .dataset_path_for_hash(&identity.hash)
+                .map_err(cache_error)?;
             std::fs::copy(&path, dataset_dir.join("source.csv")).map_err(io_err)?;
             let channel_keys: Vec<String> = cache
                 .manifest()
@@ -482,8 +505,7 @@ impl AppState {
                     .series
                     .get(key)
                     .ok_or_else(|| command_error("channel_not_found", key))?;
-                cache.build_overview(key, series).map_err(cache_error)?;
-                cache.build_pyramid(key).map_err(cache_error)?;
+                cache.write_raw(key, series).map_err(cache_error)?;
             }
             cache.mark_ready().map_err(cache_error)
         })
@@ -492,6 +514,7 @@ impl AppState {
         build.inspect_err(|error| {
             fail_job(self, id, &error.message);
         })?;
+        self.index_dataset(&hash)?;
         if let Some(mut job) = self.jobs.get_mut(&id) {
             if job.status.stage.is_terminal() {
                 return Ok(());
@@ -775,7 +798,11 @@ mod integration_tests {
             "expected physical sensor duration 641.406, got {duration}"
         );
         assert!(
-            !cached.manifest().channels.iter().any(|c| c.meta.source == telemetry_core::ChannelSource::Gps),
+            !cached
+                .manifest()
+                .channels
+                .iter()
+                .any(|c| c.meta.source == telemetry_core::ChannelSource::Gps),
             "AiM interpolated GPS channels should not be imported"
         );
         let _ = std::fs::remove_dir_all(cache_dir);

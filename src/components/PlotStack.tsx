@@ -21,14 +21,9 @@ import { getDatasetDuration } from "../api/dataset";
 
 const ZOOM_FACTOR = 1.18;
 const MAX_VISIBLE_SAMPLE_POINTS = 500;
-// 两阶段取数：窗口一变先发金字塔低清预览（拖动中按节流合并），停顿后
-// 再发 raw 精确请求。若每次窗口变化都整窗全样本拉取，拖动会形成请求风暴，
-// 最新数据永远排在队尾 —— 新露出的区域要等很久才被填充。
+// 窗口变化时直接读取 raw 全量样本；请求仍按节流合并，避免拖动时形成请求风暴。
 const PREVIEW_THROTTLE_MS = 60;
 const RAW_DEBOUNCE_MS = 200;
-// 最粗金字塔层 ≤512 桶，预览像素低于 256 会选不出层级（budget = pixels*2）。
-const PREVIEW_PIXELS_MIN = 512;
-const PREVIEW_PIXELS_MAX = 1024;
 
 function previewThrottleDelay(lastFireAt: number, now: number): number {
   if (lastFireAt <= 0) return 0;
@@ -118,9 +113,6 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
     };
   }, []);
 
-  const previewPixels = () =>
-    Math.min(PREVIEW_PIXELS_MAX, Math.max(PREVIEW_PIXELS_MIN, containerRef.current?.clientWidth || 600));
-
   const firePreviewRequest = (
     req: { datasetId: number; channelKey: string; start: number; end: number; generation: number }
   ) => {
@@ -129,7 +121,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
     setError(null);
     setBuilding(false);
     client
-      .windowSeries(req.datasetId, req.channelKey, req.start, req.end, previewPixels(), req.generation)
+      .windowSeries(req.datasetId, req.channelKey, req.start, req.end, 0xffffffff, req.generation)
       .then((next) => {
         if (!aliveRef.current) return;
         setLoading(false);
@@ -150,7 +142,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
       });
   };
 
-  // 阶段一：金字塔低清预览。连续窗口变化按节流合并（leading + trailing），
+  // 连续窗口变化按节流合并（leading + trailing），
   // 响应仍按 generation 校验，过期帧直接丢弃。
   useEffect(() => {
     const pending = { datasetId, channelKey, start: window.start, end: window.end, generation };
@@ -175,8 +167,7 @@ const ChannelChart: React.FC<ChannelChartProps> = ({
     }
   }, [datasetId, channelKey, window.start, window.end, generation, importJobs]);
 
-  // 阶段二：窗口停顿后发 raw 精确请求（u32::MAX = 每个真实样本）。
-  // 静默替换预览帧；错误由预览阶段负责上报。
+  // 窗口停顿后再次发 raw 精确请求，确保拖动结束后拿到完整窗口。
   useEffect(() => {
     const reqGen = generation;
     const timer = globalThis.setTimeout(() => {

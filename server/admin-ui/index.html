@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SCUT Racing Telemetry · 管理员</title>
+    <link rel="stylesheet" href="/admin/admin.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">SCUT RACING TELEMETRY</div>
+          <h1>管理员数据管理</h1>
+        </div>
+        <div class="server-state" id="server-state">连接中…</div>
+      </header>
+
+      <section class="panel">
+        <div class="panel-title"><span></span>日期备注</div>
+        <form id="note-form" class="note-form">
+          <input id="note-date" type="date" required />
+          <input id="note-value" type="text" maxlength="2000" placeholder="填写当天备注" />
+          <button type="submit">保存备注</button>
+        </form>
+        <div id="note-list" class="note-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title"><span></span>数据集索引</div>
+        <p class="hint">先上传原始文件，再补充元信息并登记。当前文件保存在测试服务的 `server/data/uploads`，正式部署时替换为对象存储。</p>
+        <div class="upload-row">
+          <input id="upload-file" type="file" />
+          <button id="upload-button" type="button">上传原始文件</button>
+        </div>
+        <form id="dataset-form" class="dataset-form">
+          <input name="file_hash" required placeholder="文件 SHA-256" />
+          <input name="file_name" required placeholder="文件名" />
+          <input name="file_type" required placeholder="类型，例如 csv" value="csv" />
+          <input name="record_date" required type="date" />
+          <input name="start_time" required placeholder="开始时间" />
+          <input name="session" required placeholder="场次" />
+          <input name="vehicle" required placeholder="车辆" />
+          <input name="racer" required placeholder="车手" />
+          <input name="championship" required placeholder="赛事" />
+          <input name="duration" type="number" min="0" step="0.001" placeholder="时长" value="0" />
+          <input name="sample_rate_hz" type="number" min="0" step="0.001" placeholder="采样率" value="0" />
+          <input name="file_size" type="number" min="0" step="1" placeholder="文件大小" value="0" />
+          <button type="submit">登记 / 更新数据集</button>
+        </form>
+        <div id="dataset-list" class="dataset-list"></div>
+      </section>
+
+      <div id="message" class="message" hidden></div>
+    </main>
+    <script type="module" src="/admin/admin.js"></script>
+  </body>
+</html>

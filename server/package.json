@@ -1,0 +1,10 @@
+{
+  "name": "scut-telemetry-sync-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SCUT Racing Telemetry 云端同步服务（容器内依赖清单，仅 pg）",
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
+}

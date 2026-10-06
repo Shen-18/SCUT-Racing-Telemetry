@@ -393,7 +393,8 @@ export function createStackedOptions({
         stroke: theme.textMuted,
         grid: { stroke: theme.borderSubtle, width: 1 },
         ticks: { stroke: theme.border, width: 1 },
-        values: (_u, vals) => formatAxisValues(vals, unit ? ` ${unit}` : ""),
+        // Units belong in the channel legend; keep y-axis ticks numeric.
+        values: (_u, vals) => formatAxisValues(vals),
       },
     ],
     cursor: {

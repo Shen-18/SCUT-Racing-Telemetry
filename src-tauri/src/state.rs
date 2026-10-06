@@ -10,14 +10,17 @@ use std::{
     },
 };
 use telemetry_ipc::{CmdError, ImportStatus};
+use telemetry_store::TelemetryStore;
 
 pub type CommandResult<T> = Result<T, CmdError>;
 
 pub struct AppState {
     pub cache: CacheRoot,
+    pub store: Arc<TelemetryStore>,
     pub aim: aim_ffi::AimActor,
     pub datasets: DashMap<u64, Arc<DatasetCache>>,
     pub jobs: DashMap<u64, ImportJob>,
+    pub overlay_jobs: DashMap<u64, Arc<crate::overlay_export::OverlayJob>>,
     pub(crate) imports: std::sync::Mutex<std::collections::HashMap<String, u64>>,
     /// zip 解包临时目录 → 未完成内部文件引用计数；归零即删除目录。
     pub(crate) temp_dirs: std::sync::Mutex<std::collections::HashMap<PathBuf, usize>>,
@@ -42,14 +45,25 @@ pub fn cache_error(error: CacheError) -> CmdError {
     command_error(code, error)
 }
 
+pub fn store_error(error: telemetry_store::StoreError) -> CmdError {
+    command_error("store_error", error)
+}
+
 impl AppState {
     pub fn new(cache_path: &Path, dll_path: &Path) -> CommandResult<Self> {
+        let cache = CacheRoot::open(cache_path).map_err(cache_error)?;
+        cache.migrate_legacy_layout().map_err(cache_error)?;
+        let store =
+            TelemetryStore::open(&cache.path().join("telemetry.db")).map_err(store_error)?;
+        store.reconcile_cache(cache.path()).map_err(store_error)?;
         Ok(Self {
-            cache: CacheRoot::open(cache_path).map_err(cache_error)?,
+            cache,
+            store: Arc::new(store),
             temp_dirs: std::sync::Mutex::new(std::collections::HashMap::new()),
             aim: aim_ffi::AimActor::spawn(dll_path).map_err(|e| command_error("dll_error", e))?,
             datasets: DashMap::new(),
             jobs: DashMap::new(),
+            overlay_jobs: DashMap::new(),
             next_id: AtomicU64::new(1),
             imports: std::sync::Mutex::new(std::collections::HashMap::new()),
         })
@@ -90,6 +104,20 @@ impl AppState {
         Ok(id)
     }
 
+    pub fn index_dataset(&self, hash: &str) -> CommandResult<()> {
+        let dataset = self.cache.dataset(hash).map_err(cache_error)?;
+        self.store
+            .upsert_manifest(
+                dataset.manifest(),
+                &self
+                    .cache
+                    .dataset_relative_path(hash)
+                    .map_err(cache_error)?,
+            )
+            .map_err(store_error)?;
+        Ok(())
+    }
+
     pub fn close_dataset(&self, id: u64) -> CommandResult<()> {
         self.datasets
             .remove(&id)
@@ -100,7 +128,8 @@ impl AppState {
     /// Deletes one dataset's cache directory (library-home record deletion).
     /// Closes any open handle first; the source file is never touched (D10).
     pub fn purge_hash(&self, hash: &str) -> CommandResult<u64> {
-        // The hash becomes a directory name; only a plain 64-char hex digest is valid.
+        // The hash remains the stable identity; the physical directory may use
+        // a readable name and is resolved through its manifest.
         if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
             return Err(command_error("invalid_hash", hash));
         }
@@ -116,12 +145,17 @@ impl AppState {
                 purged += 1;
             }
         }
-        let dir = self.cache.path().join("datasets").join(hash);
-        match std::fs::remove_dir_all(&dir) {
-            Ok(()) => Ok(purged + 1),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(purged),
-            Err(e) => Err(command_error("io_error", e)),
-        }
+        let dir = self
+            .cache
+            .dataset_path_for_hash(hash)
+            .map_err(cache_error)?;
+        let removed = match std::fs::remove_dir_all(&dir) {
+            Ok(()) => 1,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => 0,
+            Err(e) => return Err(command_error("io_error", e)),
+        };
+        self.store.delete_by_hash(hash).map_err(store_error)?;
+        Ok(purged + removed)
     }
 
     /// 登记一个 zip 解包目录及其内部待导入文件数。
@@ -173,11 +207,13 @@ impl AppState {
         channel: &str,
         start: f64,
         end: f64,
-        pixels: u32,
+        _pixels: u32,
         generation: u64,
     ) -> CommandResult<Vec<u8>> {
         self.dataset(id)?
-            .read_window_frame(channel, start, end, pixels, generation)
+            // Raw mode returns every native sample. Keep the pixels argument in
+            // the IPC contract for compatibility with older clients.
+            .read_window_frame(channel, start, end, u32::MAX, generation)
             .map_err(cache_error)
     }
 }
@@ -185,6 +221,8 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cache_core::SourceIdentity;
+    use telemetry_core::{ChannelDType, ChannelMeta, ChannelSource, SessionMeta};
     #[test]
     fn unknown_entities_are_not_fabricated_as_success() {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
@@ -207,5 +245,44 @@ mod tests {
                 .code,
             "dataset_not_found"
         );
+    }
+
+    #[test]
+    fn startup_reconciles_existing_manifest_into_store() {
+        let cache_path =
+            std::env::temp_dir().join(format!("step4-reconcile-{}", std::process::id()));
+        let root = cache_core::CacheRoot::open(&cache_path).unwrap();
+        let hash = "b".repeat(64);
+        root.publish_metadata(
+            SourceIdentity {
+                hash: hash.clone(),
+                mtime: 42,
+                size: 10,
+            },
+            SessionMeta {
+                file_path: "D:/runs/reconcile.csv".into(),
+                file_type: "csv".into(),
+                racer: "Driver".into(),
+                ..Default::default()
+            },
+            vec![ChannelMeta {
+                dtype: ChannelDType::Numeric,
+                key: "Speed".into(),
+                name: "Speed".into(),
+                unit: "km/h".into(),
+                source: ChannelSource::Csv,
+                sample_rate_hz: 50.0,
+            }],
+            vec![],
+        )
+        .unwrap();
+        let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+        let state = AppState::new(
+            &cache_path,
+            &workspace_root.join("TestMatLabXRK/DLL-2022/MatLabXRK-2022-64-ReleaseU.dll"),
+        )
+        .unwrap();
+        assert_eq!(state.store.list_records("driver").unwrap().len(), 1);
+        let _ = std::fs::remove_dir_all(cache_path);
     }
 }

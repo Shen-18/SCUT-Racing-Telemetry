@@ -33,6 +33,7 @@ describe("appStore", () => {
       importJobs: {},
       currentFrame: null,
       openingFileHash: null,
+      rememberSelectedChannels: false,
     });
   });
 
@@ -167,6 +168,25 @@ describe("appStore", () => {
     expect(state.window).toEqual({ start: 0, end: 35.5 });
     expect(state.checkedChannels).toContain("Speed");
     expect(state.generation).toBeGreaterThan(0);
+  });
+
+  it("restores the saved channel selection for the same record", async () => {
+    const meta: client.DatasetMeta = {
+      id: 12,
+      file_hash: "saved-selection",
+      meta: sessionMeta(35.5),
+      channels: [
+        { key: "Speed", name: "Speed", unit: "km/h", dtype: "Numeric", source: "AiM", sample_rate_hz: 50 },
+        { key: "RPM", name: "RPM", unit: "rpm", dtype: "Numeric", source: "AiM", sample_rate_hz: 50 },
+      ],
+    };
+    vi.spyOn(client, "openDataset").mockResolvedValueOnce(meta);
+    vi.spyOn(client, "selectedChannels").mockResolvedValueOnce(["RPM"]);
+    useAppStore.setState({ rememberSelectedChannels: true });
+
+    await useAppStore.getState().openDataset(meta.file_hash);
+
+    expect(useAppStore.getState().checkedChannels).toEqual(["RPM"]);
   });
 
   it("uses the duration from the real nested DatasetMeta response", async () => {

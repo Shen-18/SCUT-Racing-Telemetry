@@ -34,6 +34,8 @@ export interface RecordSummary {
   file_size:number;
   source_mtime_unix:number;
   cache_state:string;
+  record_note?: string;
+  date_note?: string;
 }
 
 

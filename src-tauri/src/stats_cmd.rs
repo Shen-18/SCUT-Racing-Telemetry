@@ -58,20 +58,38 @@ mod tests {
     }
 
     fn write_raw(cache: &CacheRoot) {
-        cache.publish_metadata(
-            SourceIdentity { hash: HASH.into(), mtime: 1, size: 1 },
-            SessionMeta { duration: 2.0, ..Default::default() },
-            vec![ChannelMeta {
-                dtype: ChannelDType::Numeric,
-                key: "Speed".into(), name: "Speed".into(), unit: "km/h".into(),
-                source: ChannelSource::Csv, sample_rate_hz: 2.0,
-            }],
-            vec![],
-        ).unwrap();
-        cache.publish_raw(HASH, "Speed", &ChannelSeries {
-            times: vec![0.0, 0.5, 1.0, 1.5, 2.0],
-            values: vec![10.0, 20.0, 30.0, 40.0, 50.0],
-        }).unwrap();
+        cache
+            .publish_metadata(
+                SourceIdentity {
+                    hash: HASH.into(),
+                    mtime: 1,
+                    size: 1,
+                },
+                SessionMeta {
+                    duration: 2.0,
+                    ..Default::default()
+                },
+                vec![ChannelMeta {
+                    dtype: ChannelDType::Numeric,
+                    key: "Speed".into(),
+                    name: "Speed".into(),
+                    unit: "km/h".into(),
+                    source: ChannelSource::Csv,
+                    sample_rate_hz: 2.0,
+                }],
+                vec![],
+            )
+            .unwrap();
+        cache
+            .publish_raw(
+                HASH,
+                "Speed",
+                &ChannelSeries {
+                    times: vec![0.0, 0.5, 1.0, 1.5, 2.0],
+                    values: vec![10.0, 20.0, 30.0, 40.0, 50.0],
+                },
+            )
+            .unwrap();
     }
 
     #[test]

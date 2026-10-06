@@ -6,11 +6,15 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tsc --noEmit -p config/frontend/tsconfig.json && vite build --config config/frontend/vite.config.ts",
+    "build:exe": "tauri build --no-bundle --features custom-protocol",
     "typecheck": "tsc --noEmit -p config/frontend/tsconfig.json",
     "lint": "eslint src config/frontend --config config/frontend/eslint.config.js --max-warnings 0",
     "test": "vitest run --config config/frontend/vite.config.ts",
     "tauri": "tauri",
     "dev:web": "vite --config config/frontend/vite.config.ts",
+    "server:local": "node server/local-server.mjs",
+    "server:start": "pwsh -NoProfile -ExecutionPolicy Bypass -File server/start-server.ps1",
+    "server:test": "node --test server/server.test.mjs",
     "check": "pwsh -NoProfile -File tests/tooling/check.ps1"
   },
   "devDependencies": {
@@ -28,6 +32,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
+    "pg": "^8.23.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwindcss": "^3.4.0",

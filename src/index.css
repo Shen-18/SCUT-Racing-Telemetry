@@ -101,21 +101,21 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--border-focu
   background: rgba(255, 255, 255, 0.12) !important;
 }
 
-/* 资料库导航 tab（P8 顶栏）：激活 = 白字 + 2px 红下划线 */
-/* 一级栏导航 tab（9.5）：红底白字，激活态白色下划线（F1 转播栏样式） */
+/* 一级栏导航 tab：使用文字颜色表达当前可切换状态，不绘制底部长条。 */
 .nav-tab {
   display: flex;
-  align-items: flex-end;
-  padding: 0 16px 9px;
+  align-items: center;
+  height: 100%;
+  padding: 0 16px;
+  line-height: 1;
   font-family: "F1 Display", sans-serif;
   font-weight: 700;
   font-size: 14px;
   letter-spacing: 2px;
   color: rgba(255, 255, 255, 0.75);
-  border-bottom: 3px solid transparent;
   cursor: pointer;
   user-select: none;
-  transition: color 100ms cubic-bezier(0.2, 0, 0, 1);
+  transition: color 300ms cubic-bezier(0.22, 1, 0.36, 1), opacity 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav-tab:hover:not(.nav-tab--disabled) {
@@ -124,7 +124,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--border-focu
 
 .nav-tab--active {
   color: #ffffff;
-  border-bottom-color: #ffffff;
 }
 
 .nav-tab--disabled {

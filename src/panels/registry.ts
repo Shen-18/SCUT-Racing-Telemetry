@@ -2,14 +2,13 @@ import type React from "react";
 import { ChannelTree } from "./ChannelTree";
 import { PlotStack } from "../components/PlotStack";
 import { StatsPanel } from "./StatsPanel";
-import { CommentsPanel } from "./CommentsPanel";
 import { TrackMapPanel } from "./TrackMapPanel";
 
-// D16：dockview 已移除，面板挂固定三栏容器；registry 仅保留"组件 + 归属栏"语义。
+// D16：dockview 已移除，面板挂固定三栏容器；registry 仅保留“组件 + 归属栏”语义。
 export type PanelProps = Record<string, never>;
 
 export interface PanelDef {
-  id: string; // 'channel-tree' | 'plot-stack' | 'stats' | 'comments' | 'track-map'
+  id: string;
   title: string;
   component: React.FC<PanelProps>;
   defaultLocation: "left" | "right" | "center";
@@ -42,13 +41,6 @@ export const PANELS: PanelDef[] = [
     id: "stats",
     title: "统计 (Stats)",
     component: StatsPanel,
-    defaultLocation: "right",
-    minWidth: 240,
-  },
-  {
-    id: "comments",
-    title: "批注 (Comments)",
-    component: CommentsPanel,
     defaultLocation: "right",
     minWidth: 240,
   },

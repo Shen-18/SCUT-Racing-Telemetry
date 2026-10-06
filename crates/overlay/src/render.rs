@@ -1,12 +1,202 @@
-use crate::layout::{DemoFrame, CANVAS_HEIGHT, CANVAS_WIDTH, GREEN, RED, WHITE};
+use crate::{
+    bindings::{GpsRoute, OverlayFrame},
+    layout::{DemoFrame, RenderConfig, GREEN, RED, WHITE},
+};
 use ab_glyph::{point, Font, FontArc, PxScale, ScaleFont};
-use std::{f32::consts::PI, fs, io::Cursor, path::Path};
+use std::{
+    collections::HashMap,
+    f32::consts::PI,
+    fs,
+    io::Cursor,
+    path::Path,
+    sync::{Mutex, OnceLock},
+};
 use thiserror::Error;
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, PixmapPaint, Stroke, Transform};
 const LOGO: &[u8] = include_bytes!("../assets/logo_white.png");
 const REG: &[u8] = include_bytes!("../assets/Formula1-Display-Regular.ttf");
 const BOLD: &[u8] = include_bytes!("../assets/Formula1-Display-Bold.ttf");
 const SECTIONS: [f32; 8] = [0., 305., 600., 800., 1215., 1371., 1570., 1920.];
+const GPS_BASE_WIDTH: f64 = 285.;
+const GPS_BASE_HEIGHT: f64 = 158.;
+
+#[derive(Debug, Clone, Default)]
+pub struct RenderContext {
+    pub gps: Option<GpsGeometry>,
+    pub vehicle: String,
+    pub racer: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct GpsGeometry {
+    pub points: Vec<(f32, f32)>,
+    raw_points: Vec<(f64, f64)>,
+    origin_lat: f64,
+    origin_lon: f64,
+    scale: f64,
+    center_x: f64,
+    center_y: f64,
+    map_width: f64,
+    map_height: f64,
+}
+
+impl GpsGeometry {
+    pub fn from_route(route: &GpsRoute) -> Option<Self> {
+        if route.points.len() < 2 {
+            return None;
+        }
+        let origin_lat = median(route.points.iter().map(|point| point.latitude));
+        let origin_lon = median(route.points.iter().map(|point| point.longitude));
+        let latitude_factor = origin_lat.to_radians().cos();
+        let raw: Vec<(f64, f64)> = route
+            .points
+            .iter()
+            .map(|point| {
+                (
+                    (point.longitude - origin_lon) * 111_320. * latitude_factor,
+                    -(point.latitude - origin_lat) * 111_320.,
+                )
+            })
+            .collect();
+        let mut geometry = Self {
+            points: Vec::new(),
+            raw_points: raw,
+            origin_lat,
+            origin_lon,
+            scale: 1.,
+            center_x: 0.,
+            center_y: 0.,
+            map_width: GPS_BASE_WIDTH,
+            map_height: GPS_BASE_HEIGHT,
+        };
+        geometry.refit_for_map(GPS_BASE_WIDTH, GPS_BASE_HEIGHT);
+        Some(geometry)
+    }
+
+    /// Refit the complete route into the exact available map rectangle.
+    /// Python recomputes this for `(w, h)` on the bottom bar, so the Rust
+    /// renderer must not stretch a fixed 285×158 normalization into it.
+    pub fn refit_for_map(&mut self, width: f64, height: f64) {
+        if self.raw_points.is_empty() || width <= 0. || height <= 0. {
+            return;
+        }
+        let min_x = self
+            .raw_points
+            .iter()
+            .map(|point| point.0)
+            .fold(f64::INFINITY, f64::min);
+        let max_x = self
+            .raw_points
+            .iter()
+            .map(|point| point.0)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let min_y = self
+            .raw_points
+            .iter()
+            .map(|point| point.1)
+            .fold(f64::INFINITY, f64::min);
+        let max_y = self
+            .raw_points
+            .iter()
+            .map(|point| point.1)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let span_x = (max_x - min_x).max(1e-6);
+        let span_y = (max_y - min_y).max(1e-6);
+        self.scale = ((width - 8.) / span_x).min((height - 8.) / span_y);
+        self.center_x = (max_x + min_x) / 2.;
+        self.center_y = (max_y + min_y) / 2.;
+        self.map_width = width;
+        self.map_height = height;
+        self.points = self
+            .raw_points
+            .iter()
+            .map(|point| {
+                (
+                    ((point.0 - self.center_x) * self.scale + width / 2.) as f32 / width as f32,
+                    ((point.1 - self.center_y) * self.scale + height / 2.) as f32 / height as f32,
+                )
+            })
+            .collect();
+    }
+
+    fn project(&self, latitude: f32, longitude: f32) -> Option<(f32, f32)> {
+        if !latitude.is_finite() || !longitude.is_finite() {
+            return None;
+        }
+        let latitude_factor = self.origin_lat.to_radians().cos();
+        let x = (longitude as f64 - self.origin_lon) * 111_320. * latitude_factor;
+        let y = -(latitude as f64 - self.origin_lat) * 111_320.;
+        Some((
+            ((x - self.center_x) * self.scale + self.map_width / 2.) as f32 / self.map_width as f32,
+            ((y - self.center_y) * self.scale + self.map_height / 2.) as f32
+                / self.map_height as f32,
+        ))
+    }
+}
+
+/// Exact map size from the Python bottom-bar layout for a render canvas.
+pub fn gps_map_size(config: RenderConfig) -> (f64, f64) {
+    let scale = config.width as f64 / 1920.;
+    let section_width = 305. * scale;
+    let padding = 15. * scale;
+    let bar_height = 172. * scale;
+    (
+        (285. * scale).min(section_width - 2. * padding),
+        (158. * scale).min(bar_height - 26. * scale),
+    )
+}
+
+fn median(values: impl Iterator<Item = f64>) -> f64 {
+    let mut values: Vec<f64> = values.collect();
+    values.sort_by(f64::total_cmp);
+    let middle = values.len() / 2;
+    if values.len() % 2 == 0 {
+        (values[middle - 1] + values[middle]) / 2.0
+    } else {
+        values[middle]
+    }
+}
+
+struct RenderAssets {
+    regular: FontArc,
+    bold: FontArc,
+}
+
+static RENDER_ASSETS: OnceLock<RenderAssets> = OnceLock::new();
+
+fn render_assets() -> &'static RenderAssets {
+    RENDER_ASSETS.get_or_init(|| RenderAssets {
+        regular: FontArc::try_from_slice(REG).expect("embedded regular font is valid"),
+        bold: FontArc::try_from_slice(BOLD).expect("embedded bold font is valid"),
+    })
+}
+
+static LOGO_SOURCE: OnceLock<Pixmap> = OnceLock::new();
+static LOGO_SIZES: OnceLock<Mutex<HashMap<u32, Pixmap>>> = OnceLock::new();
+
+fn logo_source() -> &'static Pixmap {
+    LOGO_SOURCE.get_or_init(|| {
+        let decoder = png::Decoder::new(Cursor::new(LOGO));
+        let mut reader = decoder.read_info().expect("embedded logo is valid");
+        let mut buffer = vec![0; reader.output_buffer_size()];
+        let info = reader
+            .next_frame(&mut buffer)
+            .expect("embedded logo decodes");
+        let mut pixels = Vec::with_capacity(info.buffer_size());
+        for pixel in buffer[..info.buffer_size()].chunks_exact(4) {
+            let alpha = pixel[3] as u16;
+            pixels.extend([
+                ((pixel[0] as u16 * alpha + 127) / 255) as u8,
+                ((pixel[1] as u16 * alpha + 127) / 255) as u8,
+                ((pixel[2] as u16 * alpha + 127) / 255) as u8,
+                pixel[3],
+            ]);
+        }
+        let size = tiny_skia::IntSize::from_wh(info.width, info.height)
+            .expect("embedded logo has a valid size");
+        Pixmap::from_vec(pixels, size).expect("embedded logo pixels are valid")
+    })
+}
 #[derive(Debug, Error)]
 pub enum RenderError {
     #[error("create output: {0}")]
@@ -25,28 +215,204 @@ pub struct RenderReport {
     pub bytes: Vec<u8>,
 }
 pub fn render_demo_png(path: impl AsRef<Path>) -> Result<RenderReport, RenderError> {
-    let mut pm = Pixmap::new(CANVAS_WIDTH, CANVAS_HEIGHT)
-        .ok_or_else(|| RenderError::Asset("canvas".into()))?;
-    let reg = FontArc::try_from_slice(REG).map_err(|e| RenderError::Asset(e.to_string()))?;
-    let bold = FontArc::try_from_slice(BOLD).map_err(|e| RenderError::Asset(e.to_string()))?;
-    let s = CANVAS_WIDTH as f32 / 1920.;
-    let f = DemoFrame::sample();
-    draw_logo(&mut pm, s)?;
-    timing(&mut pm, s, f, &reg, &bold);
-    bottom(&mut pm, s, f, &reg, &bold);
+    render_png(path, DemoFrame::sample())
+}
+
+pub fn render_png(path: impl AsRef<Path>, f: DemoFrame) -> Result<RenderReport, RenderError> {
+    render_png_with_config(path, f, RenderConfig::default())
+}
+
+pub fn render_png_with_config(
+    path: impl AsRef<Path>,
+    f: DemoFrame,
+    config: RenderConfig,
+) -> Result<RenderReport, RenderError> {
+    render_png_with_context(path, f, config, &RenderContext::default())
+}
+
+pub fn render_png_with_context(
+    path: impl AsRef<Path>,
+    f: DemoFrame,
+    config: RenderConfig,
+    context: &RenderContext,
+) -> Result<RenderReport, RenderError> {
+    let pm = draw_frame(&f, config, context)?;
     let bytes = pm
         .encode_png()
         .map_err(|e| RenderError::Encode(e.to_string()))?;
-    if let Some(p) = path.as_ref().parent() {
-        fs::create_dir_all(p).map_err(RenderError::CreateOutput)?;
+    if let Some(parent) = path.as_ref().parent() {
+        fs::create_dir_all(parent).map_err(RenderError::CreateOutput)?;
     }
     fs::write(path, &bytes).map_err(RenderError::Write)?;
     Ok(RenderReport {
-        width: CANVAS_WIDTH,
-        height: CANVAS_HEIGHT,
+        width: config.width,
+        height: config.height,
         bytes,
     })
 }
+
+pub fn render_rgba(frame: &OverlayFrame, config: RenderConfig) -> Result<Vec<u8>, RenderError> {
+    render_rgba_with_context(frame, config, &RenderContext::default())
+}
+
+pub fn render_rgba_with_context(
+    frame: &OverlayFrame,
+    config: RenderConfig,
+    context: &RenderContext,
+) -> Result<Vec<u8>, RenderError> {
+    let demo = DemoFrame {
+        time_seconds: frame.video_time,
+        speed_kmh: frame.speed_kmh,
+        soc_percent: frame.soc_percent,
+        voltage: frame.voltage,
+        power_kw: frame.power_kw,
+        current_a: frame.current_a,
+        steer_deg: frame.steer_deg,
+        throttle_percent: frame.throttle_percent,
+        brake_percent: frame.brake_percent,
+        g_x: frame.g_x,
+        g_y: frame.g_y,
+        gps_latitude: frame.gps_latitude,
+        gps_longitude: frame.gps_longitude,
+        torque_nm: frame.torque_nm,
+    };
+    render_rgba_with_context_for_demo(&demo, config, context)
+}
+
+pub fn render_overlay_png_with_context(
+    path: impl AsRef<Path>,
+    frame: &OverlayFrame,
+    config: RenderConfig,
+    context: &RenderContext,
+) -> Result<RenderReport, RenderError> {
+    let demo = DemoFrame {
+        time_seconds: frame.video_time,
+        speed_kmh: frame.speed_kmh,
+        soc_percent: frame.soc_percent,
+        voltage: frame.voltage,
+        power_kw: frame.power_kw,
+        current_a: frame.current_a,
+        steer_deg: frame.steer_deg,
+        throttle_percent: frame.throttle_percent,
+        brake_percent: frame.brake_percent,
+        g_x: frame.g_x,
+        g_y: frame.g_y,
+        gps_latitude: frame.gps_latitude,
+        gps_longitude: frame.gps_longitude,
+        torque_nm: frame.torque_nm,
+    };
+    let pm = draw_frame(&demo, config, context)?;
+    let bytes = pm
+        .encode_png()
+        .map_err(|error| RenderError::Encode(error.to_string()))?;
+    if let Some(parent) = path.as_ref().parent() {
+        fs::create_dir_all(parent).map_err(RenderError::CreateOutput)?;
+    }
+    fs::write(path, &bytes).map_err(RenderError::Write)?;
+    Ok(RenderReport {
+        width: config.width,
+        height: config.height,
+        bytes,
+    })
+}
+
+pub fn render_rgba_with_config(
+    frame: &DemoFrame,
+    config: RenderConfig,
+) -> Result<Vec<u8>, RenderError> {
+    render_rgba_with_context_for_demo(frame, config, &RenderContext::default())
+}
+
+fn render_rgba_with_context_for_demo(
+    frame: &DemoFrame,
+    config: RenderConfig,
+    context: &RenderContext,
+) -> Result<Vec<u8>, RenderError> {
+    // tiny-skia stores premultiplied RGBA; FFmpeg expects straight RGBA.
+    let mut pixels = draw_frame(frame, config, context)?.data().to_vec();
+    for pixel in pixels.chunks_exact_mut(4) {
+        let alpha = pixel[3] as u32;
+        if alpha > 0 && alpha < 255 {
+            for component in &mut pixel[..3] {
+                *component = ((*component as u32 * 255 + alpha / 2) / alpha).min(255) as u8;
+            }
+        }
+    }
+    Ok(pixels)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{display_name, fmt_clock, fmt_num, gforce_labels, median};
+
+    #[test]
+    fn missing_numbers_are_rendered_as_an_em_dash() {
+        assert_eq!(fmt_num(f32::NAN, 1), "—");
+        assert_eq!(fmt_num(f32::INFINITY, 0), "—");
+    }
+
+    #[test]
+    fn gforce_labels_use_the_current_frame_values() {
+        assert_eq!(
+            gforce_labels(0.812, -0.437),
+            ("X 0.81".into(), "-0.44".into())
+        );
+    }
+
+    #[test]
+    fn missing_clock_is_rendered_as_an_em_dash() {
+        assert_eq!(fmt_clock(f32::NAN), "—");
+    }
+
+    #[test]
+    fn empty_metadata_name_is_rendered_as_an_em_dash() {
+        assert_eq!(display_name(" SCUT-24 "), "SCUT-24");
+        assert_eq!(display_name(""), "—");
+    }
+
+    #[test]
+    fn gps_median_matches_numpy_for_even_routes() {
+        assert_eq!(median([1.0, 3.0].into_iter()), 2.0);
+    }
+}
+
+fn draw_frame(
+    frame: &DemoFrame,
+    config: RenderConfig,
+    context: &RenderContext,
+) -> Result<Pixmap, RenderError> {
+    if !config.validate() {
+        return Err(RenderError::Asset("invalid render dimensions".into()));
+    }
+    let mut pm = Pixmap::new(config.width, config.height)
+        .ok_or_else(|| RenderError::Asset("canvas".into()))?;
+    let assets = render_assets();
+    let reg = &assets.regular;
+    let bold = &assets.bold;
+    let s = config.width as f32 / 1920.;
+    draw_logo(&mut pm, s)?;
+    timing(
+        &mut pm,
+        s,
+        *frame,
+        config.width as f32,
+        &reg,
+        &bold,
+        context,
+    );
+    bottom(
+        &mut pm,
+        s,
+        *frame,
+        config.width as f32,
+        config.height as f32,
+        reg,
+        bold,
+        context,
+    );
+    Ok(pm)
+}
+
 fn p(c: [u8; 4]) -> Paint<'static> {
     let mut x = Paint::default();
     x.set_color(Color::from_rgba8(c[0], c[1], c[2], c[3]));
@@ -143,6 +509,31 @@ fn line(pm: &mut Pixmap, a: (f32, f32), b: (f32, f32), w: f32, c: [u8; 4]) {
         )
     }
 }
+
+fn polyline(pm: &mut Pixmap, points: impl IntoIterator<Item = (f32, f32)>, w: f32, c: [u8; 4]) {
+    let mut path = PathBuilder::new();
+    let mut has_point = false;
+    for point in points {
+        if has_point {
+            path.line_to(point.0, point.1);
+        } else {
+            path.move_to(point.0, point.1);
+            has_point = true;
+        }
+    }
+    if let Some(path) = path.finish() {
+        pm.stroke_path(
+            &path,
+            &p(c),
+            &Stroke {
+                width: w,
+                ..Default::default()
+            },
+            Transform::identity(),
+            None,
+        );
+    }
+}
 fn ellipse(pm: &mut Pixmap, cx: f32, cy: f32, rx: f32, ry: f32, c: [u8; 4], fill: bool, w: f32) {
     if let Some(r) = tiny_skia::Rect::from_xywh(cx - rx, cy - ry, rx * 2., ry * 2.) {
         let mut q = PathBuilder::new();
@@ -209,12 +600,44 @@ fn fmt_num(v: f32, d: usize) -> String {
     if v.is_finite() {
         format!("{v:.d$}")
     } else {
-        "--".into()
+        "—".into()
     }
 }
+
+fn display_name(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        "—".into()
+    } else {
+        trimmed.into()
+    }
+}
+
+fn gforce_labels(g_x: f32, g_y: f32) -> (String, String) {
+    (format!("X {}", fmt_num(g_x, 2)), fmt_num(g_y, 2))
+}
 fn fmt_clock(v: f32) -> String {
+    if !v.is_finite() || v < 0. {
+        return "—".into();
+    }
     let m = (v / 60.).floor() as u32;
     format!("{m}:{:04.1}", v - m as f32 * 60.)
+}
+
+fn fmt_steer(v: f32) -> String {
+    if v.is_finite() {
+        format!("{v:+.0}°")
+    } else {
+        "—".into()
+    }
+}
+
+fn finite_or_zero(value: f32) -> f32 {
+    if value.is_finite() {
+        value
+    } else {
+        0.
+    }
 }
 fn text(
     pm: &mut Pixmap,
@@ -271,37 +694,28 @@ fn glyphs(pm: &mut Pixmap, f: &FontArc, t: &str, z: f32, x: f32, b: f32, c: [u8;
     }
 }
 fn draw_logo(pm: &mut Pixmap, s: f32) -> Result<(), RenderError> {
-    let mut r = png::Decoder::new(Cursor::new(LOGO))
-        .read_info()
-        .map_err(|e| RenderError::Asset(e.to_string()))?;
-    let mut b = vec![0; r.output_buffer_size()];
-    let i = r
-        .next_frame(&mut b)
-        .map_err(|e| RenderError::Asset(e.to_string()))?;
-    let mut v = Vec::with_capacity(i.buffer_size());
-    for c in b[..i.buffer_size()].chunks_exact(4) {
-        let a = c[3] as u16;
-        v.extend([
-            ((c[0] as u16 * a + 127) / 255) as u8,
-            ((c[1] as u16 * a + 127) / 255) as u8,
-            ((c[2] as u16 * a + 127) / 255) as u8,
-            c[3],
-        ])
-    }
-    let z = tiny_skia::IntSize::from_wh(i.width, i.height)
-        .ok_or_else(|| RenderError::Asset("logo size".into()))?;
-    let src = Pixmap::from_vec(v, z).ok_or_else(|| RenderError::Asset("logo data".into()))?;
+    let source = logo_source();
     let h = (56. * s).round() as u32;
-    let w = (i.width as f32 * h as f32 / i.height as f32).round() as u32;
-    let mut out = Pixmap::new(w, h).ok_or_else(|| RenderError::Asset("logo target".into()))?;
-    out.draw_pixmap(
-        0,
-        0,
-        src.as_ref(),
-        &PixmapPaint::default(),
-        Transform::from_scale(h as f32 / i.height as f32, h as f32 / i.height as f32),
-        None,
-    );
+    let cache = LOGO_SIZES.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = cache
+        .lock()
+        .map_err(|_| RenderError::Asset("logo cache poisoned".into()))?;
+    let out = cache.entry(h).or_insert_with(|| {
+        let w = (source.width() as f32 * h as f32 / source.height() as f32).round() as u32;
+        let mut scaled = Pixmap::new(w, h).expect("logo target has a valid size");
+        scaled.draw_pixmap(
+            0,
+            0,
+            source.as_ref(),
+            &PixmapPaint::default(),
+            Transform::from_scale(
+                h as f32 / source.height() as f32,
+                h as f32 / source.height() as f32,
+            ),
+            None,
+        );
+        scaled
+    });
     pm.draw_pixmap(
         (60. * s) as i32,
         (48. * s) as i32,
@@ -315,8 +729,16 @@ fn draw_logo(pm: &mut Pixmap, s: f32) -> Result<(), RenderError> {
     );
     Ok(())
 }
-fn timing(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) {
-    let x = 2560. - 60. * s - 370. * s;
+fn timing(
+    pm: &mut Pixmap,
+    s: f32,
+    f: DemoFrame,
+    canvas_width: f32,
+    reg: &FontArc,
+    bold: &FontArc,
+    context: &RenderContext,
+) {
+    let x = canvas_width - 60. * s - 370. * s;
     let y = 48. * s;
     let w = 370. * s;
     let h = 60. * s;
@@ -342,7 +764,7 @@ fn timing(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
     text(
         pm,
         reg,
-        "e04",
+        &display_name(&context.vehicle),
         15. * s,
         x + w - 22. * s,
         y + 15. * s,
@@ -353,7 +775,7 @@ fn timing(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
     text(
         pm,
         reg,
-        "Lin Jiaxuan",
+        &display_name(&context.racer),
         15. * s,
         x + w - 22. * s,
         y + 37. * s,
@@ -374,16 +796,25 @@ fn timing(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
         true,
     )
 }
-fn bottom(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) {
+fn bottom(
+    pm: &mut Pixmap,
+    s: f32,
+    f: DemoFrame,
+    canvas_width: f32,
+    canvas_height: f32,
+    reg: &FontArc,
+    bold: &FontArc,
+    context: &RenderContext,
+) {
     let o = 0.95;
     let h = 172. * s;
-    let oy = 1440. - h;
+    let oy = canvas_height - h;
     let top = oy + 12. * s;
     let ch = h - 32. * s;
     let ty = oy + h - 20. * s;
     let p = 15. * s;
-    rect(pm, 0., oy, 2560., h, [8, 10, 14, 95]);
-    line(pm, (0., oy), (2560., oy), s, col(57, 242.));
+    rect(pm, 0., oy, canvas_width, h, [8, 10, 14, 95]);
+    line(pm, (0., oy), (canvas_width, oy), s, col(57, 242.));
     let e = |i: usize| SECTIONS[i] * s;
     for (i, extra) in [(1, 0.), (2, 0.), (3, 0.), (4, 10.), (5, 0.), (6, 0.)] {
         line(
@@ -394,116 +825,36 @@ fn bottom(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
             col(235, 38.),
         );
     }
-    // GPS (same widget box, fixed demo trace)
+    // GPS: the route is built once from every finite raw sample. Only the
+    // current position is projected per frame.
     let x0 = e(0);
     let x1 = e(1);
     let mw = (285. * s).min(x1 - x0 - 2. * p);
     let mh = (158. * s).min(h - 26. * s);
     let mx = x0 + p + (x1 - x0 - 2. * p - mw) / 2.;
     let my = top + (h - 16. * s - mh) / 2.;
-    // Normalized trace sampled from the source CSV with widgets.py's route()
-    // projection (same 285×158 local map coordinate system).
-    let pts = [
-        (0.3040, 0.6407),
-        (0.3017, 0.6433),
-        (0.2994, 0.6420),
-        (0.2987, 0.6386),
-        (0.2987, 0.6337),
-        (0.2929, 0.5972),
-        (0.2983, 0.5345),
-        (0.3173, 0.4383),
-        (0.3475, 0.3025),
-        (0.3947, 0.1101),
-        (0.5156, 0.0283),
-        (0.5969, 0.2218),
-        (0.5309, 0.5765),
-        (0.6703, 0.5691),
-        (0.7173, 0.2153),
-        (0.8026, 0.3766),
-        (0.7092, 0.7251),
-        (0.4722, 0.9301),
-        (0.2610, 0.6751),
-        (0.3063, 0.3062),
-        (0.3496, 0.1417),
-        (0.3590, 0.1174),
-        (0.4074, 0.0548),
-        (0.5150, 0.0720),
-        (0.5561, 0.2449),
-        (0.4838, 0.5152),
-        (0.6160, 0.6194),
-        (0.6714, 0.2392),
-        (0.7761, 0.3375),
-        (0.7009, 0.6983),
-        (0.4881, 0.9711),
-        (0.2601, 0.7225),
-        (0.2506, 0.4560),
-        (0.3344, 0.1337),
-        (0.3474, 0.1089),
-        (0.4269, 0.0523),
-        (0.5478, 0.1577),
-        (0.4792, 0.4321),
-        (0.5710, 0.6545),
-        (0.6542, 0.3275),
-        (0.7546, 0.2839),
-        (0.7212, 0.6501),
-        (0.5446, 0.9533),
-        (0.2863, 0.7821),
-        (0.2299, 0.5113),
-        (0.3244, 0.1424),
-        (0.5111, 0.0948),
-        (0.4758, 0.4045),
-        (0.5458, 0.6686),
-        (0.6385, 0.3565),
-        (0.7443, 0.2831),
-        (0.7072, 0.6679),
-        (0.5479, 0.9604),
-        (0.2743, 0.7708),
-        (0.2242, 0.5105),
-        (0.2854, 0.2655),
-        (0.2889, 0.2582),
-        (0.2934, 0.2577),
-        (0.2970, 0.2521),
-        (0.3028, 0.2444),
-        (0.3019, 0.2367),
-        (0.3074, 0.2347),
-        (0.3173, 0.2404),
-        (0.3137, 0.2521),
-        (0.3075, 0.2651),
-        (0.3106, 0.2815),
-        (0.3298, 0.2400),
-        (0.4889, 0.0727),
-        (0.5394, 0.3403),
-        (0.5370, 0.6955),
-        (0.6624, 0.4273),
-        (0.7516, 0.2612),
-        (0.7707, 0.5637),
-        (0.6184, 0.9182),
-        (0.3445, 0.8570),
-        (0.2488, 0.7005),
-        (0.2107, 0.6717),
-        (0.1968, 0.6685),
-        (0.1978, 0.6629),
-        (0.1973, 0.6600),
-    ];
-    for q in pts.windows(2) {
-        line(
+    if let Some(gps) = &context.gps {
+        polyline(
             pm,
-            (mx + q[0].0 * mw, my + q[0].1 * mh),
-            (mx + q[1].0 * mw, my + q[1].1 * mh),
+            gps.points
+                .iter()
+                .map(|point| (mx + point.0 * mw, my + point.1 * mh)),
             2. * s,
             col(157, 242.),
-        )
+        );
+        if let Some((x, y)) = gps.project(f.gps_latitude, f.gps_longitude) {
+            ellipse(
+                pm,
+                mx + x * mw,
+                my + y * mh,
+                3. * s,
+                3. * s,
+                alpha(RED, o),
+                true,
+                0.,
+            );
+        }
     }
-    ellipse(
-        pm,
-        mx + 0.2822 * mw,
-        my + 0.3178 * mh,
-        3. * s,
-        3. * s,
-        alpha(RED, o),
-        true,
-        0.,
-    );
     // battery
     let x0 = e(1);
     let x1 = e(2);
@@ -606,7 +957,8 @@ fn bottom(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
         A::MA,
         true,
     );
-    let a = (270. - (f.steer_deg / 160.) * 160.) * PI / 180.;
+    let steer = finite_or_zero(f.steer_deg);
+    let a = (270. - (steer / 160.) * 160.) * PI / 180.;
     let px = cx + r * a.cos();
     let py = cy + r * a.sin();
     arc(
@@ -615,7 +967,7 @@ fn bottom(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
         cy,
         r,
         270.,
-        270. - f.steer_deg / 160. * 160.,
+        270. - steer / 160. * 160.,
         4. * s,
         alpha(GREEN, o),
     );
@@ -623,7 +975,7 @@ fn bottom(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
     text(
         pm,
         bold,
-        &format!("{:+.0}°", f.steer_deg),
+        &fmt_steer(f.steer_deg),
         22. * s,
         cx,
         cy + 2. * s,
@@ -681,7 +1033,7 @@ fn bottom(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
         pm,
         bx0,
         by - 7. * s,
-        (bx1 - bx0) * (f.speed_kmh / 120.).clamp(0., 1.),
+        (bx1 - bx0) * (finite_or_zero(f.speed_kmh) / 120.).clamp(0., 1.),
         14. * s,
         [255, 255, 255, 219],
     );
@@ -713,12 +1065,13 @@ fn bottom(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
         let bx = x0 + p + 2. * s + k as f32 * sw + pin + if k == 1 { 14. * s } else { 0. };
         let by = top + 2. * s + bh;
         rect_outline(pm, bx, by - bh, bw, bh, s, col(76, 242.));
+        let fill = (finite_or_zero(*val) / 100.).clamp(0., 1.);
         rect(
             pm,
             bx + 1. * s,
-            by - (val / 100.) * (bh - 2. * s),
+            by - fill * (bh - 2. * s),
             bw - 2. * s,
-            (val / 100.) * (bh - 2. * s),
+            fill * (bh - 2. * s),
             alpha(*c, o),
         );
         text(
@@ -735,7 +1088,7 @@ fn bottom(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
         text(
             pm,
             bold,
-            &format!("{val:0.0}"),
+            &fmt_num(*val, 0),
             16. * s,
             bx + bw + 5. * s,
             by - bh / 2. - 9. * s,
@@ -766,18 +1119,19 @@ fn bottom(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
     line(pm, (cx, cy - r), (cx, cy + r), s, col(52, 242.));
     ellipse(
         pm,
-        cx - (-f.g_y).clamp(-2., 2.) * r / 2.,
-        cy + f.g_x.clamp(-2., 2.) * r / 2.,
+        cx - (-finite_or_zero(f.g_y)).clamp(-2., 2.) * r / 2.,
+        cy + finite_or_zero(f.g_x).clamp(-2., 2.) * r / 2.,
         6. * s,
         6. * s,
         alpha(RED, o),
         true,
         0.,
     );
+    let (x_label, y_value) = gforce_labels(f.g_x, f.g_y);
     text(
         pm,
         bold,
-        "X 0.54",
+        &x_label,
         13. * s,
         cx,
         cy - r - 7. * s,
@@ -799,7 +1153,7 @@ fn bottom(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
     text(
         pm,
         bold,
-        "-0.25",
+        &y_value,
         13. * s,
         cx - r - 22. * s,
         cy,
@@ -834,24 +1188,37 @@ fn bottom(pm: &mut Pixmap, s: f32, f: DemoFrame, reg: &FontArc, bold: &FontArc) 
     .iter()
     .enumerate()
     {
+        let torque = *val;
         let gx = x0 + p + 12. * s + k as f32 * sw + pin;
         let by = top + 2. * s + bh;
         let neg = bh * 0.25;
         let zero = by - neg;
         rect_outline(pm, gx, by - bh, bw, bh, s, col(90, 242.));
         line(pm, (gx + s, zero), (gx + bw - s, zero), s, col(142, 242.));
-        rect(
-            pm,
-            gx + s,
-            zero - (*val / 20.) * (bh - neg - s),
-            bw - 2. * s,
-            (*val / 20.) * (bh - neg - s),
-            alpha(GREEN, o),
-        );
+        if torque.is_finite() {
+            if torque >= 0. {
+                let height = (torque / 20.).clamp(0., 1.) * (bh - neg - s);
+                if height >= s {
+                    rect(
+                        pm,
+                        gx + s,
+                        zero - height,
+                        bw - 2. * s,
+                        height,
+                        alpha(GREEN, o),
+                    );
+                }
+            } else {
+                let height = (-torque / 10.).clamp(0., 1.) * (neg - s);
+                if height >= s {
+                    rect(pm, gx + s, zero + s, bw - 2. * s, height, alpha(RED, o));
+                }
+            }
+        }
         text(
             pm,
             bold,
-            &format!("{val:0.1}"),
+            &fmt_num(*val, 1),
             16. * s,
             gx + bw + 5. * s,
             by - bh / 2. - 9. * s,

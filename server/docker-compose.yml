@@ -1,0 +1,40 @@
+name: scut-server
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: scut-racing-telemetry-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: scut_telemetry
+      POSTGRES_USER: scut
+      POSTGRES_PASSWORD: ${SCUT_DB_PASSWORD}
+    ports:
+      # 只监听本机，避免数据库端口暴露公网；需要远程调试时用 SSH 隧道
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # 数据目录可用 SCUT_DATA_DIR 指到 /opt/SCUTRacing/data 之类的专属位置
+      - ${SCUT_DATA_DIR:-./data}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scut -d scut_telemetry"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    container_name: scut-racing-telemetry-sync
+    restart: unless-stopped
+    environment:
+      SCUT_DATABASE_URL: postgresql://scut:<DATABASE_PASSWORD>@postgres:5432/scut_telemetry
+      SCUT_SYNC_HOST: 0.0.0.0
+      SCUT_SYNC_PORT: "8787"
+      SCUT_UPLOAD_ROOT: /server/data/uploads
+    ports:
+      - "8787:8787"
+    volumes:
+      - ${SCUT_DATA_DIR:-./data}/uploads:/server/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+

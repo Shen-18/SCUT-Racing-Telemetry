@@ -1,8 +1,8 @@
-# Cover Video Demo Design
+# Overlay Demo Design
 
 ## Goal
 
-Add a Rust-owned demo renderer that produces one transparent `2560×1440` PNG using the existing overlay layout, then expose it through a unified Cover Video entry in the desktop app.
+Add a Rust-owned demo renderer that produces one transparent `2560×1440` PNG using the existing overlay layout, then expose it through a unified Overlay entry in the desktop app.
 
 ## Scope
 
@@ -14,15 +14,15 @@ Add a Rust-owned demo renderer that produces one transparent `2560×1440` PNG us
 
 ## Module seams
 
-- `crates/cover-video`: deep rendering module. Its public interface accepts a destination path and returns a report plus PNG bytes. Layout, colors, text rasterization, and demo values remain private to the crate.
-- `src-tauri/src/cover_video.rs`: adapter at the Tauri seam. It owns the save dialog, file IO, and JSON-shaped command result; it does not draw pixels.
+- `crates/overlay`: deep rendering module. Its public interface accepts a destination path and returns a report plus PNG bytes. Layout, colors, text rasterization, and demo values remain private to the crate.
+- `src-tauri/src/overlay.rs`: adapter at the Tauri seam. It owns the save dialog, file IO, and JSON-shaped command result; it does not draw pixels.
 - `src/api/client.ts`: the only frontend Tauri import boundary; adds picker and generation wrappers.
-- `src/components/CoverVideoView.tsx`: unified F1/SCUT panel that triggers generation and previews the transparent result over a checkerboard.
-- `src/state/appStore.ts` and `src/components/AppShell.tsx`: add the `cover-video` view and enable the existing navigation tab.
+- `src/components/OverlayView.tsx`: unified F1/SCUT panel that triggers generation and previews the transparent result over a checkerboard.
+- `src/state/appStore.ts` and `src/components/AppShell.tsx`: add the `overlay` view and enable the existing navigation tab.
 
 ## Rendering implementation
 
-The first demo is rendered by Rust with `tiny-skia` and `ab_glyph`. The logo and Formula 1 fonts are vendored under `crates/cover-video/assets`; no generated PNG from the Python project is used at runtime.
+The first demo is rendered by Rust with `tiny-skia` and `ab_glyph`. The logo and Formula 1 fonts are vendored under `crates/overlay/assets`; no generated PNG from the Python project is used at runtime.
 
 The geometry is translated from `aim-telemetry-overlay/scripts/widgets.py` using its default layout: logo, timing bar, and `BottomBarWidget`. Its seven bottom-bar sections, fixed padding, divider offsets, arc gap, speed ticks, pedal frames, G-force ring, and torque zero line are represented in the Rust renderer.
 

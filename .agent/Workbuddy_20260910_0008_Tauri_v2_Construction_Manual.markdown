@@ -1268,7 +1268,7 @@ SCUTRacingTelemetry/
 │   ├── aim-ffi/                         AiM 官方 DLL 边界（唯一 unsafe 业务 crate）
 │   ├── csv-parser/                      规范 CSV 解析
 │   ├── telemetry-ipc/                   DTO、命令类型、SXK1 二进制帧
-│   ├── cover-video/                      固定示例帧透明 PNG 渲染器（Rust demo）
+│   ├── overlay/                      固定示例帧透明 PNG 渲染器（Rust demo）
 │   ├── telemetry-store/                 当前为空壳，预留持久化模块
 │   └── migrate-v1/                      当前为 placeholder，预留迁移工具
 ├── src-tauri/                           Tauri v2 桌面主干
@@ -1276,7 +1276,7 @@ SCUTRacingTelemetry/
 │   ├── src/state.rs                     cache、AiM actor、dataset handle、Job 状态
 │   ├── src/imports.rs                   XRK/CSV/ZIP 导入工作流
 │   ├── src/export.rs                    raw/CSV 导出
-│   ├── src/cover_video.rs                Cover Video 文件对话框、PNG 命令适配
+│   ├── src/overlay.rs                Overlay 文件对话框、PNG 命令适配
 │   └── tauri.conf.json / capabilities/  窗口、构建和权限
 ├── src/                                 React/TypeScript 前端
 │   ├── main.tsx → App.tsx               前端入口
@@ -1308,8 +1308,8 @@ SCUTRacingTelemetry/
 aim-ffi / csv-parser → telemetry-core
 cache-core           → telemetry-core
 telemetry-ipc        → telemetry-core
-cover-video          → tiny-skia + ab_glyph + png（不读取 telemetry）
-src-tauri            → telemetry-core + cache-core + aim-ffi + csv-parser + telemetry-ipc + cover-video
+overlay          → tiny-skia + ab_glyph + png（不读取 telemetry）
+src-tauri            → telemetry-core + cache-core + aim-ffi + csv-parser + telemetry-ipc + overlay
 src/api/client.ts    → Tauri commands（前端其他文件不直接触达 Tauri）
 ```
 

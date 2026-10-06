@@ -61,7 +61,7 @@ export interface Comment {
   [key: string]: unknown;
 }
 
-export interface CoverVideoDemoResult {
+export interface OverlayDemoResult {
   path: string;
   width: number;
   height: number;
@@ -205,12 +205,71 @@ export function pickExportFolder(): Promise<string | null> {
   return invoke<string | null>("pick_export_folder");
 }
 
-export function pickCoverVideoFile(): Promise<string | null> {
-  return invoke<string | null>("pick_cover_video_file");
+export function pickOverlayFile(): Promise<string | null> {
+  return invoke<string | null>("pick_overlay_file");
 }
 
-export function generateCoverVideoDemo(path: string): Promise<CoverVideoDemoResult> {
-  return invoke<CoverVideoDemoResult>("generate_cover_video_demo", { path });
+export function generateOverlayDemo(path: string, datasetId?: number, bindings?: Record<string, string>, width = 2560, height = 1440): Promise<OverlayDemoResult> {
+  return invoke<OverlayDemoResult>("generate_overlay_demo", { path, datasetId, bindings, width, height });
+}
+
+export function generateOverlayPreview(datasetId?: number, bindings?: Record<string, string>, width = 2560, height = 1440): Promise<OverlayDemoResult> {
+  return invoke<OverlayDemoResult>("generate_overlay_preview", { datasetId, bindings, width, height });
+}
+
+export interface OverlaySyncAnchor {
+  dataSeconds: number;
+  videoTime: string;
+}
+
+export interface OverlayExportRequest {
+  datasetId: number;
+  outputDir: string;
+  width: number;
+  height: number;
+  fps: number;
+  renderFps: number;
+  timelineFps: number;
+  outputStart: number;
+  duration: number | null;
+  paddingHeadSeconds: number;
+  paddingTailSeconds: number;
+  offsetSeconds: number;
+  anchors: OverlaySyncAnchor[];
+  bindings: Record<string, string>;
+  maxGapSeconds: number;
+  codec: "qtrle" | "prores4444";
+  workers: number;
+}
+
+export interface OverlayProgress {
+  jobId: number;
+  status: "queued" | "rendering" | "cancelling" | "verifying" | "completed" | "cancelled" | "failed";
+  current: number;
+  total: number;
+  outputFrames: number;
+  fps: number;
+  elapsed: number;
+  eta: number;
+  percent: number;
+  outputPath: string | null;
+  error: string | null;
+}
+
+export function startOverlayExport(request: OverlayExportRequest): Promise<number> {
+  return invoke<number>("start_overlay_export", { request });
+}
+
+export function overlayExportStatus(jobId: number): Promise<OverlayProgress> {
+  return invoke<OverlayProgress>("overlay_export_status", { jobId });
+}
+
+export function cancelOverlayExport(jobId: number): Promise<void> {
+  return invoke<void>("cancel_overlay_export", { jobId });
+}
+
+export function openOverlayFolder(path: string): Promise<void> {
+  return invoke<void>("open_overlay_folder", { path });
 }
 
 export function exportRecords(hashes: string[], dir: string): Promise<ExportOutcome[]> {
@@ -219,6 +278,22 @@ export function exportRecords(hashes: string[], dir: string): Promise<ExportOutc
 
 export function listRecords(query = ""): Promise<RecordSummary[]> {
   return invoke<RecordSummary[]>("list_records", { query });
+}
+
+export function saveRecordNote(fileHash: string, note: string): Promise<void> {
+  return invoke<void>("save_record_note", { fileHash, note });
+}
+
+export function saveDateNote(dateKey: string, note: string): Promise<void> {
+  return invoke<void>("save_date_note", { dateKey, note });
+}
+
+export function selectedChannels(fileHash: string): Promise<string[] | null> {
+  return invoke<string[] | null>("selected_channels", { fileHash });
+}
+
+export function saveSelectedChannels(fileHash: string, channels: string[]): Promise<void> {
+  return invoke<void>("save_selected_channels", { fileHash, channels });
 }
 
 /** 在系统文件管理器中定位该记录的原始源文件。 */

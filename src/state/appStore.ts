@@ -19,12 +19,21 @@ export interface AppState {
   openingFileHash: string | null;
   leftWidth: number;
   rightWidth: number;
-  view: "library" | "analysis" | "cover-video";
+  view: "library" | "analysis" | "overlay" | "settings";
+  trackMapSplitterEnabled: boolean;
+  rememberSelectedChannels: boolean;
+  overlayRecordHash: string | null;
+  overlayStep: "select" | "operations";
   playing: boolean;
   detailFocusKey: string | null;
 
   openDataset(fileHash: string): Promise<void>;
-  setView(view: "library" | "analysis" | "cover-video"): void;
+  setView(view: "library" | "analysis" | "overlay" | "settings"): void;
+  setTrackMapSplitterEnabled(enabled: boolean): void;
+  setRememberSelectedChannels(enabled: boolean): void;
+  enterOverlay(fileHash?: string): void;
+  setOverlayRecord(fileHash: string | null): void;
+  setOverlayStep(step: "select" | "operations"): void;
   setPlaying(playing: boolean): void;
   setDetailFocusKey(key: string | null): void;
   setWindow(w: { start: number; end: number }): void;
@@ -68,6 +77,24 @@ function sameChannelSelection(a: string[], b: string[]): boolean {
   return a.every((key) => expected.has(key));
 }
 
+function readTrackMapSplitterEnabled(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  try {
+    return localStorage.getItem("scut.track-map-splitter") === "true";
+  } catch {
+    return false;
+  }
+}
+
+function readRememberSelectedChannels(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  try {
+    return localStorage.getItem("scut.remember-selected-channels") === "true";
+  } catch {
+    return false;
+  }
+}
+
 async function datasetSampleRange(id: number): Promise<SampleRange | null> {
   // The cursor/timeline activity area belongs to the dataset, not to the
   // currently selected channel.  Individual channels can legitimately start
@@ -98,6 +125,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   leftWidth: LEFT_WIDTH_RANGE.default,
   rightWidth: RIGHT_WIDTH_RANGE.default,
   view: "library",
+  overlayRecordHash: null,
+  overlayStep: "select",
+  trackMapSplitterEnabled: readTrackMapSplitterEnabled(),
+  rememberSelectedChannels: readRememberSelectedChannels(),
 
   bumpGeneration() {
     set((state) => ({ generation: state.generation + 1 }));
@@ -121,9 +152,44 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  setView(view: "library" | "analysis" | "cover-video") {
+  setView(view: "library" | "analysis" | "overlay" | "settings") {
     // 切视图即暂停播放，避免离开分析页后游标继续跑
     set({ view, playing: false });
+  },
+
+  setTrackMapSplitterEnabled(enabled: boolean) {
+    set({ trackMapSplitterEnabled: enabled });
+    try {
+      localStorage.setItem("scut.track-map-splitter", String(enabled));
+    } catch {
+      // Embedded webviews may disable local storage; the current session still works.
+    }
+  },
+
+  setRememberSelectedChannels(enabled: boolean) {
+    set({ rememberSelectedChannels: enabled });
+    try {
+      localStorage.setItem("scut.remember-selected-channels", String(enabled));
+    } catch {
+      // Embedded webviews may disable local storage; the current session still works.
+    }
+  },
+
+  enterOverlay(fileHash?: string) {
+    set({
+      view: "overlay",
+      playing: false,
+      overlayRecordHash: fileHash ?? null,
+      overlayStep: "select",
+    });
+  },
+
+  setOverlayRecord(fileHash: string | null) {
+    set({ overlayRecordHash: fileHash });
+  },
+
+  setOverlayStep(step: "select" | "operations") {
+    set({ overlayStep: step });
   },
 
   setPlaying(playing: boolean) {
@@ -172,6 +238,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const dataset = get().dataset;
     if (!dataset) return;
     const selected = get().checkedChannels;
+    if (get().rememberSelectedChannels) {
+      void client.saveSelectedChannels(dataset.file_hash, selected).catch(() => {
+        // 保存失败不阻断当前分析，下一次打开仍使用默认选择。
+      });
+    }
     get().setActiveRange(null);
     if (selected.length === 0) return;
     void datasetSampleRange(dataset.id).then((range) => {
@@ -201,6 +272,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   reorderChannels(order: string[]) {
     set({ channelOrder: order });
+    const dataset = get().dataset;
+    if (dataset && get().rememberSelectedChannels) {
+      void client.saveSelectedChannels(dataset.file_hash, get().checkedChannels).catch(() => undefined);
+    }
   },
 
   setTheme(t: "dark" | "light") {
@@ -224,7 +299,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     const channels = meta.channels || [];
     const channelKeys = channels.map((c) => c.key);
     const defaultSpeedKey = client.selectDefaultSpeedChannel(channels);
-    const initialChecked = defaultSpeedKey
+    let savedSelection: string[] | null = null;
+    if (get().rememberSelectedChannels) {
+      try {
+        savedSelection = await client.selectedChannels(fileHash);
+      } catch {
+        // Older installations may not have the preference command yet.
+      }
+    }
+    const savedKeys = savedSelection?.filter((key) => channelKeys.includes(key)) ?? [];
+    const initialChecked = savedSelection !== null
+      ? savedKeys
+      : defaultSpeedKey
       ? [defaultSpeedKey]
       : channelKeys.length > 0
         ? [channelKeys[0]]

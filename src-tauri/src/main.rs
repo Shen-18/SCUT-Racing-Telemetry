@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(dead_code)]
 use scut_racing_telemetry::{
-    batch, cover_video, export, records,
+    batch, export, overlay, overlay_export, records,
     state::{self, command_error, AppState},
     stats_cmd, window_fit,
 };
@@ -16,10 +16,17 @@ fn project_root() -> PathBuf {
         .expect("workspace root")
         .to_path_buf()
 }
-fn make_state(resource_root: Option<PathBuf>, install_data_root: Option<PathBuf>) -> Result<AppState, CmdError> {
+fn make_state(
+    resource_root: Option<PathBuf>,
+    install_data_root: Option<PathBuf>,
+) -> Result<AppState, CmdError> {
     let root = project_root();
     let runtime_root = resource_root
-        .or_else(|| std::env::current_exe().ok().and_then(|path| path.parent().map(Path::to_path_buf)))
+        .or_else(|| {
+            std::env::current_exe()
+                .ok()
+                .and_then(|path| path.parent().map(Path::to_path_buf))
+        })
         .unwrap_or_else(|| root.clone());
     // Tauri installs resources below `<exe>/resources`; a manually copied
     // portable folder may place the resource directory beside the exe. Accept
@@ -231,7 +238,7 @@ fn laps(
 fn cache_root_status(state: tauri::State<'_, Arc<AppState>>) -> telemetry_ipc::CacheRootStatus {
     telemetry_ipc::CacheRootStatus {
         cache_bytes: state.cache.bytes().unwrap_or(0),
-        db_path: state.cache.path().display().to_string(),
+        db_path: state.store.path().display().to_string(),
         mem_rss_bytes: 0,
         active_jobs: state
             .jobs
@@ -310,7 +317,62 @@ fn list_records(
     query: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Vec<RecordSummary>, CmdError> {
-    Ok(records::scan_records(state.cache.path(), &query))
+    records::list_records(&state.store, &query).map_err(state::store_error)
+}
+
+#[tauri::command]
+fn save_record_note(
+    file_hash: String,
+    note: String,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), CmdError> {
+    if !state
+        .store
+        .set_record_note(&file_hash, &note)
+        .map_err(state::store_error)?
+    {
+        return Err(command_error("record_not_found", file_hash));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn save_date_note(
+    date_key: String,
+    note: String,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), CmdError> {
+    state
+        .store
+        .set_date_note(&date_key, &note)
+        .map_err(state::store_error)
+}
+
+#[tauri::command]
+fn selected_channels(
+    file_hash: String,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Option<Vec<String>>, CmdError> {
+    state
+        .store
+        .selected_channels(&file_hash)
+        .map_err(state::store_error)
+}
+
+#[tauri::command]
+fn save_selected_channels(
+    file_hash: String,
+    channels: Vec<String>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), CmdError> {
+    if !state
+        .store
+        .save_selected_channels(&file_hash, &channels)
+        .map_err(state::store_error)?
+    {
+        return Err(command_error("record_not_found", file_hash));
+    }
+    Ok(())
 }
 
 /// 在系统文件管理器中定位记录的原始源文件（资源管理器 /select）。
@@ -335,7 +397,10 @@ fn reveal_record(hash: String, state: tauri::State<'_, Arc<AppState>>) -> Result
     #[cfg(not(target_os = "windows"))]
     {
         let Some(dir) = source.parent() else {
-            return Err(command_error("source_missing", source.display().to_string()));
+            return Err(command_error(
+                "source_missing",
+                source.display().to_string(),
+            ));
         };
         std::process::Command::new("xdg-open")
             .arg(dir)
@@ -535,9 +600,18 @@ fn main() {
             export_channels,
             pick_export_folder,
             pick_export_file,
-            cover_video::pick_cover_video_file,
-            cover_video::generate_cover_video_demo,
+            overlay::pick_overlay_file,
+            overlay::generate_overlay_demo,
+            overlay::generate_overlay_preview,
+            overlay_export::start_overlay_export,
+            overlay_export::overlay_export_status,
+            overlay_export::cancel_overlay_export,
+            overlay_export::open_overlay_folder,
             list_records,
+            save_record_note,
+            save_date_note,
+            selected_channels,
+            save_selected_channels,
             reveal_record,
             delete_record,
             export_csv,
@@ -602,8 +676,7 @@ mod tests {
 
     #[test]
     fn selected_channel_overlap_stops_at_the_shortest_real_tail() {
-        let root_path =
-            std::env::temp_dir().join(format!("scut-overlap-{}", std::process::id()));
+        let root_path = std::env::temp_dir().join(format!("scut-overlap-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root_path);
         let root = CacheRoot::open(&root_path).unwrap();
         let hash = "b".repeat(64);
@@ -616,7 +689,11 @@ mod tests {
             sample_rate_hz: 100.0,
         };
         root.publish_metadata(
-            SourceIdentity { hash: hash.clone(), mtime: 1, size: 1 },
+            SourceIdentity {
+                hash: hash.clone(),
+                mtime: 1,
+                size: 1,
+            },
             SessionMeta::default(),
             vec![channel("Brake"), channel("GPS")],
             vec![],
@@ -625,22 +702,32 @@ mod tests {
         root.publish_raw(
             &hash,
             "Brake",
-            &ChannelSeries { times: vec![0.1, 1.4], values: vec![1.0, 2.0] },
+            &ChannelSeries {
+                times: vec![0.1, 1.4],
+                values: vec![1.0, 2.0],
+            },
         )
         .unwrap();
         root.publish_raw(
             &hash,
             "GPS",
-            &ChannelSeries { times: vec![0.0, 1.9], values: vec![3.0, 4.0] },
+            &ChannelSeries {
+                times: vec![0.0, 1.9],
+                values: vec![3.0, 4.0],
+            },
         )
         .unwrap();
         let dataset = root.dataset(&hash).unwrap();
         assert_eq!(
-            dataset.sample_overlap(&["Brake".into(), "GPS".into()]).unwrap(),
+            dataset
+                .sample_overlap(&["Brake".into(), "GPS".into()])
+                .unwrap(),
             Some((0.1, 1.4))
         );
         assert_eq!(
-            dataset.sample_range(&["Brake".into(), "GPS".into()]).unwrap(),
+            dataset
+                .sample_range(&["Brake".into(), "GPS".into()])
+                .unwrap(),
             Some((0.0, 1.9))
         );
         let _ = std::fs::remove_dir_all(root_path);

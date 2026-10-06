@@ -5,6 +5,7 @@ import type { WindowFrame } from "../api/types";
 import { getDatasetDuration } from "../api/dataset";
 import { formatClockTime } from "../utils/time";
 import { resolveColor } from "../theme/channelColors";
+import { fitTrackGeometry, observeTrackResize } from "./trackMapGeometry";
 
 // B.4-P6 rev.5 赛道图（右栏上 300px）：单线轨迹 + 红色起终点 + 红色车箭头
 // + 尾迹 + TIME HUD + 滚轮缩放/左键拖动。
@@ -76,9 +77,18 @@ export const TrackMapPanel: React.FC = () => {
   const [latFrame, setLatFrame] = useState<WindowFrame | null>(null);
   const [lonFrame, setLonFrame] = useState<WindowFrame | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [resizeVersion, setResizeVersion] = useState(0);
   const panDragRef = useRef<{ pointerId: number; x: number; y: number; origin: { x: number; y: number } } | null>(null);
 
   const duration = dataset ? getDatasetDuration(dataset) : 0;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    return observeTrackResize(canvas.parentElement ?? canvas, () => {
+      setResizeVersion((version) => version + 1);
+    });
+  }, []);
 
   const latKey = useMemo(
     () => (dataset ? findChannelKey(dataset.channels, /latitude/i) : null),
@@ -175,17 +185,22 @@ export const TrackMapPanel: React.FC = () => {
       if (p.y < minY) minY = p.y;
       if (p.y > maxY) maxY = p.y;
     }
-    const spanX = Math.max(1e-9, maxX - minX);
-    const spanY = Math.max(1e-9, maxY - minY);
-    const scale = Math.min(w, h) * 0.82 * zoom;
-    const contentW = (spanX / Math.max(spanX, spanY)) * scale;
-    const contentH = (spanY / Math.max(spanX, spanY)) * scale;
-    const ox = (w - contentW) / 2 - (minX / Math.max(spanX, spanY)) * scale;
-    const availableHeight = Math.max(1, h - HUD_RESERVED_TOP - 8);
-    const oy = HUD_RESERVED_TOP + (availableHeight - contentH) / 2 - (minY / Math.max(spanX, spanY)) * scale + pan.y;
+    const geometry = fitTrackGeometry({
+      width: w,
+      height: h,
+      topInset: HUD_RESERVED_TOP,
+      bottomInset: 8,
+      leftInset: 0,
+      rightInset: 0,
+      minX,
+      maxX,
+      minY,
+      maxY,
+      zoom: zoom * 0.82,
+    });
     const P = (p: TrackPoint): [number, number] => [
-      ox + (p.x / Math.max(spanX, spanY)) * scale + pan.x,
-      oy + (p.y / Math.max(spanX, spanY)) * scale,
+      geometry.originX + p.x * geometry.scaleX + pan.x,
+      geometry.originY + p.y * geometry.scaleY + pan.y,
     ];
 
     g.lineJoin = "round";
@@ -237,7 +252,7 @@ export const TrackMapPanel: React.FC = () => {
     g.fill();
     g.restore();
     void dim;
-  }, [track, cursorT, duration, zoom, pan, theme, dataset]);
+  }, [track, cursorT, duration, zoom, pan, theme, dataset, resizeVersion]);
 
   const resetMap = () => {
     setZoom(1);

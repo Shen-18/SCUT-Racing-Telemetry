@@ -24,7 +24,7 @@ describe("ImportProgressBar and stage text mapping", () => {
     expect(STAGE_LABELS.ReadingMetadata).toContain("元数据");
     expect(STAGE_LABELS.ReadingChannels).toContain("通道");
     expect(STAGE_LABELS.BuildingRawCache).toContain("缓存");
-    expect(STAGE_LABELS.BuildingPyramid).toContain("金字塔");
+    expect(STAGE_LABELS.BuildingPyramid).toContain("缓存");
     expect(STAGE_LABELS.Ready).toContain("就绪");
   });
 
