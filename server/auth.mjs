@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 export const SESSION_COOKIE = "scut_admin_session";
 export const SESSION_TTL_SECONDS = 7 * 24 * 3600;
@@ -9,6 +9,21 @@ export function randomToken() {
 
 export function sha256Hex(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/** 管理员密码散列：salt$scrypt，存库原文不存在 */
+export function hashPassword(plain) {
+  const salt = randomBytes(16).toString("hex");
+  return `${salt}$${scryptSync(String(plain), salt, 32).toString("hex")}`;
+}
+
+export function verifyPassword(plain, stored) {
+  const [salt, expected] = String(stored || "").split("$");
+  if (!salt || !expected) return false;
+  const actual = scryptSync(String(plain), salt, 32);
+  const target = Buffer.from(expected, "hex");
+  if (actual.length !== target.length) return false;
+  return timingSafeEqual(actual, target);
 }
 
 export function constantTimeEquals(a, b) {

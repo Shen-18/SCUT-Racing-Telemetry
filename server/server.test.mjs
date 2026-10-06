@@ -93,6 +93,7 @@ function makeFakeDb() {
   const sessions = new Map();
   const tokens = new Map();
   const datasets = new Map();
+  const accounts = new Map();
   let idSeq = 1;
   return {
     sessions,
@@ -129,8 +130,56 @@ function makeFakeDb() {
     async saveDateNote(key, note) {
       return { date_key: key, note, updated_at: 0 };
     },
-    async createAdminSession(hash, expiresAt) {
-      sessions.set(hash, { token_hash: hash, expires_at: expiresAt });
+    async createAdminSession(hash, accountId, expiresAt) {
+      sessions.set(hash, { token_hash: hash, account_id: accountId, expires_at: expiresAt });
+    },
+    async deleteAdminSessionsForAccount(accountId, exceptHash) {
+      for (const [key, row] of [...sessions]) {
+        if (row.account_id === accountId && key !== exceptHash) sessions.delete(key);
+      }
+    },
+    async adminAccountsEmpty() {
+      return accounts.size === 0;
+    },
+    async createAdminAccount({ username, passwordHash }) {
+      const row = { id: idSeq++, username, password_hash: passwordHash, created_at: 0 };
+      accounts.set(username, row);
+      return { ...row };
+    },
+    async getAdminAccount(username) {
+      return accounts.get(username) ?? null;
+    },
+    async getAdminAccountById(id) {
+      for (const row of accounts.values()) if (row.id === id) return { ...row };
+      return null;
+    },
+    async listAdminAccounts() {
+      return [...accounts.values()].map((r) => ({ id: r.id, username: r.username, created_at: r.created_at }));
+    },
+    async deleteAdminAccount(id) {
+      for (const [key, row] of [...accounts]) {
+        if (row.id === id) {
+          accounts.delete(key);
+          // 与真实实现一致：删除账号时级联吊销其全部会话
+          for (const [sk, sr] of [...sessions]) {
+            if (sr.account_id === id) sessions.delete(sk);
+          }
+          return { id };
+        }
+      }
+      return null;
+    },
+    async countAdminAccounts() {
+      return accounts.size;
+    },
+    async updateAdminPassword(id, passwordHash) {
+      for (const row of accounts.values()) {
+        if (row.id === id) {
+          row.password_hash = passwordHash;
+          return { id };
+        }
+      }
+      return null;
     },
     async getAdminSession(hash) {
       return sessions.get(hash) ?? null;
@@ -421,6 +470,94 @@ test("client downloads by file hash and deletion removes record and file", async
       (await req(srv.port, `/api/v1/files/${hash}`, { headers: { authorization: `Bearer ${tokenRow.token}` } }))
         .status,
       404,
+    );
+  } finally {
+    srv.close();
+  }
+});
+
+// ===== 多管理员与密码修改 =====
+
+test("admin can change own password; old one stops working", async () => {
+  const srv = await startServer({ adminPassword: "secret" });
+  try {
+    const cookie = (await login(srv.port, "secret")).headers.get("set-cookie").split(";")[0];
+
+    const wrongCurrent = await req(srv.port, "/api/v1/admin/password", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ current: "nope", next: "newpass1" }),
+    });
+    assert.equal(wrongCurrent.status, 401);
+
+    const changed = await req(srv.port, "/api/v1/admin/password", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ current: "secret", next: "newpass1" }),
+    });
+    assert.equal(changed.status, 200);
+
+    // 旧密码失效
+    assert.equal((await login(srv.port, "secret")).status, 401);
+    // 新密码可用
+    assert.equal((await login(srv.port, "newpass1")).status, 200);
+  } finally {
+    srv.close();
+  }
+});
+
+test("multiple admin accounts: add, log in as another admin, delete rules", async () => {
+  const srv = await startServer({ adminPassword: "secret" });
+  try {
+    const cookie = (await login(srv.port, "secret")).headers.get("set-cookie").split(";")[0];
+
+    // 添加第二位管理员
+    const added = await req(srv.port, "/api/v1/admin/accounts", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ username: "deputy", password: "123456" }),
+    });
+    assert.equal(added.status, 201);
+
+    // deputy 能登录并以自己身份访问管理接口
+    const deputyLogin = await req(srv.port, "/api/v1/admin/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "deputy", password: "123456" }),
+    });
+    assert.equal(deputyLogin.status, 200);
+    const deputyCookie = deputyLogin.headers.get("set-cookie").split(";")[0];
+    assert.equal((await req(srv.port, "/api/v1/admin/tokens", { headers: { cookie: deputyCookie } })).status, 200);
+
+    // 列表带 current 标识
+    const listed = await (await req(srv.port, "/api/v1/admin/accounts", { headers: { cookie: deputyCookie } })).json();
+    assert.equal(listed.accounts.length, 2, JSON.stringify(listed));
+    assert.equal(listed.accounts.find((a) => a.username === "deputy").id, listed.current);
+
+    // 不能删自己
+    const selfId = listed.accounts.find((a) => a.username === "deputy").id;
+    assert.equal(
+      (await req(srv.port, `/api/v1/admin/accounts/${selfId}`, { method: "DELETE", headers: { cookie: deputyCookie } }))
+        .status,
+      400,
+    );
+
+    // admin 删除 deputy → deputy 会话立即失效
+    const deputyId = listed.accounts.find((a) => a.username === "deputy").id;
+    assert.equal(
+      (await req(srv.port, `/api/v1/admin/accounts/${deputyId}`, { method: "DELETE", headers: { cookie } })).status,
+      200,
+    );
+    assert.equal((await req(srv.port, "/api/v1/admin/tokens", { headers: { cookie: deputyCookie } })).status, 401);
+    assert.equal(
+      (
+        await req(srv.port, "/api/v1/admin/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ username: "deputy", password: "123456" }),
+        })
+      ).status,
+      401,
     );
   } finally {
     srv.close();

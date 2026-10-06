@@ -124,14 +124,17 @@ export async function createDatabase(databaseUrl) {
       }
       return this.getDateNote(dateKey);
     },
-    async createAdminSession(tokenHash, expiresAt) {
+    async createAdminSession(tokenHash, accountId, expiresAt) {
       await pool.query(
-        "INSERT INTO admin_sessions(token_hash, expires_at) VALUES ($1, $2) ON CONFLICT(token_hash) DO UPDATE SET expires_at = EXCLUDED.expires_at",
-        [tokenHash, expiresAt],
+        "INSERT INTO admin_sessions(token_hash, account_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT(token_hash) DO UPDATE SET account_id = EXCLUDED.account_id, expires_at = EXCLUDED.expires_at",
+        [tokenHash, accountId, expiresAt],
       );
     },
     async getAdminSession(tokenHash) {
-      const result = await pool.query("SELECT token_hash, expires_at FROM admin_sessions WHERE token_hash = $1", [tokenHash]);
+      const result = await pool.query(
+        "SELECT token_hash, account_id, expires_at FROM admin_sessions WHERE token_hash = $1",
+        [tokenHash],
+      );
       return result.rows[0] ?? null;
     },
     async deleteAdminSession(tokenHash) {
@@ -139,6 +142,55 @@ export async function createDatabase(databaseUrl) {
     },
     async purgeExpiredAdminSessions(now) {
       await pool.query("DELETE FROM admin_sessions WHERE expires_at < $1", [now]);
+    },
+    async deleteAdminSessionsForAccount(accountId, exceptHash) {
+      await pool.query("DELETE FROM admin_sessions WHERE account_id = $1 AND token_hash <> $2", [accountId, exceptHash]);
+    },
+    async adminAccountsEmpty() {
+      const result = await pool.query("SELECT COUNT(*)::int AS n FROM admin_accounts");
+      return (result.rows[0]?.n ?? 0) === 0;
+    },
+    async createAdminAccount({ username, passwordHash }) {
+      const result = await pool.query(
+        "INSERT INTO admin_accounts(username, password_hash, created_at) VALUES ($1, $2, $3) RETURNING id, username, created_at",
+        [username, passwordHash, Math.floor(Date.now() / 1000)],
+      );
+      return result.rows[0];
+    },
+    async getAdminAccount(username) {
+      const result = await pool.query("SELECT id, username, password_hash, created_at FROM admin_accounts WHERE username = $1", [username]);
+      return result.rows[0] ?? null;
+    },
+    async getAdminAccountById(id) {
+      const result = await pool.query("SELECT id, username, password_hash, created_at FROM admin_accounts WHERE id = $1", [id]);
+      return result.rows[0] ?? null;
+    },
+    async listAdminAccounts() {
+      const result = await pool.query("SELECT id, username, created_at FROM admin_accounts ORDER BY id");
+      return result.rows;
+    },
+    async deleteAdminAccount(id) {
+      await pool.query("BEGIN");
+      try {
+        const result = await pool.query("DELETE FROM admin_accounts WHERE id = $1 RETURNING id", [id]);
+        await pool.query("DELETE FROM admin_sessions WHERE account_id = $1", [id]);
+        await pool.query("COMMIT");
+        return result.rows[0] ?? null;
+      } catch (error) {
+        await pool.query("ROLLBACK");
+        throw error;
+      }
+    },
+    async countAdminAccounts() {
+      const result = await pool.query("SELECT COUNT(*)::int AS n FROM admin_accounts");
+      return result.rows[0]?.n ?? 0;
+    },
+    async updateAdminPassword(accountId, passwordHash) {
+      const result = await pool.query(
+        "UPDATE admin_accounts SET password_hash = $2 WHERE id = $1 RETURNING id",
+        [accountId, passwordHash],
+      );
+      return result.rows[0] ?? null;
     },
     async createClientToken({ name, token }) {
       const now = Math.floor(Date.now() / 1000);

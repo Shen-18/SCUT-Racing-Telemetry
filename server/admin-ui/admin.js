@@ -1,4 +1,4 @@
-// SCUT 管理面板 v2：登录 / 记录（上传、下载、删除、归档）/ 日期备注 / 密钥分发
+// SCUT 管理面板 v2：登录（多管理员）/ 记录（上传、下载、删除）/ 日期备注 / 密钥分发
 const app = document.getElementById("app");
 
 let state = {
@@ -7,6 +7,8 @@ let state = {
   records: [],
   notes: new Map(),
   tokens: [],
+  adminAccounts: [],
+  currentAdminId: null,
   notice: null,
   // 记录页状态（对齐本地 DATABASE 页）
   selectedGroup: null,
@@ -74,15 +76,17 @@ function renderLogin() {
     <div class="wrap" style="max-width: 420px; margin-top: 60px;">
       <div class="card">
         <h3 class="f1">管理员登录</h3>
-        <div class="kv"><label>管理密码</label><input id="login-password" type="password" autofocus /></div>
+        <div class="kv"><label>用户名</label><input id="login-username" type="text" value="admin" /></div>
+        <div class="kv"><label>密码</label><input id="login-password" type="password" autofocus /></div>
         <button class="primary" id="login-button" style="width: 100%;">登录</button>
         <div id="login-error" class="hint" style="color: var(--red); margin-top: 8px;"></div>
       </div>
     </div>`;
   const submit = async () => {
+    const username = document.getElementById("login-username").value.trim();
     const password = document.getElementById("login-password").value;
     try {
-      await api("/api/v1/admin/login", { method: "POST", body: JSON.stringify({ password }) });
+      await api("/api/v1/admin/login", { method: "POST", body: JSON.stringify({ username, password }) });
       state.loggedIn = true;
       await reload();
     } catch (error) {
@@ -358,18 +362,14 @@ async function onRecordAction(event) {
 function renderSettings(root) {
   const active = state.tokens.filter((t) => !t.revoked_at);
   root.innerHTML = `
-    <div class="card copy-pair">
-      <h3 class="f1">分发给队员</h3>
-      <div class="hint">第一步：复制服务器链接；第二步：从下面任选一个有效密钥复制，发给队员。生成的都是可用的，一条密钥给一位队员，吊销某个不影响其他人。</div>
-      <div class="kv"><label>服务器链接</label><input id="pair-link" readonly value="${esc(location.origin)}" /><button class="line" data-copy="pair-link">复制链接</button></div>
+    <div class="card">
+      <h3 class="f1">服务器地址</h3>
+      <div class="kv"><label>链接</label><input id="pair-link" readonly value="${esc(location.origin)}" /><button class="line" data-copy="pair-link">复制</button></div>
     </div>
     <div class="card">
-      <h3 class="f1">生成新密钥</h3>
-      <div class="kv"><label>名称</label><input id="token-name" placeholder="例如：张三-笔记本" /><button class="primary" id="token-create">生成</button></div>
-    </div>
-    <div class="card">
-      <h3 class="f1">全部密钥（${active.length} 个有效 / ${state.tokens.length} 个）</h3>
-      ${state.tokens.length === 0 ? '<div class="hint">还没有密钥，先在上方生成一个。</div>' : ""}
+      <h3 class="f1">密钥分发</h3>
+      <div class="kv"><label>新密钥名称</label><input id="token-name" placeholder="例如：张三-笔记本" /><button class="primary" id="token-create">生成</button></div>
+      ${state.tokens.length === 0 ? '<div class="hint">还没有密钥，生成后复制发给队员。</div>' : ""}
       ${state.tokens
         .map(
           (t) => `
@@ -383,7 +383,31 @@ function renderSettings(root) {
         </div>`,
         )
         .join("")}
+    </div>
+    <div class="card">
+      <h3 class="f1">修改我的密码</h3>
+      <div class="kv"><label>当前密码</label><input id="pw-current" type="password" /></div>
+      <div class="kv"><label>新密码</label><input id="pw-next" type="password" placeholder="至少 6 位" /></div>
+      <div style="text-align: right;"><button class="primary" id="pw-save">修改密码</button></div>
+    </div>
+    <div class="card">
+      <h3 class="f1">管理员账号（${state.adminAccounts.length}）</h3>
+      <div class="kv"><label>用户名</label><input id="admin-username" placeholder="2-24 字符，无空格" /><input id="admin-password" type="password" placeholder="密码（至少 6 位）" style="flex: 1;" /><button class="primary" id="admin-add">添加</button></div>
+      ${state.adminAccounts
+        .map(
+          (a) => `
+        <div class="row">
+          <div class="meta">
+            <div class="name">${esc(a.username)} ${a.id === state.currentAdminId ? '<span class="badge status-ok">当前登录</span>' : ""}</div>
+            <div class="sub">添加于 ${esc(new Date((a.created_at || 0) * 1000).toLocaleDateString())}</div>
+          </div>
+          <button class="line" data-del-admin="${a.id}" ${a.id === state.currentAdminId ? "disabled" : ""} title="${a.id === state.currentAdminId ? "不能删除当前登录的账号" : "删除该管理员"}">删除</button>
+        </div>`,
+        )
+        .join("")}
+      <div class="hint" style="margin-top: 8px;">每位管理员都能登录本面板；删除账号会立即吊销其所有登录会话。</div>
     </div>`;
+
   root.querySelectorAll("[data-copy]").forEach((button) =>
     button.addEventListener("click", async () => {
       const ok = await copyText(document.getElementById(button.dataset.copy).value);
@@ -428,6 +452,43 @@ function renderSettings(root) {
     }
     await reload();
   });
+  document.getElementById("pw-save").addEventListener("click", async () => {
+    const current = document.getElementById("pw-current").value;
+    const next = document.getElementById("pw-next").value;
+    try {
+      await api("/api/v1/admin/password", { method: "PUT", body: JSON.stringify({ current, next }) });
+      setNotice("密码已修改，其他设备的登录已被踢下线。", true);
+      renderShell();
+      renderTab();
+    } catch (error) {
+      setNotice(`修改失败：${error.message}`);
+      renderShell();
+      renderTab();
+    }
+  });
+  document.getElementById("admin-add").addEventListener("click", async () => {
+    const username = document.getElementById("admin-username").value.trim();
+    const password = document.getElementById("admin-password").value;
+    try {
+      await api("/api/v1/admin/accounts", { method: "POST", body: JSON.stringify({ username, password }) });
+      setNotice(`管理员「${username}」已添加。`, true);
+    } catch (error) {
+      setNotice(`添加失败：${error.message}`);
+    }
+    await reload();
+  });
+  root.querySelectorAll("[data-del-admin]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      if (!window.confirm("删除该管理员？其所有登录会话会立即失效。")) return;
+      try {
+        await api(`/api/v1/admin/accounts/${button.dataset.delAdmin}`, { method: "DELETE" });
+        setNotice("已删除。", true);
+      } catch (error) {
+        setNotice(`删除失败：${error.message}`);
+      }
+      await reload();
+    }),
+  );
 }
 
 // ===== 数据加载 =====
@@ -438,14 +499,17 @@ async function reload() {
     return;
   }
   try {
-    const [datasetsBody, notesBody, tokensBody] = await Promise.all([
+    const [datasetsBody, notesBody, tokensBody, accountsBody] = await Promise.all([
       api("/api/v1/datasets?include_archived=true"),
       api("/api/v1/date-notes"),
       api("/api/v1/admin/tokens"),
+      api("/api/v1/admin/accounts"),
     ]);
     state.records = datasetsBody.datasets || [];
     state.notes = new Map((notesBody.date_notes || []).map((item) => [item.date_key, item.note]));
     state.tokens = tokensBody.tokens || [];
+    state.adminAccounts = accountsBody.accounts || [];
+    state.currentAdminId = accountsBody.current;
     setNotice(null);
   } catch (error) {
     setNotice(`加载失败：${error.message}`);

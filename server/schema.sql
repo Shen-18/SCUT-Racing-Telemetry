@@ -39,3 +39,12 @@ CREATE TABLE IF NOT EXISTS client_tokens (
   last_used_at BIGINT,
   revoked_at BIGINT
 );
+
+CREATE TABLE IF NOT EXISTS admin_accounts (
+  id SERIAL PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+
+ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS account_id INTEGER;

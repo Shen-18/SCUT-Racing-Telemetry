@@ -11,13 +11,16 @@ import { normalizeDatasetInput, normalizeDatasetInputs, normalizeDateNote } from
 import {
   clearedSessionCookie,
   clientIp,
-  constantTimeEquals,
   createRateLimiter,
+  hashPassword,
   randomToken,
+  readCookie,
   requireAdmin,
   requireToken,
   sessionCookie,
   sha256Hex,
+  verifyPassword,
+  SESSION_COOKIE,
   SESSION_TTL_SECONDS,
 } from "./auth.mjs";
 
@@ -83,6 +86,10 @@ function assertDateKey(value) {
 async function createApp(db, deps = {}) {
   const adminPassword = deps.adminPassword ?? "";
   const limiter = createRateLimiter();
+  // 引导：账号表为空且配置了初始密码时，创建首个管理员账号（之后的密码改动都在数据库里）
+  if (adminPassword && (await db.adminAccountsEmpty())) {
+    await db.createAdminAccount({ username: "admin", passwordHash: hashPassword(adminPassword) });
+  }
   const uploadRoot = deps.uploadRoot;
   // 生产默认调用 PATH 上的 xrk-meta（容器内 /app/bin）；测试注入 stub
   const runExtractor =
@@ -130,17 +137,18 @@ async function createApp(db, deps = {}) {
     }
 
     const url = new URL(request.url || "/", `http://${request.headers.host || "127.0.0.1"}`);
-    // 管理接口守卫：未配置管理密码 → 503；未登录 → 401
+    // 管理接口守卫：未配置管理密码 → 503；未登录 → 401；通过则返回会话行
     const guardAdmin = async () => {
       if (!adminPassword) {
         sendError(response, 503, "admin_password_not_set", "服务端未配置 SCUT_ADMIN_PASSWORD");
-        return false;
+        return null;
       }
-      if (!(await requireAdmin(request, db))) {
+      const session = await requireAdmin(request, db);
+      if (!session) {
         sendError(response, 401, "unauthorized", "请先登录管理面板");
-        return false;
+        return null;
       }
-      return true;
+      return session;
     };
     // 客户端接口守卫：有效令牌或管理员会话均可（管理面板同源展示数据用）
     const guardToken = async () => {
@@ -173,17 +181,93 @@ async function createApp(db, deps = {}) {
           return;
         }
         const body = await readBody(request);
-        if (!constantTimeEquals(body.password ?? "", adminPassword)) {
+        const username = String(body.username ?? "admin").trim() || "admin";
+        const account = await db.getAdminAccount(username);
+        if (!account || !verifyPassword(body.password ?? "", account.password_hash)) {
           limiter.fail(clientIp(request));
-          sendError(response, 401, "invalid_password", "密码错误");
+          sendError(response, 401, "invalid_credentials", "用户名或密码错误");
           return;
         }
         limiter.reset(clientIp(request));
         const token = randomToken();
         const now = Math.floor(Date.now() / 1000);
-        await db.createAdminSession(sha256Hex(token), now + SESSION_TTL_SECONDS);
+        await db.createAdminSession(sha256Hex(token), account.id, now + SESSION_TTL_SECONDS);
         await db.purgeExpiredAdminSessions(now);
-        sendJson(response, 200, { ok: true }, { "set-cookie": sessionCookie(token) });
+        sendJson(response, 200, { ok: true, username: account.username }, { "set-cookie": sessionCookie(token) });
+        return;
+      }
+
+      // 多管理员：列出 / 添加 / 删除（不能删自己，至少保留一个）
+      if (url.pathname === "/api/v1/admin/accounts" && request.method === "GET") {
+        const session = await guardAdmin();
+        if (!session) return;
+        sendJson(response, 200, { accounts: await db.listAdminAccounts(), current: session.account_id });
+        return;
+      }
+
+      if (url.pathname === "/api/v1/admin/accounts" && request.method === "POST") {
+        const session = await guardAdmin();
+        if (!session) return;
+        const body = await readBody(request);
+        const username = String(body.username ?? "").trim();
+        const password = String(body.password ?? "");
+        if (username.length < 2 || username.length > 24 || /\s/.test(username)) {
+          sendError(response, 400, "invalid_username", "用户名需要 2-24 个字符且不含空格");
+          return;
+        }
+        if (password.length < 6) {
+          sendError(response, 400, "invalid_password", "密码至少 6 位");
+          return;
+        }
+        if (await db.getAdminAccount(username)) {
+          sendError(response, 409, "username_taken", "该用户名已存在");
+          return;
+        }
+        const row = await db.createAdminAccount({ username, passwordHash: hashPassword(password) });
+        sendJson(response, 201, { account: row });
+        return;
+      }
+
+      const deleteAccount = url.pathname.match(/^\/api\/v1\/admin\/accounts\/(\d+)$/);
+      if (deleteAccount && request.method === "DELETE") {
+        const session = await guardAdmin();
+        if (!session) return;
+        const id = Number(deleteAccount[1]);
+        if (id === session.account_id) {
+          sendError(response, 400, "cannot_delete_self", "不能删除当前登录的账号");
+          return;
+        }
+        if ((await db.countAdminAccounts()) <= 1) {
+          sendError(response, 400, "last_account", "至少保留一个管理员账号");
+          return;
+        }
+        const row = await db.deleteAdminAccount(id);
+        if (!row) {
+          sendError(response, 404, "account_not_found", "找不到该账号");
+          return;
+        }
+        sendJson(response, 200, { ok: true });
+        return;
+      }
+
+      // 修改当前登录账号的密码（改完吊销该账号的其他会话）
+      if (url.pathname === "/api/v1/admin/password" && request.method === "PUT") {
+        const session = await guardAdmin();
+        if (!session) return;
+        const body = await readBody(request);
+        const account = await db.getAdminAccountById(session.account_id);
+        if (!account || !verifyPassword(body.current ?? "", account.password_hash)) {
+          sendError(response, 401, "invalid_credentials", "当前密码不正确");
+          return;
+        }
+        const next = String(body.next ?? "");
+        if (next.length < 6) {
+          sendError(response, 400, "invalid_password", "新密码至少 6 位");
+          return;
+        }
+        await db.updateAdminPassword(account.id, hashPassword(next));
+        await db.deleteAdminSessionsForAccount(account.id, sha256Hex(readCookie(request, SESSION_COOKIE) || " "));
+        sendJson(response, 200, { ok: true });
         return;
       }
 
