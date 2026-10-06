@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAppStore } from "../state/appStore";
 import { checkRemoteHealth, normalizeRemoteBaseUrl } from "../api/remote";
+import { checkForUpdate, downloadAndInstall, getCurrentVersion, type UpdateInfo } from "../api/updater";
+import { invoke as invokeCmd } from "../api/client";
 
 export type SettingsScope = "database" | "overlay";
 
@@ -51,6 +53,54 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ scope = "database" }
     } catch (error) {
       setRemoteStatus("failed");
       setRemoteMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  // 软件更新控件
+  const [appVersion, setAppVersion] = useState("…");
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateState, setUpdateState] = useState<"idle" | "checking" | "downloading" | "ready">("idle");
+  const [updateMessage, setUpdateMessage] = useState("");
+
+  useEffect(() => {
+    getCurrentVersion()
+      .then(setAppVersion)
+      .catch(() => setAppVersion("未知"));
+  }, []);
+
+  const runCheck = async () => {
+    setUpdateState("checking");
+    setUpdateMessage("");
+    try {
+      const info = await checkForUpdate();
+      setUpdateInfo(info);
+      setUpdateState("idle");
+      setUpdateMessage(info ? `发现新版本 v${info.version}` : "当前已是最新版本。");
+    } catch (error) {
+      setUpdateState("idle");
+      setUpdateInfo(null);
+      setUpdateMessage(`检查失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const runInstall = async () => {
+    setUpdateState("downloading");
+    setUpdateMessage("正在下载更新…");
+    try {
+      await downloadAndInstall((progress) => {
+        if (progress.event === "progress") {
+          const mb = (progress.downloaded / 1024 / 1024).toFixed(1);
+          setUpdateMessage(`正在下载更新… ${mb} MB`);
+        }
+      });
+      setUpdateState("ready");
+      setUpdateMessage("更新下载完成，软件即将关闭——重新打开即为新版本。");
+      setTimeout(async () => {
+        await invokeCmd("exit_app");
+      }, 2500);
+    } catch (error) {
+      setUpdateState("idle");
+      setUpdateMessage(`更新失败：${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -113,6 +163,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ scope = "database" }
                   {remoteStatus === "connected" ? "已连接：" : "连接失败："}{remoteMessage}
                 </div>
               )}
+            </div>
+            <div style={{ ...CARD_STYLE, marginTop: "12px" }} data-testid="software-update-settings">
+              <div style={{ fontWeight: 700, fontSize: "14px", marginBottom: "4px" }}>软件更新</div>
+              <div style={{ color: "var(--dim2)", fontSize: "12px", lineHeight: 1.6, marginBottom: "12px" }}>
+                当前版本 <strong style={{ color: "var(--text)" }}>v{appVersion}</strong>。更新由云端服务器分发，安装包经签名校验后自动安装。
+              </div>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <button
+                  data-testid="check-update"
+                  type="button"
+                  onClick={() => (updateInfo && updateState !== "downloading" && updateState !== "ready" ? void runInstall() : void runCheck())}
+                  disabled={updateState === "checking" || updateState === "downloading"}
+                  style={{ flex: "none", padding: "7px 12px", background: updateInfo ? "var(--red)" : "transparent", border: "1px solid " + (updateInfo ? "var(--red)" : "var(--line)"), color: updateInfo ? "#fff" : "var(--text)", cursor: updateState === "checking" || updateState === "downloading" ? "default" : "pointer" }}
+                >
+                  {updateState === "checking" ? "检查中…" : updateState === "downloading" ? "下载中…" : updateInfo ? "立即更新" : "检查更新"}
+                </button>
+                {updateMessage && (
+                  <span style={{ color: updateState === "ready" ? "var(--text)" : "var(--dim2)", fontSize: "11px" }}>{updateMessage}</span>
+                )}
+              </div>
             </div>
           </>
         ) : (

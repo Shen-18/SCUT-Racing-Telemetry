@@ -23,7 +23,8 @@
     "reqwest": "0.12",
     "uuid": "1",
     "flate2": "1",
-    "dirs": "6"
+    "dirs": "6",
+    "tauri-plugin-updater": "2"
   },
   "frontend": {
     "@tauri-apps/api": "^2.11.1",
@@ -43,7 +44,8 @@
     "typescript-eslint": "^8.70.0",
     "vite": "^6.0.0",
     "vitest": "^3.2.7",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "@tauri-apps/plugin-updater": "^2.13.1"
   },
   "members": [
     "crates/telemetry-core",

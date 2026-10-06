@@ -450,6 +450,7 @@ enum ChunkEvent {
     Done(Result<(), String>),
 }
 
+#[allow(clippy::too_many_arguments)] // FFmpeg 管线参数天然偏多
 fn write_parallel_chunks(
     ffmpeg: &Path,
     output: &Path,
@@ -547,6 +548,7 @@ fn write_parallel_chunks(
     result
 }
 
+#[allow(clippy::too_many_arguments)] // FFmpeg 管线参数天然偏多
 fn write_chunk(
     child: &mut Child,
     indices: &[usize],

@@ -565,6 +565,7 @@ fn clamp_main_window(app: &tauri::AppHandle) {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             use tauri::Manager;
             let resource_root = app.path().resource_dir().ok();
@@ -608,6 +609,7 @@ fn main() {
             overlay_export::cancel_overlay_export,
             overlay_export::open_overlay_folder,
             cloud::cloud_download_file,
+            cloud::exit_app,
             list_records,
             save_record_note,
             save_date_note,

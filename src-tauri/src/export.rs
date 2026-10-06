@@ -96,7 +96,9 @@ pub fn raw_grid(
             channel.push(f64::NAN);
         }
         for (_, channel_index, value) in &events[row_start..index] {
-            values[*channel_index].last_mut().map(|slot| *slot = *value);
+            if let Some(slot) = values[*channel_index].last_mut() {
+                *slot = *value;
+            }
         }
     }
     let gridded_channels = selected

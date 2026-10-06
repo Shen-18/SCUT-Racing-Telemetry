@@ -51,3 +51,9 @@ pub async fn cloud_download_file(
     std::fs::rename(&tmp, &dest).map_err(|e| command_error("io", e))?;
     Ok(dest.to_string_lossy().into_owned())
 }
+
+/// 更新安装完成后退出应用（重新打开即为新版本）。
+#[tauri::command]
+pub fn exit_app() {
+    std::process::exit(0);
+}
