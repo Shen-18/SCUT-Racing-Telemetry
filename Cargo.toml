@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/telemetry-core","crates/cache-core","crates/aim-ffi","crates/csv-parser","crates/telemetry-store","crates/telemetry-ipc", "crates/overlay","src-tauri","crates/migrate-v1", "tests/golden-tests"]
+members = ["crates/telemetry-core","crates/cache-core","crates/aim-ffi","crates/csv-parser","crates/telemetry-store","crates/telemetry-ipc", "crates/overlay","crates/xrk-meta","src-tauri","crates/migrate-v1", "tests/golden-tests"]
 [workspace.dependencies]
 serde = { version="1", features=["derive"] }
 thiserror = "2"

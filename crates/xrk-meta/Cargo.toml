@@ -1,0 +1,10 @@
+[package]
+name = "xrk-meta"
+version = "0.1.0"
+edition = "2021"
+description = "AiM XRK/XRZ 元数据提取：日期/开始时间/车辆/车手/通道数（供云端上传自动建记录）"
+
+[dependencies]
+flate2 = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
