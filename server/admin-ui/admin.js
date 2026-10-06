@@ -105,7 +105,7 @@ function renderShell() {
       <span class="spacer"></span>
       <button class="ghost" id="logout">登出</button>
     </div>
-    <div class="wrap">
+    <div class="wrap${state.tab === "records" ? " wrap-full" : ""}">
       ${state.notice ? `<div class="banner ${state.notice.ok ? "ok" : ""}">${esc(state.notice.text)}</div>` : ""}
       <div id="tab-content"></div>
     </div>`;
