@@ -58,3 +58,4 @@ design-demos/fonts/
 # TestMatLabXRK is intentionally retained as the complete official example.
 server/.env
 server/bin/
+.keys/

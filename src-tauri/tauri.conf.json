@@ -27,7 +27,9 @@
   "bundle": {
     "active": true,
     "targets": "nsis",
-    "icon": ["../Data/SCUTRacing.ico"],
+    "icon": [
+      "../Data/SCUTRacing.ico"
+    ],
     "resources": {
       "../TestMatLabXRK/DLL-2022/MatLabXRK-2022-64-ReleaseU.dll": "MatLabXRK-2022-64-ReleaseU.dll",
       "../TestMatLabXRK/64/libiconv-2.dll": "libiconv-2.dll",
@@ -35,6 +37,19 @@
       "../TestMatLabXRK/64/libz.dll": "libz.dll",
       "../TestMatLabXRK/64/pthreadVC2_x64.dll": "pthreadVC2_x64.dll"
     },
-    "windows": {"webviewInstallMode": {"type": "embedBootstrapper"}}
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERGOThCNTU3M0NBREYwMjQKUldRazhLMDhWN1dZMzZRb0trWmltUW56QU9ZaUpZT1NFTmJQTjIrS05VVnFUeHpPN1JMMW5mcngK",
+      "endpoints": [
+        "http://8.134.196.199:8787/api/v1/updates/latest"
+      ]
+    }
   }
 }

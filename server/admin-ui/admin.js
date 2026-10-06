@@ -94,6 +94,7 @@ function renderLogin() {
 function renderShell() {
   const tabs = [
     ["records", "记录"],
+    ["releases", "软件发布"],
     ["settings", "设置 · 密钥分发"],
   ];
   app.innerHTML = `
@@ -126,6 +127,7 @@ function renderShell() {
 function renderTab() {
   const root = document.getElementById("tab-content");
   if (state.tab === "records") renderRecords(root);
+  else if (state.tab === "releases") renderReleases(root);
   else renderSettings(root);
 }
 
@@ -427,18 +429,7 @@ function renderSettings(root) {
         .join("")}
       <div class="hint" style="margin-top: 8px;">每位管理员都能登录本面板；删除账号会立即吊销其所有登录会话。</div>
     </div>
-    <div class="card">
-      <h3 class="f1">软件发布</h3>
-      <div class="kv"><label>版本号</label><input id="rel-tag" placeholder="例如 1.0.1" /><label style="width: 50px;">标题</label><input id="rel-title" placeholder="一句话说明（可选）" /></div>
-      <div class="kv"><label>更新说明</label><textarea id="rel-notes" style="min-height: 48px;" placeholder="弹窗里展示给队员看的内容"></textarea></div>
-      <div class="kv"><label>安装包 .exe</label><input type="file" id="rel-installer" accept=".exe" style="flex: 1;" /><span id="rel-installer-hint" class="hint"></span></div>
-      <div class="kv"><label>签名 .sig</label><input type="file" id="rel-sig" accept=".sig" style="flex: 1;" /><span id="rel-sig-hint" class="hint"></span></div>
-      <div style="display: flex; gap: 8px; justify-content: flex-end;">
-        <button class="line" id="rel-save-draft">保存草稿</button>
-        <button class="primary" id="rel-publish">发布</button>
-      </div>
-      ${state.releases.length === 0 ? "" : `<div style="margin-top: 12px;">${state.releases.map(renderReleaseRow).join("")}</div>`}
-    </div>`;
+`;
 
   root.querySelectorAll("[data-copy]").forEach((button) =>
     button.addEventListener("click", async () => {
@@ -521,7 +512,6 @@ function renderSettings(root) {
       await reload();
     }),
   );
-  bindReleaseForm(root);
 }
 
 async function onUpload(event) {
@@ -548,6 +538,63 @@ async function onUpload(event) {
     setNotice(`上传失败：${error.message}`);
   }
   await reload();
+}
+
+// ===== 软件发布页（GitHub Releases 式：左侧发布列表 + 右侧发布表单） =====
+
+function renderReleases(root) {
+  root.innerHTML = `
+    <div class="release-page">
+      <div class="release-main">
+        <h3 class="f1" style="margin: 4px 0 12px;">全部发布（${state.releases.length}）</h3>
+        ${state.releases.length === 0 ? '<div class="card hint">还没有发布记录。在右侧创建第一个版本。</div>' : state.releases.map(renderReleaseCard).join("")}
+      </div>
+      <aside class="release-side">
+        <div class="card">
+          <h3 class="f1">新建发布</h3>
+          <div class="kv"><label>版本号</label><input id="rel-tag" placeholder="例如 1.0.1" /></div>
+          <div class="kv"><label>标题</label><input id="rel-title" placeholder="一句话说明（可选）" /></div>
+          <div class="kv" style="align-items: flex-start;"><label style="margin-top: 6px;">说明</label><textarea id="rel-notes" style="min-height: 72px;" placeholder="更新弹窗里展示给队员的内容（支持换行）"></textarea></div>
+          <div class="kv"><label>安装包 .exe</label><input type="file" id="rel-installer" accept=".exe" style="flex: 1; min-width: 0;" /></div>
+          <div class="kv"><label>签名 .sig</label><input type="file" id="rel-sig" accept=".sig" style="flex: 1; min-width: 0;" /></div>
+          <div id="rel-hints" class="hint" style="min-height: 16px;"></div>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button class="line" id="rel-save-draft">保存草稿</button>
+            <button class="primary" id="rel-publish">发布</button>
+          </div>
+        </div>
+      </aside>
+    </div>`;
+  bindReleaseForm(root);
+}
+
+function renderReleaseCard(release) {
+  const status = release.draft
+    ? '<span class="badge">草稿</span>'
+    : '<span class="badge status-ok">已发布</span>';
+  const date = new Date((release.published_at || release.created_at || 0) * 1000).toLocaleDateString();
+  const notes = String(release.notes || "").trim();
+  return `
+    <div class="card release-card" data-release="${release.id}">
+      <div class="release-head">
+        <span class="release-tag f1">v${esc(release.tag)}</span>
+        <span class="release-title">${esc(release.title || "")}</span>
+        ${status}
+        <span style="flex: 1;"></span>
+        ${release.draft
+          ? `<button class="line" data-rel-publish="${release.id}">发布</button>`
+          : `<button class="line" data-rel-unpublish="${release.id}">撤下</button>`}
+        <button class="line" data-rel-delete="${release.id}">删除</button>
+      </div>
+      ${notes ? `<div class="release-notes">${esc(notes)}</div>` : ""}
+      <div class="release-assets">
+        ${release.installer_name
+          ? `<a class="release-asset mono" href="/api/v1/admin/files/${esc(release.installer_key)}?name=${encodeURIComponent(release.installer_name)}">⬇ ${esc(release.installer_name)}</a>`
+          : '<span class="hint">未上传安装包</span>'}
+        <span class="hint">${release.installer_hash ? (release.signature ? "签名 ✓" : "缺签名") : ""}</span>
+        <span class="hint" style="margin-left: auto;">${esc(date)}</span>
+      </div>
+    </div>`;
 }
 
 // ===== 数据加载 =====
@@ -597,38 +644,17 @@ async function restoreSession() {
 }
 
 
-function renderReleaseRow(release) {
-  const status = release.draft
-    ? '<span class="badge">草稿</span>'
-    : '<span class="badge status-ok">已发布</span>';
-  const asset = release.installer_hash
-    ? `${esc(release.installer_name)}${release.signature ? " + 签名" : "（缺签名）"}`
-    : "（未上传安装包）";
-  const date = new Date((release.published_at || release.created_at || 0) * 1000).toLocaleDateString();
-  return `
-    <div class="row" data-release="${release.id}">
-      <div class="meta">
-        <div class="name">v${esc(release.tag)} ${status}</div>
-        <div class="sub">${esc(release.title || "")} · ${esc(asset)} · ${esc(date)}</div>
-      </div>
-      ${release.draft
-        ? `<button class="line" data-rel-publish="${release.id}">发布</button>`
-        : `<button class="line" data-rel-unpublish="${release.id}">撤下</button>`}
-      <button class="line" data-rel-delete="${release.id}">删除</button>
-    </div>`;
-}
-
 async function bindReleaseForm(root) {
   const installerInput = document.getElementById("rel-installer");
   const sigInput = document.getElementById("rel-sig");
   if (!installerInput) return;
   installerInput.addEventListener("change", () => {
     const f = installerInput.files[0];
-    document.getElementById("rel-installer-hint").textContent = f ? `${f.name}（${(f.size / 1024 / 1024).toFixed(1)} MB）` : "";
+    document.getElementById("rel-hints").textContent = f ? `安装包：${f.name}（${(f.size / 1024 / 1024).toFixed(1)} MB）` : "";
   });
   sigInput.addEventListener("change", () => {
     const f = sigInput.files[0];
-    document.getElementById("rel-sig-hint").textContent = f ? f.name : "";
+    if (f) document.getElementById("rel-hints").textContent += " · 签名已选";
   });
 
   const submitRelease = async (publish) => {
