@@ -4,8 +4,8 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
 # Updater signing key (.keys/ is gitignored; losing it means no more signed updates)
-$env:TAURI_SIGNING_PRIVATE_KEY_PATH = Join-Path $PSScriptRoot ".keys\scut-updater.key"
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
+$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content (Join-Path $PSScriptRoot ".keys\scut-updater.key") -Raw
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = (Get-Content (Join-Path $PSScriptRoot ".keys\password.txt") -Raw).Trim()
 
 pnpm tauri build
 $version = (Get-Content src-tauri\tauri.conf.json | ConvertFrom-Json).version
