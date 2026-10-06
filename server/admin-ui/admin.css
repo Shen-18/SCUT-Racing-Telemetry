@@ -129,68 +129,27 @@ button:disabled { opacity: .5; cursor: default; }
 .date-band-count { margin-left: auto; color: var(--dim); font-size: 10px; }
 
 /* ===== 软件发布页（GitHub Releases 式布局） ===== */
-.relpage { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 0; min-height: calc(100vh - 45px); }
-.rel-side { border-right: 1px solid var(--line); overflow-y: auto; }
-.rel-side-head { padding: 14px 14px 8px; font-weight: 700; font-size: 13px; color: var(--dim); }
+.relpage { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 0; }
+.rel-side {
+  border-right: 1px solid var(--line);
+  position: sticky; top: 0; align-self: start;
+  height: calc(100vh - 45px); overflow-y: auto;
+}
+.rel-side-head { padding: 16px 14px 10px; font-weight: 700; font-size: 14px; }
 .rel-item { display: flex; align-items: center; gap: 8px; padding: 9px 14px; cursor: pointer; border-left: 3px solid transparent; }
 .rel-item:hover { background: var(--bg2); }
 .rel-item.active { background: var(--bg2); border-left-color: var(--red); }
 .rel-item-tag { font-weight: 700; font-size: 13px; }
-.rel-main { min-width: 0; padding: 14px 20px 48px; }
-.rel-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
-.release-detail { max-width: 860px; }
+.rel-main { min-width: 0; padding: 14px 24px 60px; }
+.rel-main > * { max-width: 980px; margin-left: auto; margin-right: auto; }
+.rel-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
+.release-card { padding: 16px 20px; margin-bottom: 20px; }
 .rel-detail-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.rel-meta { color: var(--dim); font-size: 13px; margin-top: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.rel-notes { margin-top: 12px; white-space: pre-wrap; font-size: 13px; line-height: 1.8; }
+.rel-meta { color: var(--dim); font-size: 13px; margin-top: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.rel-notes { margin-top: 14px; white-space: pre-wrap; font-size: 14px; line-height: 1.9; }
 .rel-assets { margin-top: 16px; border: 1px solid var(--line); background: var(--bg2); }
-.rel-assets-head { padding: 8px 12px; font-weight: 700; font-size: 12px; border-bottom: 1px solid var(--line); }
-.rel-asset-row { display: flex; align-items: center; gap: 12px; padding: 8px 12px; font-size: 12px; }
+.rel-assets-head { padding: 8px 12px; font-weight: 700; font-size: 13px; border-bottom: 1px solid var(--line); }
+.rel-asset-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; font-size: 13px; }
 .rel-asset-row + .rel-asset-row { border-top: 1px solid var(--line); }
 .release-asset { color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--line); }
 .release-asset:hover { color: var(--red); }
-
-/* ===== 新建发布（GitHub New release 式） ===== */
-.new-release { max-width: 900px; }
-.nr-divider { height: 1px; background: var(--line); margin: 12px 0 16px; }
-.nr-tag-row { display: flex; }
-.nr-tag-pill {
-  display: inline-flex; align-items: center; gap: 8px;
-  background: var(--bg2); border: 1px solid var(--line); border-radius: 6px;
-  padding: 8px 12px; font-size: 13px; color: var(--dim);
-}
-.nr-tag-pill input {
-  background: transparent; border: none; outline: none; color: var(--text);
-  font-size: 13px; width: 120px; padding: 0;
-}
-.nr-label { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
-.nr-title { width: 100%; max-width: 560px; box-sizing: border-box; }
-.nr-editor { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.nr-editor-tabs { display: flex; gap: 2px; background: var(--bg2); border-bottom: 1px solid var(--line); padding: 4px 6px 0; }
-.nr-tab {
-  background: transparent; border: none; border-radius: 6px 6px 0 0; color: var(--dim);
-  padding: 7px 16px; font: inherit; cursor: pointer;
-}
-.nr-tab.active { background: var(--bg); color: var(--text); }
-.nr-editor textarea {
-  display: block; width: 100%; box-sizing: border-box; min-height: 220px;
-  border: none; outline: none; resize: vertical; background: var(--bg);
-  padding: 12px 14px; font: inherit; color: var(--text);
-}
-.nr-preview { display: none; min-height: 220px; padding: 12px 14px; white-space: pre-wrap; font-size: 13px; line-height: 1.8; background: var(--bg); }
-.nr-editor-foot { padding: 6px 12px; border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; }
-.nr-attach {
-  margin-top: 16px; border: 1px dashed var(--line); border-radius: 6px;
-  padding: 26px 16px; text-align: center; color: var(--dim); font-size: 13px;
-  cursor: pointer;
-}
-.nr-attach.dragging { border-color: var(--red); color: var(--text); }
-.nr-files { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
-.nr-file {
-  display: inline-flex; align-items: center; gap: 6px; justify-content: center;
-  background: var(--bg2); border: 1px solid var(--line); border-radius: 6px;
-  padding: 6px 10px; font-size: 12px;
-}
-.nr-file button { background: transparent; border: none; color: var(--dim); cursor: pointer; }
-.nr-file button:hover { color: var(--red); }
-.nr-actions { display: flex; gap: 10px; margin-top: 16px; }
-.nr-actions .primary { background: var(--ok); border-color: var(--ok); }

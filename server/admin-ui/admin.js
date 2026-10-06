@@ -598,17 +598,21 @@ function renderKeys(root) {
   });
 }
 
-// ===== 软件发布页（GitHub Releases 式：左列表 + 右详情/表单） =====
+// ===== 软件发布页（GitHub Releases 式：左索引定位 + 中间全部 release 堆叠） =====
 
 function latestPublishedTag(list) {
-  const semver = (tag) => String(tag).replace(/^v/i, "").split("-")[0].split(".").map(Number);
-  const ok = list.filter((r) => !r.draft);
+  const semver = (tag) => {
+    const parts = String(tag).replace(/^v/i, "").split("-")[0].split(".");
+    if (parts.length !== 2) return null;
+    return [Number.parseInt(parts[0], 10) || 0, Number.parseInt(parts[1], 10) || 0];
+  };
+  const ok = list.filter((r) => !r.draft && semver(r.tag) !== null);
   if (ok.length === 0) return null;
   ok.sort((a, b) => {
     const va = semver(a.tag);
     const vb = semver(b.tag);
-    for (let i = 0; i < 3; i++) if (va[i] !== vb[i]) return vb[i] - va[i];
-    return b.published_at - a.published_at;
+    if (va[0] !== vb[0]) return vb[0] - va[0];
+    return vb[1] - va[1];
   });
   return ok[0].tag;
 }
@@ -631,8 +635,6 @@ function renderReleases(root) {
   if (state.releaseMode === "new" && !state.relForm) {
     state.relForm = { tag: suggestNextTag(list), title: "", notes: "" };
   }
-  if (state.selectedReleaseId === null && list.length > 0) state.selectedReleaseId = list[0].id;
-  const selected = list.find((r) => r.id === state.selectedReleaseId) || null;
   const latestTag = latestPublishedTag(list);
 
   root.innerHTML = `
@@ -640,7 +642,7 @@ function renderReleases(root) {
       <aside class="rel-side">
         <div class="rel-side-head f1">发布列表</div>
         ${list.length === 0 ? '<div class="hint" style="padding: 8px 14px;">还没有发布记录</div>' : list.map((r) => `
-          <div class="rel-item ${r.id === state.selectedReleaseId ? "active" : ""}" data-rel-sel="${r.id}">
+          <div class="rel-item ${r.id === state.selectedReleaseId ? "active" : ""}" data-rel-goto="${r.id}">
             <span class="rel-item-tag f1">v${esc(r.tag)}</span>
             ${r.draft ? '<span class="badge">草稿</span>' : r.tag === latestTag ? '<span class="badge status-ok">Latest</span>' : ""}
           </div>`).join("")}
@@ -648,23 +650,24 @@ function renderReleases(root) {
       <section class="rel-main">
         <div class="rel-actions">
           ${state.releaseMode === "new"
-            ? '<button class="line" id="rel-cancel">取消</button>'
+            ? '<button class="line" id="rel-cancel">← 返回列表</button>'
             : '<button class="primary" id="rel-new">新建发布</button>'}
         </div>
         ${state.releaseMode === "new"
           ? newReleaseFormHtml()
-          : selected
-            ? renderReleaseDetail(selected, latestTag)
-            : '<div class="card hint" style="margin-top: 8px;">还没有发布记录，点右上「新建发布」创建第一个版本。</div>'}
+          : list.length === 0
+            ? '<div class="card hint">还没有发布记录，点右上「新建发布」创建第一个版本。</div>'
+            : list.map((r) => renderReleaseCard(r, latestTag)).join("")}
       </section>
     </div>`;
 
-  root.querySelectorAll("[data-rel-sel]").forEach((item) =>
+  // 索引点击：定位到对应卡片（平滑滚动），并高亮当前索引项
+  root.querySelectorAll("[data-rel-goto]").forEach((item) =>
     item.addEventListener("click", () => {
-      state.selectedReleaseId = Number(item.dataset.relSel);
-      state.releaseMode = "view";
-      renderShell();
-      renderTab();
+      state.selectedReleaseId = Number(item.dataset.relGoto);
+      root.querySelectorAll("[data-rel-goto]").forEach((el) => el.classList.toggle("active", el === item));
+      const card = document.getElementById(`release-card-${state.selectedReleaseId}`);
+      card?.scrollIntoView({ behavior: "smooth", block: "start" });
     }),
   );
   const newBtn = document.getElementById("rel-new");
@@ -726,7 +729,7 @@ function newReleaseFormHtml() {
     </div>`;
 }
 
-function renderReleaseDetail(release, latestTag) {
+function renderReleaseCard(release, latestTag) {
   const status = release.draft
     ? '<span class="badge">草稿</span>'
     : release.tag === latestTag
@@ -735,9 +738,9 @@ function renderReleaseDetail(release, latestTag) {
   const date = new Date((release.published_at || release.created_at || 0) * 1000).toLocaleDateString();
   const notes = String(release.notes || "").trim();
   return `
-    <div class="card release-detail">
+    <div class="card release-card" id="release-card-${release.id}">
       <div class="rel-detail-head">
-        <h1 class="f1" style="margin: 0; font-size: 22px;">v${esc(release.tag)}</h1>
+        <h1 class="f1" style="margin: 0; font-size: 20px;">${esc(release.title || `v${release.tag}`)}</h1>
         ${status}
         <span style="flex: 1;"></span>
         ${release.draft
@@ -745,7 +748,7 @@ function renderReleaseDetail(release, latestTag) {
           : `<button class="line" data-rel-unpublish="${release.id}">撤下</button>`}
         <button class="line" data-rel-delete="${release.id}">删除</button>
       </div>
-      <div class="rel-meta">${esc(release.title || "")} · 发布于 ${esc(date)}</div>
+      <div class="rel-meta">🏷 v${esc(release.tag)} · 发布于 ${esc(date)}</div>
       <div class="rel-notes">${notes ? esc(notes) : "（没有填写更新说明）"}</div>
       <div class="rel-assets">
         <div class="rel-assets-head f1">Assets</div>
