@@ -319,12 +319,12 @@ async function createApp(db, deps = {}) {
       const revokeToken = url.pathname.match(/^\/api\/v1\/admin\/tokens\/(\d+)$/);
       if (revokeToken && request.method === "DELETE") {
         if (!(await guardAdmin())) return;
-        const row = await db.revokeClientToken(Number(revokeToken[1]));
+        const row = await db.deleteClientToken(Number(revokeToken[1]));
         if (!row) {
           sendError(response, 404, "token_not_found", "找不到令牌");
           return;
         }
-        sendJson(response, 200, { ok: true });
+        sendJson(response, 200, { ok: true, deleted: true });
         return;
       }
 

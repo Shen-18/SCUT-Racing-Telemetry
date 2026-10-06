@@ -206,6 +206,15 @@ function makeFakeDb() {
       }
       return null;
     },
+    async deleteClientToken(id) {
+      for (const [key, row] of [...tokens]) {
+        if (row.id === id) {
+          tokens.delete(key);
+          return { id };
+        }
+      }
+      return null;
+    },
     async getClientToken(token) {
       return tokens.get(token) ?? null;
     },

@@ -549,7 +549,7 @@ function renderKeys(root) {
             <div class="sub mono">${esc(t.token)}</div>
           </div>
           <button class="line" data-copy-token="${esc(t.token)}" ${t.revoked_at ? "disabled" : ""}>复制</button>
-          ${t.revoked_at ? "" : `<button class="line" data-revoke="${t.id}">吊销</button>`}
+          <button class="line" data-revoke="${t.id}">删除</button>
         </div>`,
         )
         .join("")}
@@ -565,12 +565,12 @@ function renderKeys(root) {
   );
   root.querySelectorAll("[data-revoke]").forEach((button) =>
     button.addEventListener("click", async () => {
-      if (!window.confirm("吊销后该密钥立即失效，队员需要换新密钥。确认吊销？")) return;
+      if (!window.confirm("删除后该密钥立即失效且不可恢复，队员需要换新密钥。确认删除？")) return;
       try {
         await api(`/api/v1/admin/tokens/${button.dataset.revoke}`, { method: "DELETE" });
-        setNotice("已吊销。", true);
+        setNotice("已删除。", true);
       } catch (error) {
-        setNotice(`吊销失败：${error.message}`);
+        setNotice(`删除失败：${error.message}`);
       }
       await reload();
     }),

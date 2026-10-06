@@ -314,6 +314,10 @@ export async function createDatabase(databaseUrl) {
       );
       return result.rows[0] ?? null;
     },
+    async deleteClientToken(id) {
+      const result = await pool.query("DELETE FROM client_tokens WHERE id = $1 RETURNING id", [id]);
+      return result.rows[0] ?? null;
+    },
     async getClientToken(token) {
       const result = await pool.query(
         "SELECT id, name, token, created_at, last_used_at, revoked_at FROM client_tokens WHERE token = $1",
