@@ -8,6 +8,10 @@ let state = {
   notes: new Map(),
   tokens: [],
   notice: null,
+  // 记录页状态（对齐本地 DATABASE 页）
+  selectedGroup: null,
+  query: "",
+  selected: new Set(),
 };
 
 async function api(path, options = {}) {
@@ -42,12 +46,18 @@ function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-function fmtSize(bytes) {
-  const n = Number(bytes) || 0;
-  if (n > 1024 * 1024 * 1024) return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
-  if (n > 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  if (n > 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${n} B`;
+// 与桌面端一致：m:ss.d
+function fmtDuration(t) {
+  const n = Number(t);
+  if (!Number.isFinite(n) || n < 0) return "--:--.-";
+  const m = Math.floor(n / 60);
+  const s = n - m * 60;
+  return `${m}:${s.toFixed(1).padStart(4, "0")}`;
+}
+
+function notePreview(note, maxLength = 72) {
+  const compact = String(note || "").replace(/\s+/g, " ").trim();
+  return compact.length > maxLength ? `${compact.slice(0, maxLength - 1)}…` : compact;
 }
 
 // ===== 渲染 =====
@@ -124,75 +134,164 @@ function renderTab() {
   else renderSettings(root);
 }
 
-// ===== 记录页 =====
+// ===== 记录页（复刻本地 DATABASE 页：左分组列表 + 右数据明细网格；无详情查看） =====
 
 function renderRecords(root) {
-  const groups = new Map();
-  for (const record of [...state.records].sort((a, b) => (a.record_date < b.record_date ? 1 : -1))) {
-    const key = record.record_date || "未知日期";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(record);
-  }
+  const dates = [...new Set(state.records.map((r) => r.record_date).filter(Boolean))].sort().reverse();
+  const query = state.query.trim().toLowerCase();
+  const visible = state.records.filter((r) => {
+    if (state.selectedGroup && r.record_date !== state.selectedGroup) return false;
+    if (!query) return true;
+    return (
+      (r.file_name || "").toLowerCase().includes(query) ||
+      (r.racer || "").toLowerCase().includes(query) ||
+      (r.vehicle || "").toLowerCase().includes(query)
+    );
+  });
+  const allSelected = visible.length > 0 && visible.every((r) => state.selected.has(r.file_hash));
+
   root.innerHTML = `
-    <div class="card">
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <h3 class="f1" style="margin: 0; flex: 1;">数据文件</h3>
-        <input type="file" id="upload-input" accept=".xrk,.xrz" style="display: none;" />
-        <button class="primary" id="upload-button">上传 XRK / XRZ</button>
-      </div>
-      <div class="hint" style="margin-top: 8px;">上传后服务器自动解析元数据并生成记录（同名文件按内容去重）。</div>
-    </div>
-    ${groups.size === 0 ? '<div class="card hint">云端还没有记录，先上传一个 .xrk / .xrz 文件。</div>' : ""}
-    ${[...groups.entries()]
-      .map(([date, rows]) => {
-        const note = state.notes.get(date) || "";
-        return `<div class="date-head"><span class="d f1">${esc(date)}</span>${note ? `<span class="n">📝 ${esc(note)}</span>` : ""}</div>
-          ${rows.map(renderRecordRow).join("")}`;
-      })
-      .join("")}`;
+    <div class="layout">
+      <aside class="left-col">
+        <div class="group-row ${state.selectedGroup === null ? "active" : ""}" data-group="">
+          <span class="gname f1">全部</span><span></span>
+          <span class="gcount">${state.records.length}</span>
+        </div>
+        ${dates
+          .map((date) => {
+            const rows = state.records.filter((r) => r.record_date === date);
+            const note = state.notes.get(date) || "";
+            return `
+            <div class="group-row ${state.selectedGroup === date ? "active" : ""}" data-group="${esc(date)}">
+              <span class="gname f1" title="${esc(date)}">${esc(date)}</span>
+              <span class="gnote" title="${esc(note)}">${esc(notePreview(note, 24))}</span>
+              <span class="gcount">${rows.length}</span>
+            </div>`;
+          })
+          .join("")}
+      </aside>
+      <section class="right-pane">
+        <div class="detail-header">
+          <span class="title f1">数据明细</span>
+          ${state.records.length > 0 ? '<input class="search" id="library-search" placeholder="搜索车手 / 车辆…" />' : ""}
+          <span class="count f1">${visible.length} 条记录${state.selectedGroup ? ` · ${esc(state.selectedGroup)}` : ""}</span>
+          <span style="flex: 1;"></span>
+          ${state.selected.size > 0 ? `<span style="color: var(--red); font-weight: 700; font-size: 11px; letter-spacing: 1px;">已选 ${state.selected.size} 条</span><button class="line" id="delete-selected">删除所选</button>` : ""}
+          <input type="file" id="upload-input" accept=".xrk,.xrz" style="display: none;" />
+          <button class="primary" id="upload-button">上传文件</button>
+        </div>
+        ${
+          state.records.length === 0
+            ? emptyStateHtml()
+            : `
+        <div class="grid-header">
+          <span class="checkbox ${allSelected ? "checked" : state.selected.size > 0 ? "partial" : ""}" id="select-all" title="全选 / 全不选"></span>
+          <span>开始时间</span><span>备注</span><span>车手</span><span>车辆</span><span>时长</span><span>操作</span>
+        </div>
+        <div style="flex: 1; overflow-y: auto; min-height: 0;">
+          ${
+            visible.length === 0
+              ? '<div style="padding: 32px; text-align: center; color: var(--dim); font-weight: 700; letter-spacing: 1.5px;">没有匹配的记录</div>'
+              : visible.map(renderRecordRow).join("")
+          }
+        </div>`
+        }
+      </section>
+    </div>`;
+
+  root.querySelectorAll(".group-row").forEach((row) =>
+    row.addEventListener("click", () => {
+      state.selectedGroup = row.dataset.group || null;
+      renderShell();
+      renderTab();
+    }),
+  );
+  const search = document.getElementById("library-search");
+  if (search) {
+    search.value = state.query;
+    search.addEventListener("input", () => {
+      state.query = search.value;
+      renderShell();
+      renderTab();
+      const again = document.getElementById("library-search");
+      if (again) {
+        again.focus();
+        again.setSelectionRange(again.value.length, again.value.length);
+      }
+    });
+  }
+  const selectAll = document.getElementById("select-all");
+  if (selectAll)
+    selectAll.addEventListener("click", () => {
+      if (allSelected) visible.forEach((r) => state.selected.delete(r.file_hash));
+      else visible.forEach((r) => state.selected.add(r.file_hash));
+      renderShell();
+      renderTab();
+    });
+  root.querySelectorAll("[data-check]").forEach((box) =>
+    box.addEventListener("click", () => {
+      const hash = box.dataset.check;
+      if (state.selected.has(hash)) state.selected.delete(hash);
+      else state.selected.add(hash);
+      renderShell();
+      renderTab();
+    }),
+  );
+  root.querySelectorAll("[data-action]").forEach((button) => button.addEventListener("click", onRecordAction));
+  const deleteSelected = document.getElementById("delete-selected");
+  if (deleteSelected)
+    deleteSelected.addEventListener("click", async () => {
+      const hashes = [...state.selected];
+      if (!window.confirm(`确认删除所选 ${hashes.length} 条记录？记录与服务器文件会一起删除，不可恢复。`)) return;
+      let okCount = 0;
+      for (const hash of hashes) {
+        try {
+          await api(`/api/v1/admin/datasets/${hash}`, { method: "DELETE" });
+          state.selected.delete(hash);
+          okCount += 1;
+        } catch (error) {
+          setNotice(`删除失败：${error.message}`);
+          break;
+        }
+      }
+      if (okCount > 0) setNotice(`已删除 ${okCount} 条记录。`, true);
+      await reload();
+    });
   document.getElementById("upload-button").addEventListener("click", () => document.getElementById("upload-input").click());
   document.getElementById("upload-input").addEventListener("change", onUpload);
-  root.querySelectorAll("[data-action]").forEach((button) => button.addEventListener("click", onRecordAction));
 }
 
-function renderRecordRow(record) {
-  const archived = Boolean(record.is_archived);
+function emptyStateHtml() {
   return `
-    <div class="row" data-hash="${esc(record.file_hash)}">
-      <div class="meta">
-        <div class="name">${esc(record.file_name)} ${archived ? '<span class="badge archived">已归档</span>' : ""}</div>
-        <div class="sub">${esc(record.vehicle || "未知车辆")} · ${esc(record.racer || "未知车手")} · 开始于 ${esc(record.start_time || "--:--")} · ${fmtSize(record.file_size)}</div>
-      </div>
-      <button class="line" data-action="download" ${record.storage_key ? "" : "disabled"}>下载</button>
-      <button class="line" data-action="archive">${archived ? "恢复" : "归档"}</button>
-      <button class="line" data-action="delete">删除</button>
+    <div class="empty-state">
+      <div class="db-logo"><span>DB</span></div>
+      <div class="f1" style="font-weight: 700; font-size: 14px; letter-spacing: 1.5px;">上传遥测数据以开始</div>
+      <div class="f1" style="font-size: 11px; letter-spacing: 1px; margin-top: 6px;">点击「上传文件」选择 .xrk / .xrz 文件</div>
     </div>`;
 }
 
-async function onUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  setNotice(`正在上传并解析 ${file.name} …`, true);
-  renderShell();
-  try {
-    const res = await fetch("/api/v1/admin/uploads", {
-      method: "POST",
-      headers: { "x-file-name": file.name, "content-type": "application/octet-stream" },
-      body: file,
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body?.error?.message || `上传失败 HTTP ${res.status}`);
-    setNotice(body.duplicate ? `${file.name} 已存在（按内容去重，未重复登记）。` : `${file.name} 上传成功，已生成记录。`, true);
-  } catch (error) {
-    setNotice(`上传失败：${error.message}`);
-  }
-  await reload();
+function renderRecordRow(record) {
+  const checked = state.selected.has(record.file_hash);
+  return `
+    <div class="grid-row" data-hash="${esc(record.file_hash)}">
+      <span class="checkbox ${checked ? "checked" : ""}" data-check="${esc(record.file_hash)}" title="勾选以批量删除"></span>
+      <span class="dim" title="文件时间 ${esc(new Date((record.source_mtime_unix || 0) * 1000).toLocaleString())}">${esc(record.start_time || "—")}</span>
+      <span class="dim" title="云端索引暂无单条备注">—</span>
+      <span class="cell" title="${esc(record.racer || "")}">${esc(record.racer || "—")}</span>
+      <span class="dim" title="${esc(record.vehicle || "")}">${esc(record.vehicle || "—")}</span>
+      <span>${fmtDuration(record.duration)}</span>
+      <span class="row-actions">
+        <button class="icon-btn" data-action="download" data-hash="${esc(record.file_hash)}" ${record.storage_key ? "" : "disabled"} title="下载原始文件">⬇</button>
+        <button class="icon-btn" data-action="archive" data-hash="${esc(record.file_hash)}" title="${record.is_archived ? "恢复" : "归档"}">${record.is_archived ? "▲" : "▼"}</button>
+        <button class="icon-btn danger" data-action="delete" data-hash="${esc(record.file_hash)}" title="删除记录与文件">✕</button>
+      </span>
+    </div>`;
 }
 
 async function onRecordAction(event) {
-  const row = event.target.closest(".row");
-  const hash = row.dataset.hash;
+  const hash = event.target.dataset.hash;
   const record = state.records.find((r) => r.file_hash === hash);
+  if (!record) return;
   const action = event.target.dataset.action;
   try {
     if (action === "download") {
@@ -206,6 +305,7 @@ async function onRecordAction(event) {
     if (action === "delete") {
       if (!window.confirm(`确认删除 ${record.file_name}？记录与服务器文件会一起删除，不可恢复。`)) return;
       await api(`/api/v1/admin/datasets/${hash}`, { method: "DELETE" });
+      state.selected.delete(hash);
       setNotice("已删除。", true);
     }
   } catch (error) {

@@ -62,3 +62,46 @@ button:disabled { opacity: .5; cursor: default; }
 .status-ok { color: var(--ok); }
 .status-off { color: var(--red); }
 .mono { font-family: Consolas, monospace; }
+
+/* ===== 记录页：复刻桌面端 DATABASE 页布局 ===== */
+.layout { display: flex; height: calc(100vh - 45px); min-height: 0; }
+.left-col { width: 240px; flex: none; border-right: 1px solid var(--line); overflow-y: auto; }
+.group-row {
+  display: grid; grid-template-columns: minmax(88px, 1fr) minmax(0, 1.5fr) 34px;
+  column-gap: 8px; align-items: center; padding: 8px 14px;
+  cursor: pointer; border-left: 3px solid transparent;
+}
+.group-row:hover { background: var(--bg2); }
+.group-row.active { background: var(--bg2); border-left-color: var(--red); }
+.group-row .gname { font-weight: 700; font-size: 12px; letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.group-row .gnote { color: var(--dim); font-size: 12px; padding-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.group-row .gcount { font-size: 12px; color: var(--dim); font-weight: 700; text-align: right; }
+.right-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.detail-header { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 16px; border-bottom: 1px solid var(--line); flex: none; }
+.detail-header .title { font-weight: 700; font-size: 13px; letter-spacing: 2px; color: var(--dim); }
+.detail-header input.search { width: 220px; border-radius: 2px; padding: 5px 8px; font-size: 11px; letter-spacing: .5px; }
+.detail-header .count { font-size: 11px; letter-spacing: 1px; color: var(--dim); }
+.grid-header, .grid-row {
+  display: grid; grid-template-columns: 28px 104px minmax(128px, 1.25fr) minmax(132px, 1fr) 120px 88px 132px;
+  gap: 0 8px; align-items: center; text-align: center; margin: 0 16px; padding: 9px 8px;
+}
+.grid-header { min-height: 32px; padding: 0 8px; border-bottom: 1px solid var(--line); flex: none; }
+.grid-header span { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: var(--dim); }
+.grid-row { border-bottom: 1px solid var(--line); font-size: 14px; }
+.grid-row:hover { background: var(--bg2); }
+.grid-row .dim { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid-row .cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-actions { display: flex; gap: 6px; justify-content: center; align-items: center; }
+.icon-btn { background: transparent; border: none; color: var(--dim); cursor: pointer; font-size: 13px; padding: 2px 6px; }
+.icon-btn:hover { color: var(--text); }
+.icon-btn.danger:hover { color: var(--red); }
+.checkbox { width: 14px; height: 14px; border: 1.5px solid var(--dim); position: relative; display: inline-block; cursor: pointer; justify-self: center; flex: none; }
+.checkbox.checked { border-color: var(--text); }
+.checkbox.checked::after { content: ""; position: absolute; inset: 2px; background: var(--text); }
+.checkbox.partial::before { content: ""; position: absolute; left: 2px; right: 2px; top: 4px; height: 2px; background: var(--red); }
+.empty-state { margin: auto; text-align: center; color: var(--dim); padding: 40px 0; }
+.empty-state .db-logo {
+  width: 48px; height: 48px; margin: 0 auto 12px; background: var(--red);
+  transform: skewX(-10deg); display: grid; place-items: center;
+}
+.empty-state .db-logo span { transform: skewX(10deg); font-weight: 700; color: #fff; font-size: 16px; }
