@@ -1,7 +1,7 @@
 {
   "name": "scut-racing-telemetry",
   "private": true,
-  "version": "1.2",
+  "version": "1.2.0",
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "dev": "tauri dev",
