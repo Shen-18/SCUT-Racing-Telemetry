@@ -818,3 +818,49 @@ async function bindReleaseForm(root) {
     }),
   );
 }
+
+// ===== 数据加载 =====
+
+async function reload() {
+  if (!state.loggedIn) {
+    render();
+    return;
+  }
+  try {
+    const [datasetsBody, notesBody, tokensBody, accountsBody, releasesBody] = await Promise.all([
+      api("/api/v1/datasets?include_archived=true"),
+      api("/api/v1/date-notes"),
+      api("/api/v1/admin/tokens"),
+      api("/api/v1/admin/accounts"),
+      api("/api/v1/admin/releases"),
+    ]);
+    state.records = datasetsBody.datasets || [];
+    state.notes = new Map((notesBody.date_notes || []).map((item) => [item.date_key, item.note]));
+    state.tokens = tokensBody.tokens || [];
+    state.adminAccounts = accountsBody.accounts || [];
+    state.currentAdminId = accountsBody.current;
+    state.releases = releasesBody.releases || [];
+    setNotice(null);
+  } catch (error) {
+    setNotice(`加载失败：${error.message}`);
+  }
+  render();
+}
+
+render();
+restoreSession();
+
+// 页面加载先用已有 Cookie 问服务器会话是否有效——有效则直接进主界面（不主动登出就保持 7 天）
+async function restoreSession() {
+  try {
+    const response = await fetch("/api/v1/admin/session", { headers: { "content-type": "application/json" } });
+    if (response.ok) {
+      state.loggedIn = true;
+      await reload();
+      return;
+    }
+  } catch {
+    // 网络异常时留在登录视图
+  }
+  render();
+}
