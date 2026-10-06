@@ -275,13 +275,13 @@ export async function createDatabase(databaseUrl) {
       const result = await pool.query(
         "SELECT id, tag, title, notes, installer_hash, installer_name, signature, published_at FROM releases WHERE draft = FALSE AND installer_hash IS NOT NULL AND signature <> ''",
       );
-      const semver = (tag) =>
-        String(tag)
-          .replace(/^v/i, "")
-          .split("-")[0]
-          .split(".")
-          .map((n) => Number.parseInt(n, 10) || 0);
-      const candidates = result.rows.filter((row) => semver(row.tag).length === 3);
+      // 版本号规范为两位（1.0 / 1.1 / 1.2）
+      const semver = (tag) => {
+        const parts = String(tag).replace(/^v/i, "").split("-")[0].split(".");
+        if (parts.length !== 2) return null;
+        return [Number.parseInt(parts[0], 10) || 0, Number.parseInt(parts[1], 10) || 0];
+      };
+      const candidates = result.rows.filter((row) => semver(row.tag) !== null);
       if (candidates.length === 0) return null;
       candidates.sort((a, b) => {
         const va = semver(a.tag);

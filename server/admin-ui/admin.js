@@ -20,6 +20,7 @@ let state = {
   releaseMode: "view",
   relInstaller: null,
   relSig: null,
+  relForm: null,
 };
 
 async function api(path, options = {}) {
@@ -612,8 +613,24 @@ function latestPublishedTag(list) {
   return ok[0].tag;
 }
 
+function suggestNextTag(list) {
+  // 两位版本号规范（1.0 → 1.1 → 1.2）：取现有最高版本 minor +1
+  let best = null;
+  for (const r of list) {
+    const parts = String(r.tag).replace(/^v/i, "").split("-")[0].split(".");
+    if (parts.length !== 2) continue;
+    const v = [Number.parseInt(parts[0], 10) || 0, Number.parseInt(parts[1], 10) || 0];
+    if (!best || v[0] > best[0] || (v[0] === best[0] && v[1] > best[1])) best = v;
+  }
+  if (!best) return "1.0";
+  return `${best[0]}.${best[1] + 1}`;
+}
+
 function renderReleases(root) {
   const list = state.releases;
+  if (state.releaseMode === "new" && !state.relForm) {
+    state.relForm = { tag: suggestNextTag(list), title: "", notes: "" };
+  }
   if (state.selectedReleaseId === null && list.length > 0) state.selectedReleaseId = list[0].id;
   const selected = list.find((r) => r.id === state.selectedReleaseId) || null;
   const latestTag = latestPublishedTag(list);
@@ -676,12 +693,12 @@ function newReleaseFormHtml() {
       <h1 class="f1" style="margin: 0 0 4px; font-size: 22px;">新建发布</h1>
       <div class="nr-divider"></div>
       <div class="nr-tag-row">
-        <span class="nr-tag-pill">🏷 版本号：<input id="rel-tag" placeholder="1.0.1" /></span>
+        <span class="nr-tag-pill">🏷 版本号：<input id="rel-tag" value="${esc(state.relForm.tag)}" placeholder="留空自动递增" /></span>
       </div>
-      <div class="hint" style="margin: 6px 0 18px;">发布时若版本号已存在会被拒绝；队员端按版本号大小判断是否提示更新。</div>
+      <div class="hint" style="margin: 6px 0 18px;">留空则自动取现有最高版本 +1（如 1.0 → 1.1）；两位数字，重复发布会被拒绝。</div>
 
       <div class="nr-label f1">发布标题</div>
-      <input id="rel-title" class="nr-title" placeholder="标题" />
+      <input id="rel-title" class="nr-title" value="${esc(state.relForm.title)}" placeholder="标题" />
 
       <div class="nr-label f1" style="margin-top: 16px;">更新说明</div>
       <div class="nr-editor">
@@ -689,7 +706,7 @@ function newReleaseFormHtml() {
           <button class="nr-tab active" data-notes-tab="write">撰写</button>
           <button class="nr-tab" data-notes-tab="preview">预览</button>
         </div>
-        <textarea id="rel-notes" placeholder="描述这个版本改了什么（支持换行）"></textarea>
+        <textarea id="rel-notes" placeholder="描述这个版本改了什么（支持换行）">${esc(state.relForm.notes)}</textarea>
         <div id="rel-notes-preview" class="nr-preview" style="display: none;"></div>
         <div class="nr-editor-foot">纯文本 · 换行会保留展示给队员</div>
       </div>
@@ -793,15 +810,22 @@ async function bindReleaseForm(root) {
     );
   }
 
-  if (attach && notesArea) {
+  const form = state.relForm;
+  if (attach && notesArea && form) {
+    const tagInput = document.getElementById("rel-tag");
+    const titleInput = document.getElementById("rel-title");
+    tagInput.addEventListener("input", () => { form.tag = tagInput.value; });
+    titleInput.addEventListener("input", () => { form.title = titleInput.value; });
+    notesArea.addEventListener("input", () => { form.notes = notesArea.value; });
+
     const submitRelease = async (publish) => {
-      const tag = document.getElementById("rel-tag").value.trim();
-      const title = document.getElementById("rel-title").value.trim();
-      const notes = notesArea.value;
+      const tag = (form.tag.trim() || suggestNextTag(state.releases)).replace(/^v/i, "");
+      const title = form.title.trim();
+      const notes = form.notes;
       const installer = state.relInstaller;
       const sig = state.relSig;
-      if (!/^v?\d+\.\d+\.\d+(-[\w.]+)?$/i.test(tag)) {
-        setNotice("版本号格式应为 1.2.3。");
+      if (!/^\d+\.\d+(-[\w.]+)?$/.test(tag)) {
+        setNotice("版本号格式应为两位数字，如 1.0、1.2。");
         renderShell(); renderTab();
         return;
       }
@@ -838,6 +862,7 @@ async function bindReleaseForm(root) {
         }
         state.relInstaller = null;
         state.relSig = null;
+        state.relForm = null;
         state.selectedReleaseId = id;
         state.releaseMode = "view";
       } catch (error) {

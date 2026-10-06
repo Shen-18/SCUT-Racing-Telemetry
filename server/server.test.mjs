@@ -705,13 +705,13 @@ test("release publish flow: create, attach assets, publish, latest.json shape", 
       400,
     );
     // 重复 tag 409
-    await publishFullRelease(srv.port, cookie, "1.0.1", srv.uploadRoot, { draft: true });
+    await publishFullRelease(srv.port, cookie, "1.0", srv.uploadRoot, { draft: true });
     assert.equal(
       (
         await req(srv.port, "/api/v1/admin/releases", {
           method: "POST",
           headers: { "content-type": "application/json", cookie },
-          body: JSON.stringify({ tag: "v1.0.1" }),
+          body: JSON.stringify({ tag: "v1.0" }),
         })
       ).status,
       409,
@@ -721,7 +721,7 @@ test("release publish flow: create, attach assets, publish, latest.json shape", 
     const bare = await req(srv.port, "/api/v1/admin/releases", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ tag: "1.0.2" }),
+      body: JSON.stringify({ tag: "1.1" }),
     });
     const bareId = (await bare.json()).release.id;
     assert.equal(
@@ -735,18 +735,18 @@ test("release publish flow: create, attach assets, publish, latest.json shape", 
 
     // 把之前的 1.0.1 草稿发布；再完整发布 1.0.3 → latest 应取 1.0.3
     const draftList = await (await req(srv.port, "/api/v1/admin/releases", { headers: { cookie } })).json();
-    const draft101 = draftList.releases.find((r) => r.tag === "1.0.1");
+    const draft101 = draftList.releases.find((r) => r.tag === "1.0");
     await req(srv.port, `/api/v1/admin/releases/${draft101.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ draft: false }),
     });
-    await publishFullRelease(srv.port, cookie, "1.0.3", srv.uploadRoot);
+    await publishFullRelease(srv.port, cookie, "1.2", srv.uploadRoot);
 
     const latest = await req(srv.port, "/api/v1/updates/latest");
     assert.equal(latest.status, 200);
     const body = await latest.json();
-    assert.equal(body.version, "1.0.3");
+    assert.equal(body.version, "1.2");
     assert.match(body.notes, /修复若干问题/);
     const platform = body.platforms["windows-x86_64"];
     assert.match(platform.signature, /^dW50cnVzdGVk/);
@@ -756,18 +756,18 @@ test("release publish flow: create, attach assets, publish, latest.json shape", 
     const hash = platform.url.split("/").pop();
     const dl = await req(srv.port, `/api/v1/updates/files/${hash}`);
     assert.equal(dl.status, 200);
-    assert.equal(await dl.text(), "installer-1.0.3");
+    assert.equal(await dl.text(), "installer-1.2");
 
     // 撤下 1.0.2 → latest 回退到 1.0.1
     const rel = await (await req(srv.port, "/api/v1/admin/releases", { headers: { cookie } })).json();
-    const rel2 = rel.releases.find((r) => r.tag === "1.0.3");
+    const rel2 = rel.releases.find((r) => r.tag === "1.2");
     await req(srv.port, `/api/v1/admin/releases/${rel2.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ draft: true }),
     });
     const latest2 = await (await req(srv.port, "/api/v1/updates/latest")).json();
-    assert.equal(latest2.version, "1.0.1"); // 撤下 1.0.3 后回退到已发布的 1.0.1
+    assert.equal(latest2.version, "1.0"); // 撤下 1.2 后回退到已发布的 1.0
   } finally {
     srv.close();
   }

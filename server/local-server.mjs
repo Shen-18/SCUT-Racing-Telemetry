@@ -492,8 +492,8 @@ async function createApp(db, deps = {}) {
         if (!(await guardAdmin())) return;
         const body = await readBody(request);
         const tag = String(body.tag ?? "").trim();
-        if (!/^v?\d+\.\d+\.\d+(-[\w.]+)?$/i.test(tag)) {
-          sendError(response, 400, "invalid_tag", "版本号格式应为 1.2.3（可带 v 前缀与 -后缀）");
+        if (!/^v?\d+\.\d+(-[\w.]+)?$/i.test(tag)) {
+          sendError(response, 400, "invalid_tag", "版本号格式应为 1.0（两位，可带 v 前缀与 -后缀）");
           return;
         }
         const normalizedTag = tag.replace(/^v/i, "");
