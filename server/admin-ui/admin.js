@@ -64,7 +64,7 @@ function render() {
 
 function renderLogin() {
   app.innerHTML = `
-    <div class="topbar"><img class="logo-img" src="/admin/assets/logo_white.png" alt="logo" /><span class="logo f1">SCUT RACING TELEMETRY · ADMIN</span></div>
+    <div class="topbar"><img class="logo-img" src="/admin/assets/logo_white.png" alt="logo" /></div>
     <div class="wrap" style="max-width: 420px; margin-top: 60px;">
       <div class="card">
         <h3 class="f1">管理员登录</h3>
@@ -100,7 +100,7 @@ function renderShell() {
   ];
   app.innerHTML = `
     <div class="topbar">
-      <img class="logo-img" src="/admin/assets/logo_white.png" alt="logo" /><span class="logo f1">SCUT RACING TELEMETRY · ADMIN</span>
+      <img class="logo-img" src="/admin/assets/logo_white.png" alt="logo" />
       <div class="tabs">${tabs.map(([key, label]) => `<button class="tab f1 ${state.tab === key ? "active" : ""}" data-tab="${key}">${label}</button>`).join("")}</div>
       <span class="spacer"></span>
       <button class="ghost" id="logout">登出</button>
