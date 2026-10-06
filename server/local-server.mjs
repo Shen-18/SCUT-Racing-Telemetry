@@ -170,6 +170,22 @@ async function createApp(db, deps = {}) {
         return;
       }
 
+      // 会话自检：页面加载时验证已有 Cookie，避免刷新即见登录页
+      if (url.pathname === "/api/v1/admin/session" && request.method === "GET") {
+        if (!adminPassword) {
+          sendError(response, 503, "admin_password_not_set", "服务端未配置 SCUT_ADMIN_PASSWORD");
+          return;
+        }
+        const session = await requireAdmin(request, db);
+        if (!session) {
+          sendError(response, 401, "unauthorized", "未登录");
+          return;
+        }
+        const account = await db.getAdminAccountById(session.account_id);
+        sendJson(response, 200, { ok: true, username: account?.username ?? "admin" });
+        return;
+      }
+
       if (url.pathname === "/api/v1/admin/login" && request.method === "POST") {
         if (!adminPassword) {
           sendError(response, 503, "admin_password_not_set", "服务端未配置 SCUT_ADMIN_PASSWORD");

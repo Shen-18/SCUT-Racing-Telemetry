@@ -563,3 +563,20 @@ test("multiple admin accounts: add, log in as another admin, delete rules", asyn
     srv.close();
   }
 });
+
+test("session check endpoint validates existing cookies without re-login", async () => {
+  const srv = await startServer({ adminPassword: "secret" });
+  try {
+    // 未登录 → 401
+    assert.equal((await req(srv.port, "/api/v1/admin/session")).status, 401);
+    // 登录后带 Cookie → 返回用户名
+    const cookie = (await login(srv.port, "secret")).headers.get("set-cookie").split(";")[0];
+    const res = await req(srv.port, "/api/v1/admin/session", { headers: { cookie } });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.username, "admin");
+  } finally {
+    srv.close();
+  }
+});

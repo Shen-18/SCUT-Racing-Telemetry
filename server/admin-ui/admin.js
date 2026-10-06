@@ -563,4 +563,19 @@ async function reload() {
 }
 
 render();
-reload();
+restoreSession();
+
+// 页面加载先用已有 Cookie 问服务器会话是否有效——有效则直接进主界面（不主动登出就保持 7 天）
+async function restoreSession() {
+  try {
+    const response = await fetch("/api/v1/admin/session", { headers: { "content-type": "application/json" } });
+    if (response.ok) {
+      state.loggedIn = true;
+      await reload();
+      return;
+    }
+  } catch {
+    // 网络异常时留在登录视图
+  }
+  render();
+}
