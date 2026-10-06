@@ -54,7 +54,6 @@
     "crates/telemetry-ipc",
     "crates/overlay",
     "src-tauri",
-    "crates/migrate-v1",
     "tests/golden-tests",
     "crates/xrk-meta"
   ],
@@ -88,11 +87,6 @@
       "telemetry-store",
       "telemetry-ipc",
       "overlay"
-    ],
-    "migrate-v1": [
-      "telemetry-core",
-      "cache-core",
-      "telemetry-store"
     ],
     "golden-tests": [
       "telemetry-core",
