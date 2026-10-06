@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(dead_code)]
 use scut_racing_telemetry::{
-    batch, export, overlay, overlay_export, records,
+    batch, cloud, export, overlay, overlay_export, records,
     state::{self, command_error, AppState},
     stats_cmd, window_fit,
 };
