@@ -177,7 +177,7 @@ async function startServer(deps) {
   const app = await createApp(db, deps);
   await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve));
   const port = app.address().port;
-  return { db, port, close: () => app.close() };
+  return { db, port, uploadRoot: deps.uploadRoot, close: () => app.close() };
 }
 
 const req = (port, path, options = {}) =>
@@ -279,6 +279,146 @@ test("expired admin sessions are rejected", async () => {
     assert.equal(
       (await req(srv.port, "/api/v1/admin/tokens", { headers: { cookie: `scut_admin_session=${token}` } })).status,
       401,
+    );
+  } finally {
+    srv.close();
+  }
+});
+
+// ===== 上传解析入库 + 下载/删除 =====
+
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const okExtractor = async () => ({
+  record_date: "2026-01-25",
+  start_time: "13:56:23",
+  duration_seconds: 0,
+  vehicle: "TEST",
+  racer: "SMOKE",
+});
+
+test("admin upload parses xrk and creates an indexed record", async () => {
+  const srv = await startServer({
+    adminPassword: "secret",
+    uploadRoot: fs.mkdtempSync(path.join(os.tmpdir(), "scut-upload-")),
+    runExtractor: okExtractor,
+  });
+  try {
+    const cookie = (await login(srv.port, "secret")).headers.get("set-cookie").split(";")[0];
+    const res = await req(srv.port, "/api/v1/admin/uploads", {
+      method: "POST",
+      headers: { cookie, "x-file-name": "session01.xrk", "content-type": "application/octet-stream" },
+      body: Buffer.from("fake-xrk-bytes"),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    const hash = createHash("sha256").update("fake-xrk-bytes").digest("hex");
+    assert.equal(body.file_hash, hash);
+
+    const row = srv.db.datasets.get(hash);
+    assert.equal(row.vehicle, "TEST");
+    assert.equal(row.racer, "SMOKE");
+    assert.equal(row.record_date, "2026-01-25");
+    assert.equal(row.storage_key, `${hash}.xrk`);
+    assert.ok(fs.existsSync(path.join(srv.uploadRoot, row.storage_key)));
+
+    // 同内容重复上传 → duplicate
+    const dup = await req(srv.port, "/api/v1/admin/uploads", {
+      method: "POST",
+      headers: { cookie, "x-file-name": "session01.xrk" },
+      body: Buffer.from("fake-xrk-bytes"),
+    });
+    assert.equal(dup.status, 200);
+    assert.equal((await dup.json()).duplicate, true);
+
+    // 管理员下载
+    const file = await req(srv.port, `/api/v1/admin/files/${hash}.xrk?name=session01.xrk`, { headers: { cookie } });
+    assert.equal(file.status, 200);
+    assert.equal(await file.text(), "fake-xrk-bytes");
+  } finally {
+    srv.close();
+  }
+});
+
+test("upload with failing extractor is rejected and leaves no file", async () => {
+  const srv = await startServer({
+    adminPassword: "secret",
+    uploadRoot: fs.mkdtempSync(path.join(os.tmpdir(), "scut-upload-")),
+    runExtractor: async () => {
+      throw new Error("不是 XRK 帧流");
+    },
+  });
+  try {
+    const cookie = (await login(srv.port, "secret")).headers.get("set-cookie").split(";")[0];
+    const res = await req(srv.port, "/api/v1/admin/uploads", {
+      method: "POST",
+      headers: { cookie, "x-file-name": "broken.xrk" },
+      body: Buffer.from("broken"),
+    });
+    assert.equal(res.status, 422);
+    const hash = createHash("sha256").update("broken").digest("hex");
+    assert.ok(!fs.existsSync(path.join(srv.uploadRoot, `${hash}.xrk`)));
+    assert.ok(!srv.db.datasets.has(hash));
+  } finally {
+    srv.close();
+  }
+});
+
+test("upload rejects non xrk/xrz types", async () => {
+  const srv = await startServer({ adminPassword: "secret", runExtractor: okExtractor });
+  try {
+    const cookie = (await login(srv.port, "secret")).headers.get("set-cookie").split(";")[0];
+    const res = await req(srv.port, "/api/v1/admin/uploads", {
+      method: "POST",
+      headers: { cookie, "x-file-name": "notes.csv" },
+      body: Buffer.from("a,b"),
+    });
+    assert.equal(res.status, 415);
+  } finally {
+    srv.close();
+  }
+});
+
+test("client downloads by file hash and deletion removes record and file", async () => {
+  const srv = await startServer({
+    adminPassword: "secret",
+    uploadRoot: fs.mkdtempSync(path.join(os.tmpdir(), "scut-upload-")),
+    runExtractor: okExtractor,
+  });
+  try {
+    const cookie = (await login(srv.port, "secret")).headers.get("set-cookie").split(";")[0];
+    const created = await req(srv.port, "/api/v1/admin/tokens", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ name: " downloader" }),
+    });
+    const { token: tokenRow } = await created.json();
+
+    await req(srv.port, "/api/v1/admin/uploads", {
+      method: "POST",
+      headers: { cookie, "x-file-name": "session01.xrk" },
+      body: Buffer.from("fake-xrk-bytes"),
+    });
+    const hash = createHash("sha256").update("fake-xrk-bytes").digest("hex");
+
+    const denied = await req(srv.port, `/api/v1/files/${hash}`);
+    assert.equal(denied.status, 401);
+    const file = await req(srv.port, `/api/v1/files/${hash}`, {
+      headers: { authorization: `Bearer ${tokenRow.token}` },
+    });
+    assert.equal(file.status, 200);
+    assert.equal(await file.text(), "fake-xrk-bytes");
+
+    const del = await req(srv.port, `/api/v1/admin/datasets/${hash}`, { method: "DELETE", headers: { cookie } });
+    assert.equal(del.status, 200);
+    assert.ok(!fs.existsSync(path.join(srv.uploadRoot, `${hash}.xrk`)));
+    assert.equal(
+      (await req(srv.port, `/api/v1/files/${hash}`, { headers: { authorization: `Bearer ${tokenRow.token}` } }))
+        .status,
+      404,
     );
   } finally {
     srv.close();

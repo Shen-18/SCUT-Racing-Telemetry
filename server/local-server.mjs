@@ -1,10 +1,12 @@
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { createReadStream } from "node:fs";
+import { readFile, stat, unlink } from "node:fs/promises";
 import { resolve, join, extname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveServerConfig } from "./config.mjs";
 import { createDatabase } from "./db.mjs";
-import { saveUpload } from "./storage.mjs";
+import { safeUploadName, saveUpload, uploadRootDir } from "./storage.mjs";
 import { normalizeDatasetInput, normalizeDatasetInputs, normalizeDateNote } from "./validation.mjs";
 import {
   clearedSessionCookie,
@@ -81,6 +83,40 @@ function assertDateKey(value) {
 async function createApp(db, deps = {}) {
   const adminPassword = deps.adminPassword ?? "";
   const limiter = createRateLimiter();
+  const uploadRoot = deps.uploadRoot;
+  // 生产默认调用 PATH 上的 xrk-meta（容器内 /app/bin）；测试注入 stub
+  const runExtractor =
+    deps.runExtractor ??
+    ((filePath) =>
+      new Promise((resolvePromise, rejectPromise) => {
+        execFile("xrk-meta", [filePath], { windowsHide: true }, (error, stdout, stderr) => {
+          if (error) {
+            rejectPromise(new Error(stderr?.trim() || `xrk-meta 执行失败 (${error.code ?? "?"})`));
+            return;
+          }
+          try {
+            resolvePromise(JSON.parse(stdout));
+          } catch {
+            rejectPromise(new Error("xrk-meta 输出不是有效 JSON"));
+          }
+        });
+      }));
+
+  const sendFile = async (response, filePath, downloadName) => {
+    let statInfo;
+    try {
+      statInfo = await stat(filePath);
+    } catch {
+      sendError(response, 404, "not_found", "文件不存在");
+      return;
+    }
+    response.writeHead(200, {
+      "content-type": "application/octet-stream",
+      "content-length": statInfo.size,
+      "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
+    });
+    createReadStream(filePath).pipe(response);
+  };
 
   return createServer(async (request, response) => {
     if (request.method === "OPTIONS") {
@@ -235,8 +271,92 @@ async function createApp(db, deps = {}) {
 
       if (url.pathname === "/api/v1/admin/uploads" && request.method === "POST") {
         if (!(await guardAdmin())) return;
-        const upload = await saveUpload(request);
-        sendJson(response, 201, { ok: true, ...upload });
+        const uploadName = safeUploadName(request.headers["x-file-name"]);
+        const ext = extname(uploadName).toLowerCase();
+        if (![".xrk", ".xrz"].includes(ext)) {
+          sendError(response, 415, "unsupported_type", "仅支持 .xrk / .xrz 文件");
+          return;
+        }
+        const upload = await saveUpload(request, uploadRoot);
+        // 同内容去重：已索引的 hash 直接返回，不再解析
+        if (await db.getDatasetByHash(upload.file_hash)) {
+          sendJson(response, 200, { ok: true, duplicate: true, file_hash: upload.file_hash, file_name: upload.file_name });
+          return;
+        }
+        let meta;
+        try {
+          meta = await runExtractor(upload.path);
+        } catch (error) {
+          await unlink(upload.path).catch(() => {});
+          sendError(response, 422, "extract_failed", `遥测文件解析失败：${error instanceof Error ? error.message : String(error)}`);
+          return;
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.record_date || "")) {
+          await unlink(upload.path).catch(() => {});
+          sendError(response, 422, "extract_failed", "无法从文件中解析出记录日期");
+          return;
+        }
+        const dataset = normalizeDatasetInput({
+          file_hash: upload.file_hash,
+          file_name: upload.file_name,
+          file_type: upload.file_type,
+          record_date: meta.record_date,
+          start_time: meta.start_time || "",
+          session: "",
+          vehicle: meta.vehicle || "",
+          racer: meta.racer || "",
+          championship: "",
+          duration: Number(meta.duration_seconds) || 0,
+          sample_rate_hz: 0,
+          file_size: upload.file_size,
+          source_mtime_unix: Math.floor(Date.now() / 1000),
+          storage_key: upload.storage_key,
+        });
+        await db.upsertDataset(dataset);
+        sendJson(response, 201, { ok: true, file_hash: upload.file_hash, file_name: upload.file_name, dataset });
+        return;
+      }
+
+      // 管理员按 storage_key 下载原始文件
+      const adminFile = url.pathname.match(/^\/api\/v1\/admin\/files\/([0-9a-f]{64}\.[a-z0-9]+)$/);
+      if (adminFile && request.method === "GET") {
+        if (!(await guardAdmin())) return;
+        const storageKey = adminFile[1];
+        await sendFile(response, resolve(uploadRoot || uploadRootDir(), storageKey), url.searchParams.get("name") || storageKey);
+        return;
+      }
+
+      // 队员按 file_hash 下载数据文件（走索引找 storage_key）
+      const clientFile = url.pathname.match(/^\/api\/v1\/files\/([0-9a-f]{64})$/);
+      if (clientFile && request.method === "GET") {
+        if (!(await guardToken())) return;
+        const dataset = await db.getDatasetByHash(clientFile[1]);
+        if (!dataset || !dataset.storage_key) {
+          sendError(response, 404, "file_not_found", "该记录没有可下载的文件");
+          return;
+        }
+        await sendFile(
+          response,
+          resolve(uploadRoot || uploadRootDir(), dataset.storage_key),
+          dataset.file_name || dataset.storage_key,
+        );
+        return;
+      }
+
+      // 删除记录及其关联文件
+      const deleteDatasetRoute = url.pathname.match(/^\/api\/v1\/admin\/datasets\/([^/]+)$/);
+      if (deleteDatasetRoute && request.method === "DELETE") {
+        if (!(await guardAdmin())) return;
+        const fileHash = decodeURIComponent(deleteDatasetRoute[1]);
+        const removed = await db.deleteDataset(fileHash);
+        if (!removed) {
+          sendError(response, 404, "dataset_not_found", "找不到数据集");
+          return;
+        }
+        if (removed.storage_key && /^[0-9a-f]{64}\.[a-z0-9]+$/.test(removed.storage_key)) {
+          await unlink(resolve(uploadRoot || uploadRootDir(), removed.storage_key)).catch(() => {});
+        }
+        sendJson(response, 200, { ok: true, file_hash: fileHash });
         return;
       }
 

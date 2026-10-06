@@ -7,7 +7,11 @@ export function safeUploadName(value) {
   return name || "upload.bin";
 }
 
-export async function saveUpload(request, root = resolve(process.env.SCUT_UPLOAD_ROOT || "server/data/uploads")) {
+export function uploadRootDir() {
+  return resolve(process.env.SCUT_UPLOAD_ROOT || "server/data/uploads");
+}
+
+export async function saveUpload(request, root = uploadRootDir()) {
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
@@ -20,7 +24,8 @@ export async function saveUpload(request, root = resolve(process.env.SCUT_UPLOAD
   const fileName = safeUploadName(request.headers["x-file-name"]);
   const storageKey = `${fileHash}${extname(fileName).toLowerCase()}`;
   await mkdir(root, { recursive: true });
-  await writeFile(resolve(root, storageKey), data, { flag: "wx" }).catch((error) => {
+  const targetPath = resolve(root, storageKey);
+  await writeFile(targetPath, data, { flag: "wx" }).catch((error) => {
     if (error?.code !== "EEXIST") throw error;
   });
   return {
@@ -29,5 +34,6 @@ export async function saveUpload(request, root = resolve(process.env.SCUT_UPLOAD
     file_type: extname(fileName).replace(/^\./, "").toLowerCase() || "bin",
     file_size: size,
     storage_key: storageKey,
+    path: targetPath,
   };
 }
