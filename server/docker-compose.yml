@@ -30,6 +30,8 @@ services:
       SCUT_SYNC_HOST: 0.0.0.0
       SCUT_SYNC_PORT: "8787"
       SCUT_UPLOAD_ROOT: /server/data/uploads
+      # 管理面板登录密码：在 .env 里设置（不入 git）
+      SCUT_ADMIN_PASSWORD: ${SCUT_ADMIN_PASSWORD:-}
     ports:
       - "8787:8787"
     volumes:
