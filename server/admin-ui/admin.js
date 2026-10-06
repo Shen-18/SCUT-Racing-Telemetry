@@ -95,7 +95,8 @@ function renderShell() {
   const tabs = [
     ["records", "记录"],
     ["releases", "软件发布"],
-    ["settings", "设置 · 密钥分发"],
+    ["keys", "密钥分发"],
+    ["settings", "设置"],
   ];
   app.innerHTML = `
     <div class="topbar">
@@ -128,6 +129,7 @@ function renderTab() {
   const root = document.getElementById("tab-content");
   if (state.tab === "records") renderRecords(root);
   else if (state.tab === "releases") renderReleases(root);
+  else if (state.tab === "keys") renderKeys(root);
   else renderSettings(root);
 }
 
@@ -387,29 +389,10 @@ async function onRecordAction(event) {
 // ===== 设置页（密钥分发） =====
 
 function renderSettings(root) {
-  const active = state.tokens.filter((t) => !t.revoked_at);
   root.innerHTML = `
     <div class="card">
       <h3 class="f1">服务器地址</h3>
       <div class="kv"><label>链接</label><input id="pair-link" readonly value="${esc(location.origin)}" /><button class="line" data-copy="pair-link">复制</button></div>
-    </div>
-    <div class="card">
-      <h3 class="f1">密钥分发</h3>
-      <div class="kv"><label>新密钥名称</label><input id="token-name" placeholder="例如：张三-笔记本" /><button class="primary" id="token-create">生成</button></div>
-      ${state.tokens.length === 0 ? '<div class="hint">还没有密钥，生成后复制发给队员。</div>' : ""}
-      ${state.tokens
-        .map(
-          (t) => `
-        <div class="row">
-          <div class="meta">
-            <div class="name">${esc(t.name)} ${t.revoked_at ? '<span class="badge archived">已吊销</span>' : '<span class="badge status-ok">有效</span>'}</div>
-            <div class="sub mono">${esc(t.token)}</div>
-          </div>
-          <button class="line" data-copy-token="${esc(t.token)}" ${t.revoked_at ? "disabled" : ""}>复制</button>
-          ${t.revoked_at ? "" : `<button class="line" data-revoke="${t.id}">吊销</button>`}
-        </div>`,
-        )
-        .join("")}
     </div>
     <div class="card">
       <h3 class="f1">修改我的密码</h3>
@@ -444,42 +427,6 @@ function renderSettings(root) {
       renderTab();
     }),
   );
-  root.querySelectorAll("[data-copy-token]").forEach((button) =>
-    button.addEventListener("click", async () => {
-      const ok = await copyText(button.dataset.copyToken);
-      setNotice(ok ? "密钥已复制，发给队员即可。" : "复制失败，请手动复制。", ok);
-      renderShell();
-      renderTab();
-    }),
-  );
-  root.querySelectorAll("[data-revoke]").forEach((button) =>
-    button.addEventListener("click", async () => {
-      if (!window.confirm("吊销后该密钥立即失效，队员需要换新密钥。确认吊销？")) return;
-      try {
-        await api(`/api/v1/admin/tokens/${button.dataset.revoke}`, { method: "DELETE" });
-        setNotice("已吊销。", true);
-      } catch (error) {
-        setNotice(`吊销失败：${error.message}`);
-      }
-      await reload();
-    }),
-  );
-  document.getElementById("token-create").addEventListener("click", async () => {
-    const name = document.getElementById("token-name").value.trim();
-    if (!name) {
-      setNotice("请填写密钥名称。");
-      renderShell();
-      renderTab();
-      return;
-    }
-    try {
-      await api("/api/v1/admin/tokens", { method: "POST", body: JSON.stringify({ name }) });
-      setNotice(`密钥「${name}」已生成，在下方复制发给队员。`, true);
-    } catch (error) {
-      setNotice(`生成失败：${error.message}`);
-    }
-    await reload();
-  });
   document.getElementById("pw-save").addEventListener("click", async () => {
     const current = document.getElementById("pw-current").value;
     const next = document.getElementById("pw-next").value;
@@ -582,6 +529,67 @@ function bindRecordDropZone(root) {
     root.querySelector(".drop-overlay")?.classList.remove("visible");
     const files = [...(e.dataTransfer?.files || [])];
     if (files.length > 0) void uploadFiles(files);
+  });
+}
+
+// ===== 密钥分发页 =====
+
+function renderKeys(root) {
+  root.innerHTML = `
+    <div class="card">
+      <h3 class="f1">密钥分发</h3>
+      <div class="kv"><label>新密钥名称</label><input id="token-name" placeholder="例如：张三-笔记本" /><button class="primary" id="token-create">生成</button></div>
+      ${state.tokens.length === 0 ? '<div class="hint">还没有密钥，生成后复制发给队员。</div>' : ""}
+      ${state.tokens
+        .map(
+          (t) => `
+        <div class="row">
+          <div class="meta">
+            <div class="name">${esc(t.name)} ${t.revoked_at ? '<span class="badge archived">已吊销</span>' : '<span class="badge status-ok">有效</span>'}</div>
+            <div class="sub mono">${esc(t.token)}</div>
+          </div>
+          <button class="line" data-copy-token="${esc(t.token)}" ${t.revoked_at ? "disabled" : ""}>复制</button>
+          ${t.revoked_at ? "" : `<button class="line" data-revoke="${t.id}">吊销</button>`}
+        </div>`,
+        )
+        .join("")}
+    </div>`;
+
+  root.querySelectorAll("[data-copy-token]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      const ok = await copyText(button.dataset.copyToken);
+      setNotice(ok ? "密钥已复制，发给队员即可。" : "复制失败，请手动复制。", ok);
+      renderShell();
+      renderTab();
+    }),
+  );
+  root.querySelectorAll("[data-revoke]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      if (!window.confirm("吊销后该密钥立即失效，队员需要换新密钥。确认吊销？")) return;
+      try {
+        await api(`/api/v1/admin/tokens/${button.dataset.revoke}`, { method: "DELETE" });
+        setNotice("已吊销。", true);
+      } catch (error) {
+        setNotice(`吊销失败：${error.message}`);
+      }
+      await reload();
+    }),
+  );
+  document.getElementById("token-create").addEventListener("click", async () => {
+    const name = document.getElementById("token-name").value.trim();
+    if (!name) {
+      setNotice("请填写密钥名称。");
+      renderShell();
+      renderTab();
+      return;
+    }
+    try {
+      await api("/api/v1/admin/tokens", { method: "POST", body: JSON.stringify({ name }) });
+      setNotice(`密钥「${name}」已生成，在下方复制发给队员。`, true);
+    } catch (error) {
+      setNotice(`生成失败：${error.message}`);
+    }
+    await reload();
   });
 }
 
