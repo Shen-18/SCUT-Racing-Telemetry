@@ -9,6 +9,8 @@ import { OverlayView } from "./OverlayView";
 import { SettingsView, type SettingsScope } from "./SettingsView";
 import { PANELS } from "../panels/registry";
 import * as client from "../api/client";
+import { checkForUpdate, downloadAndInstall, type UpdateInfo } from "../api/updater";
+import { invoke as invokeCmd } from "../api/client";
 import { getDatasetFileName } from "../api/dataset";
 import { formatClockTime } from "../utils/time";
 import { LEFT_WIDTH_RANGE, RIGHT_WIDTH_RANGE } from "../state/appStore";
@@ -73,6 +75,43 @@ export interface AppShellProps {
 }
 
 export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
+  // 启动静默检查更新：有新版弹窗提示（失败静默，不影响使用）
+  const [startupUpdate, setStartupUpdate] = useState<UpdateInfo | null>(null);
+  const [startupUpdateDismissed, setStartupUpdateDismissed] = useState(false);
+  const [startupUpdateState, setStartupUpdateState] = useState<"idle" | "downloading" | "ready">("idle");
+  const [startupUpdateMessage, setStartupUpdateMessage] = useState("");
+
+  useEffect(() => {
+    checkForUpdate()
+      .then((info) => {
+        if (info) setStartupUpdate(info);
+      })
+      .catch(() => {
+        // 静默：网络/服务端不可达不打扰用户
+      });
+  }, []);
+
+  const runStartupInstall = async () => {
+    setStartupUpdateState("downloading");
+    setStartupUpdateMessage("正在下载更新…");
+    try {
+      await downloadAndInstall((progress) => {
+        if (progress.event === "progress") {
+          const mb = (progress.downloaded / 1024 / 1024).toFixed(1);
+          setStartupUpdateMessage(`正在下载更新… ${mb} MB`);
+        }
+      });
+      setStartupUpdateState("ready");
+      setStartupUpdateMessage("更新完成，软件即将关闭——重新打开即为新版本。");
+      setTimeout(async () => {
+        await invokeCmd("exit_app");
+      }, 2500);
+    } catch (error) {
+      setStartupUpdateState("idle");
+      setStartupUpdateMessage(`更新失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   const dataset = useAppStore((s) => s.dataset);
   const checkedChannels = useAppStore((s) => s.checkedChannels);
   const window = useAppStore((s) => s.window);
@@ -641,6 +680,56 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
                 }}
               >
                 取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {startupUpdate && !startupUpdateDismissed && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 100,
+            background: "rgba(10, 11, 16, 0.72)",
+            display: "grid", placeItems: "center",
+          }}
+        >
+          <div
+            style={{
+              width: "440px", background: "var(--bg2)", border: "1px solid var(--line)",
+              padding: "20px 22px", color: "var(--text)",
+            }}
+            data-testid="update-dialog"
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ width: "3px", height: "16px", background: "var(--red)" }} />
+              <span style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 700, fontSize: "15px", letterSpacing: "1.5px" }}>
+                发现新版本 v{startupUpdate.version}
+              </span>
+            </div>
+            {startupUpdate.notes.trim() && (
+              <div style={{ marginTop: "12px", whiteSpace: "pre-wrap", fontSize: "13px", lineHeight: 1.8, color: "var(--text)", background: "var(--bg)", border: "1px solid var(--line)", padding: "10px 12px" }}>
+                {startupUpdate.notes}
+              </div>
+            )}
+            {startupUpdateMessage && (
+              <div style={{ marginTop: "10px", color: startupUpdateState === "ready" ? "var(--text)" : "var(--dim2)", fontSize: "12px" }}>
+                {startupUpdateMessage}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "16px" }}>
+              <button
+                onClick={() => setStartupUpdateDismissed(true)}
+                disabled={startupUpdateState === "downloading"}
+                style={{ background: "transparent", border: "1px solid var(--line)", color: "var(--dim2)", padding: "7px 14px", font: "inherit", cursor: "pointer" }}
+              >
+                稍后
+              </button>
+              <button
+                onClick={() => void runStartupInstall()}
+                disabled={startupUpdateState === "downloading" || startupUpdateState === "ready"}
+                style={{ background: "var(--red)", border: "1px solid var(--red)", color: "#fff", fontWeight: 700, padding: "7px 16px", font: "inherit", cursor: "pointer" }}
+              >
+                {startupUpdateState === "downloading" ? "下载中…" : "立即更新"}
               </button>
             </div>
           </div>
