@@ -600,7 +600,9 @@ async function createApp(db, deps = {}) {
         }
         sendJson(response, 200, {
           version: release.tag,
-          notes: release.notes || release.title,
+          notes: [release.title, release.notes].filter(Boolean).join("
+
+"),
           pub_date: new Date((release.published_at || 0) * 1000).toISOString(),
           platforms: {
             "windows-x86_64": {

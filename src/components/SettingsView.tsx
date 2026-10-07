@@ -3,6 +3,7 @@ import { useAppStore } from "../state/appStore";
 import { checkRemoteHealth, normalizeRemoteBaseUrl } from "../api/remote";
 import { checkForUpdate, downloadAndInstall, getCurrentVersion, type UpdateInfo } from "../api/updater";
 import { invoke as invokeCmd } from "../api/client";
+import { UpdateDialog } from "./UpdateDialog";
 
 export type SettingsScope = "database" | "overlay";
 
@@ -61,6 +62,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ scope = "database" }
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateState, setUpdateState] = useState<"idle" | "checking" | "downloading" | "ready">("idle");
   const [updateMessage, setUpdateMessage] = useState("");
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
 
   useEffect(() => {
     getCurrentVersion()
@@ -75,7 +77,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ scope = "database" }
       const info = await checkForUpdate();
       setUpdateInfo(info);
       setUpdateState("idle");
-      setUpdateMessage(info ? `发现新版本 v${info.version}` : "当前已是最新版本。");
+      if (info) {
+        setUpdateMessage("");
+        setUpdateDialogOpen(true);
+      } else {
+        setUpdateMessage("当前已是最新版本。");
+      }
     } catch (error) {
       setUpdateState("idle");
       setUpdateInfo(null);
@@ -173,7 +180,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ scope = "database" }
                 <button
                   data-testid="check-update"
                   type="button"
-                  onClick={() => (updateInfo && updateState !== "downloading" && updateState !== "ready" ? void runInstall() : void runCheck())}
+                  onClick={() => {
+                    if (updateInfo && updateState !== "downloading" && updateState !== "ready") setUpdateDialogOpen(true);
+                    else void runCheck();
+                  }}
                   disabled={updateState === "checking" || updateState === "downloading"}
                   style={{ flex: "none", padding: "7px 12px", background: updateInfo ? "var(--red)" : "transparent", border: "1px solid " + (updateInfo ? "var(--red)" : "var(--line)"), color: updateInfo ? "#fff" : "var(--text)", cursor: updateState === "checking" || updateState === "downloading" ? "default" : "pointer" }}
                 >
@@ -192,6 +202,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ scope = "database" }
           </div>
         )}
       </div>
+      {updateDialogOpen && updateInfo && (
+        <UpdateDialog
+          info={updateInfo}
+          state={updateState === "checking" ? "idle" : updateState}
+          message={updateMessage}
+          onInstall={() => void runInstall()}
+          onDismiss={() => setUpdateDialogOpen(false)}
+        />
+      )}
     </section>
   );
 };
