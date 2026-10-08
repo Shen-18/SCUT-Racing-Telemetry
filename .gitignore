@@ -59,3 +59,11 @@ design-demos/fonts/
 server/.env
 server/bin/
 .keys/
+
+# Local historical evidence and credential-bearing original handoffs
+.agent/archive/**/private/
+.agent/archive/**/agent/evidence/
+.agent/archive/**/agent/agy-*.md
+
+# Local credentials, private keys and pre-cleanup backups
+.secrets/

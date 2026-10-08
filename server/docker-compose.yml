@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: scut_telemetry
       POSTGRES_USER: scut
-      POSTGRES_PASSWORD: ${SCUT_DB_PASSWORD}
+      POSTGRES_PASSWORD: ${SCUT_DB_PASSWORD:?请提供本地凭据配置中的 SCUT_DB_PASSWORD}
     ports:
       # 只监听本机，避免数据库端口暴露公网；需要远程调试时用 SSH 隧道
       - "127.0.0.1:5432:5432"
@@ -26,17 +26,19 @@ services:
     container_name: scut-racing-telemetry-sync
     restart: unless-stopped
     environment:
-      SCUT_DATABASE_URL: postgresql://scut:<DATABASE_PASSWORD>@postgres:5432/scut_telemetry
+      SCUT_DATABASE_URL: postgresql://scut:${SCUT_DB_PASSWORD:?请提供本地凭据配置中的 SCUT_DB_PASSWORD}@postgres:5432/scut_telemetry
       SCUT_SYNC_HOST: 0.0.0.0
       SCUT_SYNC_PORT: "8787"
       SCUT_UPLOAD_ROOT: /server/data/uploads
-      # 管理面板登录密码：在 .env 里设置（不入 git）
+      # 管理面板登录密码：仅由本地凭据配置或部署环境提供
       SCUT_ADMIN_PASSWORD: ${SCUT_ADMIN_PASSWORD:-}
     ports:
       - "8787:8787"
+      # 80 是 HTTP 默认端口：浏览器访问 http://<IP>/admin 可以省略端口号。
+      # 8787 必须保留——已发布客户端的自动更新端点写死在 :8787。
+      - "80:8787"
     volumes:
       - ${SCUT_DATA_DIR:-./data}/uploads:/server/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
-
