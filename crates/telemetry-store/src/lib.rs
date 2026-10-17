@@ -262,7 +262,7 @@ impl TelemetryStore {
                 OR LOWER(d.session) LIKE ?1
                 OR LOWER(d.vehicle) LIKE ?1
                 OR LOWER(d.racer) LIKE ?1
-             ORDER BY d.source_mtime_unix DESC, d.file_hash ASC",
+             ORDER BY d.record_date DESC, d.start_time DESC, d.source_mtime_unix DESC, d.file_hash ASC",
         )?;
         let rows = statement.query_map([pattern], |row| {
             Ok(RecordSummary {

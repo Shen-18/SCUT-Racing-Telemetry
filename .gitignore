@@ -28,6 +28,7 @@ cache/
 temp/
 *.tmp
 server/data/
+resources/
 
 # Operating System & IDE
 .DS_Store

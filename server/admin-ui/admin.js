@@ -21,6 +21,7 @@ let state = {
   relInstaller: null,
   relSig: null,
   relForm: null,
+  uploadProgress: null,
 };
 
 async function api(path, options = {}) {
@@ -43,12 +44,31 @@ function setNotice(text, ok = false) {
 }
 
 async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
+  // navigator.clipboard 仅在安全上下文（HTTPS/localhost）可用；HTTP 部署走 execCommand 兜底
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // 落到下面的兜底
+    }
   }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  area.setSelectionRange(0, String(text ?? "").length);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  area.remove();
+  return ok;
 }
 
 function esc(value) {
@@ -111,7 +131,7 @@ function renderShell() {
       <button class="ghost" id="logout">登出</button>
     </div>
     <div class="wrap${state.tab === "records" || state.tab === "releases" ? " wrap-full" : ""}">
-      ${state.notice ? `<div class="banner ${state.notice.ok ? "ok" : ""}">${esc(state.notice.text)}</div>` : ""}
+      ${state.notice ? `<div class="banner ${state.notice.ok ? "ok" : ""}">${esc(state.notice.text)}${state.uploadProgress ? `<div class="upload-progress"><div class="upload-progress__track"><div class="upload-progress__bar" style="width:${Math.max(0, Math.min(100, state.uploadProgress.percent))}%"></div></div><span>${Math.round(state.uploadProgress.percent)}%</span></div>` : ""}</div>` : ""}
       <div id="tab-content"></div>
     </div>`;
   app.querySelectorAll("[data-tab]").forEach((button) =>
@@ -193,7 +213,7 @@ function renderRecords(root) {
           <span class="count f1">${visible.length} 条记录${state.selectedGroup ? ` · ${esc(state.selectedGroup)}` : ""}</span>
           <span style="flex: 1;"></span>
           ${state.selected.size > 0 ? `<span style="color: var(--red); font-weight: 700; font-size: 11px; letter-spacing: 1px;">已选 ${state.selected.size} 条</span><button class="line" id="delete-selected">删除所选</button>` : ""}
-          <input type="file" id="upload-input" accept=".xrk,.xrz" style="display: none;" />
+          <input type="file" id="upload-input" accept=".xrk,.xrz" multiple style="display: none;" />
           <button class="primary" id="upload-button">上传文件</button>
         </div>
         ${
@@ -477,6 +497,54 @@ async function onUpload(event) {
   await uploadFiles(files);
 }
 
+function setUploadProgress(text, percent, ok = true) {
+  state.uploadProgress = { percent };
+  setNotice(text, ok);
+  renderShell();
+  renderTab();
+}
+
+function uploadFile(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", "/api/v1/admin/uploads");
+    request.withCredentials = true;
+    request.setRequestHeader("x-file-name", encodeURIComponent(file.name));
+    request.setRequestHeader("content-type", "application/octet-stream");
+    request.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress((event.loaded / event.total) * 100);
+    });
+    request.addEventListener("error", () => reject(new Error("网络连接失败")));
+    request.addEventListener("abort", () => reject(new Error("上传已取消")));
+    request.addEventListener("load", () => {
+      let body = {};
+      try { body = JSON.parse(request.responseText || "{}"); } catch { /* 使用 HTTP 状态提示 */ }
+      if (request.status === 401) {
+        state.loggedIn = false;
+        render();
+        reject(new Error("登录已过期，请重新登录"));
+        return;
+      }
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(body?.error?.message || `HTTP ${request.status}`));
+        return;
+      }
+      resolve(body);
+    });
+    request.send(file);
+  });
+}
+
+async function waitForUploadParse(jobId, fileName) {
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const body = await api(`/api/v1/admin/uploads/${encodeURIComponent(jobId)}`);
+    if (body.status === "done") return body;
+    if (body.status === "failed") throw new Error(body.error || "解析失败");
+    setUploadProgress(`上传成功，正在解析 ${fileName} …`, 100, true);
+  }
+}
+
 async function uploadFiles(files) {
   const ok = files.filter((f) => /\.(xrk|xrz)$/i.test(f.name));
   const skipped = files.length - ok.length;
@@ -488,27 +556,21 @@ async function uploadFiles(files) {
   }
   const results = [];
   for (const file of ok) {
-    setNotice(`正在上传并解析 ${file.name} …`, true);
-    renderShell();
-    renderTab();
     try {
-      const res = await fetch("/api/v1/admin/uploads", {
-        method: "POST",
-        headers: { "x-file-name": encodeURIComponent(file.name), "content-type": "application/octet-stream" },
-        body: file,
-      });
-      const body = await res.json().catch(() => ({}));
-      if (res.status === 401) {
-        state.loggedIn = false;
-        render();
-        return;
+      setUploadProgress(`正在上传 ${file.name} …`, 0, true);
+      const body = await uploadFile(file, (percent) => setUploadProgress(`正在上传 ${file.name} …`, percent, true));
+      if (body.duplicate) {
+        results.push(`${file.name} 已存在（去重）`);
+      } else {
+        setUploadProgress(`上传成功，正在解析 ${file.name} …`, 100, true);
+        await waitForUploadParse(body.job_id, file.name);
+        results.push(`${file.name} 上传并解析完成`);
       }
-      if (!res.ok) throw new Error(body?.error?.message || `HTTP ${res.status}`);
-      results.push(body.duplicate ? `${file.name} 已存在（去重）` : `${file.name} ✓`);
     } catch (error) {
       results.push(`${file.name} 失败：${error.message}`);
     }
   }
+  state.uploadProgress = null;
   const summary = results.join("；");
   setNotice(skipped > 0 ? `${summary}（另忽略 ${skipped} 个非 xrk/xrz 文件）` : summary, !summary.includes("失败"));
   await reload();
@@ -603,16 +665,18 @@ function renderKeys(root) {
 function latestPublishedTag(list) {
   const semver = (tag) => {
     const parts = String(tag).replace(/^v/i, "").split("-")[0].split(".");
-    if (parts.length !== 2) return null;
-    return [Number.parseInt(parts[0], 10) || 0, Number.parseInt(parts[1], 10) || 0];
+    if (parts.length !== 3) return null;
+    return parts.map((n) => Number.parseInt(n, 10) || 0);
   };
   const ok = list.filter((r) => !r.draft && semver(r.tag) !== null);
   if (ok.length === 0) return null;
   ok.sort((a, b) => {
     const va = semver(a.tag);
     const vb = semver(b.tag);
-    if (va[0] !== vb[0]) return vb[0] - va[0];
-    return vb[1] - va[1];
+    for (let i = 0; i < 3; i++) {
+      if (va[i] !== vb[i]) return vb[i] - va[i];
+    }
+    return b.published_at - a.published_at;
   });
   return ok[0].tag;
 }

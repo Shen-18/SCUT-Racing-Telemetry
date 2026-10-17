@@ -6,7 +6,7 @@ import { resolve, join, extname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveServerConfig } from "./config.mjs";
 import { createDatabase } from "./db.mjs";
-import { safeUploadName, saveUpload, uploadRootDir } from "./storage.mjs";
+import { resolveUploadRacer, safeUploadName, saveUpload, uploadRootDir } from "./storage.mjs";
 import { normalizeDatasetInput, normalizeDatasetInputs, normalizeDateNote } from "./validation.mjs";
 import {
   clearedSessionCookie,
@@ -91,6 +91,7 @@ async function createApp(db, deps = {}) {
     await db.createAdminAccount({ username: "admin", passwordHash: hashPassword(adminPassword) });
   }
   const uploadRoot = deps.uploadRoot;
+  const uploadJobs = new Map();
   // 生产默认调用 PATH 上的 xrk-meta（容器内 /app/bin）；测试注入 stub
   const runExtractor =
     deps.runExtractor ??
@@ -368,6 +369,25 @@ async function createApp(db, deps = {}) {
         return;
       }
 
+      const uploadJobRoute = url.pathname.match(/^\/api\/v1\/admin\/uploads\/([A-Za-z0-9_-]+)$/);
+      if (uploadJobRoute && request.method === "GET") {
+        if (!(await guardAdmin())) return;
+        const job = uploadJobs.get(uploadJobRoute[1]);
+        if (!job) {
+          sendError(response, 404, "upload_job_not_found", "上传任务不存在或已过期");
+          return;
+        }
+        sendJson(response, 200, {
+          ok: job.status === "done",
+          status: job.status,
+          file_name: job.file_name,
+          file_hash: job.file_hash,
+          dataset: job.dataset ?? null,
+          error: job.error ?? null,
+        });
+        return;
+      }
+
       if (url.pathname === "/api/v1/admin/uploads" && request.method === "POST") {
         if (!(await guardAdmin())) return;
         const uploadName = safeUploadName(request.headers["x-file-name"]);
@@ -382,37 +402,50 @@ async function createApp(db, deps = {}) {
           sendJson(response, 200, { ok: true, duplicate: true, file_hash: upload.file_hash, file_name: upload.file_name });
           return;
         }
-        let meta;
-        try {
-          meta = await runExtractor(upload.path);
-        } catch (error) {
-          await unlink(upload.path).catch(() => {});
-          sendError(response, 422, "extract_failed", `遥测文件解析失败：${error instanceof Error ? error.message : String(error)}`);
-          return;
-        }
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.record_date || "")) {
-          await unlink(upload.path).catch(() => {});
-          sendError(response, 422, "extract_failed", "无法从文件中解析出记录日期");
-          return;
-        }
-        const dataset = normalizeDatasetInput({
-          file_hash: upload.file_hash,
+        const jobId = randomToken();
+        const job = {
+          status: "uploaded",
           file_name: upload.file_name,
-          file_type: upload.file_type,
-          record_date: meta.record_date,
-          start_time: meta.start_time || "",
-          session: "",
-          vehicle: meta.vehicle || "",
-          racer: meta.racer || "",
-          championship: "",
-          duration: Number(meta.duration_seconds) || 0,
-          sample_rate_hz: 0,
-          file_size: upload.file_size,
-          source_mtime_unix: Math.floor(Date.now() / 1000),
-          storage_key: upload.storage_key,
-        });
-        await db.upsertDataset(dataset);
-        sendJson(response, 201, { ok: true, file_hash: upload.file_hash, file_name: upload.file_name, dataset });
+          file_hash: upload.file_hash,
+          dataset: null,
+          error: null,
+        };
+        uploadJobs.set(jobId, job);
+        const parseUpload = async () => {
+          job.status = "parsing";
+          try {
+            const meta = await runExtractor(upload.path);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.record_date || "")) {
+              throw new Error("无法从文件中解析出记录日期");
+            }
+            const dataset = normalizeDatasetInput({
+              file_hash: upload.file_hash,
+              file_name: upload.file_name,
+              file_type: upload.file_type,
+              record_date: meta.record_date,
+              start_time: meta.start_time || "",
+              session: "",
+              vehicle: meta.vehicle || "",
+              racer: resolveUploadRacer(meta, upload.file_name),
+              championship: "",
+              duration: Number(meta.duration_seconds) || 0,
+              sample_rate_hz: 0,
+              file_size: upload.file_size,
+              source_mtime_unix: Math.floor(Date.now() / 1000),
+              storage_key: upload.storage_key,
+            });
+            await db.upsertDataset(dataset);
+            job.dataset = dataset;
+            job.status = "done";
+          } catch (error) {
+            await unlink(upload.path).catch(() => {});
+            job.error = error instanceof Error ? error.message : String(error);
+            job.status = "failed";
+          }
+          setTimeout(() => uploadJobs.delete(jobId), 10 * 60 * 1000).unref?.();
+        };
+        setImmediate(() => void parseUpload());
+        sendJson(response, 202, { ok: true, status: "uploaded", job_id: jobId, file_hash: upload.file_hash, file_name: upload.file_name });
         return;
       }
 
@@ -600,9 +633,7 @@ async function createApp(db, deps = {}) {
         }
         sendJson(response, 200, {
           version: release.tag,
-          notes: [release.title, release.notes].filter(Boolean).join("
-
-"),
+          notes: [release.title, release.notes].filter(Boolean).join("\n\n"),
           pub_date: new Date((release.published_at || 0) * 1000).toISOString(),
           platforms: {
             "windows-x86_64": {

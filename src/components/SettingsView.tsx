@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAppStore } from "../state/appStore";
-import { checkRemoteHealth, normalizeRemoteBaseUrl } from "../api/remote";
+import { checkRemoteHealth, normalizeRemoteBaseUrl, readRemoteBaseUrl } from "../api/remote";
 import { checkForUpdate, downloadAndInstall, getCurrentVersion, type UpdateInfo } from "../api/updater";
 import { invoke as invokeCmd } from "../api/client";
 import { UpdateDialog } from "./UpdateDialog";
@@ -21,15 +21,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ scope = "database" }
   const rememberSelectedChannels = useAppStore((state) => state.rememberSelectedChannels);
   const setRememberSelectedChannels = useAppStore((state) => state.setRememberSelectedChannels);
   const accentColor = scope === "overlay" ? "#2A4A98" : "var(--red)";
-  const [remoteUrl, setRemoteUrl] = useState(() => {
-    try {
-      return localStorage.getItem("scut.remote-server-url") || "http://127.0.0.1:8787";
-    } catch {
-      return "http://127.0.0.1:8787";
-    }
-  });
+  const [remoteUrl, setRemoteUrl] = useState(readRemoteBaseUrl);
   const [remoteStatus, setRemoteStatus] = useState<"idle" | "checking" | "connected" | "failed">("idle");
   const [remoteMessage, setRemoteMessage] = useState("");
+
+  // 云端数据同步
+  const remoteToken = useAppStore((s) => s.remoteToken);
+  const setRemoteToken = useAppStore((s) => s.setRemoteToken);
+  const remoteAutosync = useAppStore((s) => s.remoteAutosync);
+  const setRemoteAutosync = useAppStore((s) => s.setRemoteAutosync);
+  const cloudSync = useAppStore((s) => s.cloudSync);
+  const checkCloudUpdates = useAppStore((s) => s.checkCloudUpdates);
+  const syncRunning =
+    cloudSync.phase === "checking" || cloudSync.phase === "downloading" || cloudSync.phase === "importing";
+
+  const syncStatusText = (() => {
+    switch (cloudSync.phase) {
+      case "checking":
+        return "正在检查云端新数据…";
+      case "confirm":
+        return `发现 ${cloudSync.newFiles.length} 条新数据，请在弹窗中确认下载。`;
+      case "downloading":
+        return `正在下载 ${cloudSync.done}/${cloudSync.total}${cloudSync.currentName ? ` · ${cloudSync.currentName}` : ""}`;
+      case "importing":
+        return "下载完成，正在导入并构建缓存…";
+      case "done":
+        return cloudSync.message;
+      case "error":
+        return cloudSync.message;
+      default:
+        return cloudSync.message;
+    }
+  })();
+  const syncStatusBad = cloudSync.phase === "error";
 
   const saveRemoteUrl = (value: string) => {
     setRemoteUrl(value);
@@ -145,21 +169,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ scope = "database" }
             <div style={{ ...CARD_STYLE, marginTop: "12px" }} data-testid="remote-server-settings">
               <div style={{ fontWeight: 700, fontSize: "14px", marginBottom: "4px" }}>云端服务器</div>
               <div style={{ color: "var(--dim2)", fontSize: "12px", lineHeight: 1.6, marginBottom: "12px" }}>
-                填写云端 API 地址。当前桌面端只读取数据集索引和管理员维护的日期备注，不会上传本地数据。
+                填写管理员分发的 Base URL 与访问密钥。数据同步和软件更新共用此地址，默认留空；接口路径由软件自动补齐。
               </div>
+              <label htmlFor="remote-server-base-url" style={{ display: "block", fontSize: "12px", marginBottom: "6px" }}>
+                服务器 Base URL
+              </label>
               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <input
+                  id="remote-server-base-url"
                   data-testid="remote-server-url"
                   value={remoteUrl}
                   onChange={(event) => saveRemoteUrl(event.target.value)}
-                  placeholder="http://127.0.0.1:8787"
+                  placeholder="填写 Base URL（协议、主机及可选端口）"
                   style={{ flex: 1, minWidth: 0, background: "var(--bg)", border: "1px solid var(--line)", color: "var(--text)", padding: "7px 9px" }}
                 />
                 <button
                   data-testid="remote-server-test"
                   type="button"
                   onClick={() => void testRemote()}
-                  disabled={remoteStatus === "checking"}
+                  disabled={remoteStatus === "checking" || !normalizeRemoteBaseUrl(remoteUrl)}
                   style={{ flex: "none", padding: "7px 12px", background: "transparent", border: "1px solid var(--line)", color: "var(--text)", cursor: remoteStatus === "checking" ? "default" : "pointer" }}
                 >
                   {remoteStatus === "checking" ? "连接中…" : "测试连接"}
@@ -168,6 +196,45 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ scope = "database" }
               {remoteMessage && (
                 <div style={{ marginTop: "8px", color: remoteStatus === "connected" ? "var(--text)" : "var(--red)", fontSize: "11px" }}>
                   {remoteStatus === "connected" ? "已连接：" : "连接失败："}{remoteMessage}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "10px" }}>
+                <input
+                  data-testid="remote-token"
+                  type="password"
+                  value={remoteToken}
+                  onChange={(event) => setRemoteToken(event.target.value)}
+                  placeholder="访问密钥（管理员分发）"
+                  autoComplete="off"
+                  style={{ flex: 1, minWidth: 0, background: "var(--bg)", border: "1px solid var(--line)", color: "var(--text)", padding: "7px 9px" }}
+                />
+              </div>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: "10px", flexWrap: "wrap" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", userSelect: "none" }}>
+                  <input
+                    data-testid="remote-autosync-toggle"
+                    type="checkbox"
+                    checked={remoteAutosync}
+                    onChange={(event) => setRemoteAutosync(event.target.checked)}
+                  />
+                  <span style={{ fontWeight: 700, fontSize: "12px" }}>启动时自动同步</span>
+                </label>
+                <span style={{ flex: 1 }} />
+                <button
+                  data-testid="remote-sync-now"
+                  type="button"
+                  onClick={() => void checkCloudUpdates({ auto: false })}
+                  disabled={syncRunning}
+                  style={{ flex: "none", padding: "7px 12px", background: "transparent", border: "1px solid var(--line)", color: "var(--text)", cursor: syncRunning ? "default" : "pointer" }}
+                >
+                  {cloudSync.phase === "checking" ? "检查中…" : "检查新数据"}
+                </button>
+              </div>
+              {(syncStatusText || cloudSync.lastSyncAt !== null) && (
+                <div style={{ marginTop: "8px", color: syncStatusBad ? "var(--red)" : "var(--dim2)", fontSize: "11px" }} data-testid="remote-sync-status">
+                  {syncStatusText}
+                  {cloudSync.phase === "idle" && cloudSync.lastSyncAt !== null &&
+                    ` 上次检查：${new Date(cloudSync.lastSyncAt).toLocaleString()}`}
                 </div>
               )}
             </div>

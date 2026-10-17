@@ -52,6 +52,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
   const storeDataset = useAppStore((s) => s.dataset);
   const setWindow = useAppStore((s) => s.setWindow);
   const activeRange = useAppStore((s) => s.activeRange);
+  const theme = useAppStore((s) => s.theme);
 
   const windowRange = props.window ?? storeWindow;
   const cursorT = props.cursorT ?? storeCursorT;
@@ -296,7 +297,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = (props) => {
     g.moveTo(cx, 4);
     g.lineTo(cx, baseY + 6);
     g.stroke();
-  }, [size, thumb, windowRange.start, windowRange.end, cursorT, domain.start, duration, isDragging]);
+  }, [size, thumb, windowRange.start, windowRange.end, cursorT, domain.start, duration, isDragging, theme]);
 
   return (
     <div

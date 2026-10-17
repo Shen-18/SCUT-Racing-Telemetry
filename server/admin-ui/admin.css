@@ -11,7 +11,8 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font-family: "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 14px; }
-html, body { overflow-x: auto; }
+/* 横向溢出只交给视口（html）滚动；body 若设 overflow 会成为滚动容器，导致子元素 position:sticky 失效 */
+html { overflow-x: auto; }
 .f1 { font-family: "F1 Display", "Segoe UI", "Microsoft YaHei", sans-serif; letter-spacing: 2px; }
 
 .topbar { background: var(--red); color: #fff; padding: 10px 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
@@ -48,6 +49,9 @@ button:disabled { opacity: .5; cursor: default; }
 
 .banner { border-left: 3px solid var(--red); background: var(--bg2); padding: 10px 14px; margin-bottom: 14px; white-space: pre-wrap; }
 .banner.ok { border-left-color: var(--ok); }
+.upload-progress { display: flex; align-items: center; gap: 9px; margin-top: 8px; color: var(--dim); font-size: 12px; }
+.upload-progress__track { height: 6px; flex: 1; min-width: 120px; background: var(--line); overflow: hidden; }
+.upload-progress__bar { height: 100%; background: var(--ok); transition: width 120ms linear; }
 
 .date-head { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
 .date-head .d { font-weight: 700; font-size: 13px; letter-spacing: 1.5px; }

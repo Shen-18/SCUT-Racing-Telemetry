@@ -1,15 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { DEFAULT_DATABASE_URL, resolveServerConfig } from "./config.mjs";
+import { resolveServerConfig } from "./config.mjs";
 import { safeUploadName } from "./storage.mjs";
 import { normalizeDatasetInput, normalizeDatasetInputs } from "./validation.mjs";
 
 test("server config uses the PostgreSQL connection string and local defaults", () => {
-  assert.deepEqual(
-    resolveServerConfig({}).databaseUrl,
-    DEFAULT_DATABASE_URL,
-  );
+  assert.throws(() => resolveServerConfig({}), /SCUT_DATABASE_URL/);
   assert.deepEqual(
     resolveServerConfig({ SCUT_SYNC_PORT: "9123", SCUT_DATABASE_URL: "postgres://demo", SCUT_ADMIN_PASSWORD: "pw" }),
     {
@@ -50,8 +47,17 @@ test("dataset input validates the metadata required by the cloud index", () => {
 });
 
 test("uploaded file names are reduced to safe local names", () => {
-  assert.equal(safeUploadName("..\\raw\\session 01.xrk"), "session_01.xrk");
+  assert.equal(safeUploadName("..\\raw\\session 01.xrk"), "session 01.xrk");
+  assert.equal(safeUploadName(encodeURIComponent("张三 A04_AF26.xrk")), "张三 A04_AF26.xrk");
   assert.equal(safeUploadName(""), "upload.bin");
+});
+
+test("url-encoded upload names are decoded before sanitizing", () => {
+  assert.equal(
+    safeUploadName(encodeURIComponent("SCUT Racing Telemetry_1.2.2_x64-setup.exe")),
+    "SCUT Racing Telemetry_1.2.2_x64-setup.exe"
+  );
+  assert.equal(safeUploadName("100%off.xrk"), "100_off.xrk");
 });
 
 test("dataset fields may be empty strings but must exist", () => {
@@ -429,7 +435,7 @@ test("admin upload parses xrk and creates an indexed record", async () => {
     const cookie = (await login(srv.port, "secret")).headers.get("set-cookie").split(";")[0];
     const res = await req(srv.port, "/api/v1/admin/uploads", {
       method: "POST",
-      headers: { cookie, "x-file-name": "session01.xrk", "content-type": "application/octet-stream" },
+      headers: { cookie, "x-file-name": encodeURIComponent("张三 A04_AF26.xrk"), "content-type": "application/octet-stream" },
       body: Buffer.from("fake-xrk-bytes"),
     });
     assert.equal(res.status, 201);
@@ -441,20 +447,21 @@ test("admin upload parses xrk and creates an indexed record", async () => {
     assert.equal(row.vehicle, "TEST");
     assert.equal(row.racer, "SMOKE");
     assert.equal(row.record_date, "2026-01-25");
+    assert.equal(row.file_name, "张三 A04_AF26.xrk");
     assert.equal(row.storage_key, `${hash}.xrk`);
     assert.ok(fs.existsSync(path.join(srv.uploadRoot, row.storage_key)));
 
     // 同内容重复上传 → duplicate
     const dup = await req(srv.port, "/api/v1/admin/uploads", {
       method: "POST",
-      headers: { cookie, "x-file-name": "session01.xrk" },
+      headers: { cookie, "x-file-name": encodeURIComponent("张三 A04_AF26.xrk") },
       body: Buffer.from("fake-xrk-bytes"),
     });
     assert.equal(dup.status, 200);
     assert.equal((await dup.json()).duplicate, true);
 
     // 管理员下载
-    const file = await req(srv.port, `/api/v1/admin/files/${hash}.xrk?name=session01.xrk`, { headers: { cookie } });
+    const file = await req(srv.port, `/api/v1/admin/files/${hash}.xrk?name=${encodeURIComponent("张三 A04_AF26.xrk")}`, { headers: { cookie } });
     assert.equal(file.status, 200);
     assert.equal(await file.text(), "fake-xrk-bytes");
   } finally {

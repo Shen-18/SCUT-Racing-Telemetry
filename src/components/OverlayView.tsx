@@ -4,9 +4,11 @@ import type { ChannelMeta, RecordSummary } from "../api/client";
 import { filterRecords, groupRecords, type LibraryCategory } from "./LibraryView";
 import { useAppStore } from "../state/appStore";
 import { formatDurationShort } from "../utils/time";
+import { ResizableColumns } from "./ResizableColumns";
 
 const BLUE = "#2A4A98";
 const BLUE_DARK = "#173B8F";
+const RECORD_COLUMNS = "24px 92px minmax(96px, 1.25fr) minmax(88px, 1fr) 68px";
 const OVERLAY_RESOLUTIONS = [
   { label: "720p · 1280×720", width: 1280, height: 720 },
   { label: "1080p · 1920×1080", width: 1920, height: 1080 },
@@ -45,9 +47,14 @@ export const OverlaySelector: React.FC<OverlaySelectorProps> = ({
     }
     const result = [...buckets.entries()].map(([key, bucket]) => ({
       key,
-      records: [...bucket].sort((a, b) => b.source_mtime_unix - a.source_mtime_unix),
+      records: [...bucket].sort(
+        (a, b) =>
+          (b.start_time || '').localeCompare(a.start_time || '') ||
+          b.source_mtime_unix - a.source_mtime_unix ||
+          b.file_hash.localeCompare(a.file_hash)
+      ),
     }));
-    result.sort((a, b) => Math.max(...b.records.map((record) => record.source_mtime_unix)) - Math.max(...a.records.map((record) => record.source_mtime_unix)));
+    result.sort((a, b) => b.key.localeCompare(a.key));
     return result;
   }, [visible]);
   const selected = records.find((record) => record.file_hash === selectedHash) ?? null;
@@ -61,14 +68,19 @@ export const OverlaySelector: React.FC<OverlaySelectorProps> = ({
       <div
         key={record.file_hash}
         data-testid="overlay-record"
+        role="radio"
+        aria-checked={active}
         tabIndex={0}
         title="双击进入 Overlay 操作台"
         onClick={() => onSelect(record.file_hash)}
         onDoubleClick={onContinue}
-        onKeyDown={(event) => { if (event.key === "Enter") onContinue(); }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") { if (active) onContinue(); else onSelect(record.file_hash); }
+          if (event.key === " ") { event.preventDefault(); onSelect(record.file_hash); }
+        }}
         style={{
           display: "grid",
-          gridTemplateColumns: "104px minmax(128px, 1.25fr) minmax(132px, 1fr) 88px 92px",
+          gridTemplateColumns: RECORD_COLUMNS,
           gap: "0 8px",
           alignItems: "center",
           textAlign: "center",
@@ -83,11 +95,13 @@ export const OverlaySelector: React.FC<OverlaySelectorProps> = ({
         }}
         className="library-row"
       >
+        <span aria-hidden="true" style={{ width: "13px", height: "13px", border: `1px solid ${active ? BLUE : "var(--dim2)"}`, justifySelf: "center", position: "relative" }}>
+          {active && <span style={{ position: "absolute", inset: "2px", background: BLUE }} />}
+        </span>
         <span className="tnum" style={{ color: "var(--dim)", whiteSpace: "nowrap" }}>{record.start_time || "—"}</span>
         <span style={{ color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{record.racer || "—"}</span>
         <span style={{ color: "var(--dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={record.vehicle}>{record.vehicle || "—"}</span>
         <span className="tnum" style={{ color: "var(--text)" }}>{formatDurationShort(record.duration)}</span>
-        <span style={{ color: active ? "#91A9EA" : "var(--dim2)", fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "10px", letterSpacing: "1px" }}>{active ? "SELECTED" : "SELECT"}</span>
       </div>
     );
   };
@@ -102,8 +116,8 @@ export const OverlaySelector: React.FC<OverlaySelectorProps> = ({
         <span style={{ color: BLUE, fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 700, fontSize: "10px", letterSpacing: "2px" }}>OVERLAY / SELECT SOURCE</span>
       </header>
 
-      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "280px minmax(0, 1fr) 300px" }}>
-        <aside style={{ borderRight: "1px solid var(--line)", minHeight: 0, display: "flex", flexDirection: "column", background: "var(--bg)" }}>
+      <ResizableColumns storageKey="scut.overlay.select-layout" defaultLeft={220} left={
+        <aside style={{ minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", background: "var(--bg)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 700, fontSize: "13px", letterSpacing: "2px", color: "var(--dim)", padding: "12px 14px 8px" }}>
             <span style={{ width: "3px", height: "12px", background: BLUE, display: "inline-block" }} />分类
           </div>
@@ -127,26 +141,32 @@ export const OverlaySelector: React.FC<OverlaySelectorProps> = ({
             })}
           </div>
         </aside>
-
+      } center={
         <section style={{ minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", minHeight: "52px", padding: "8px 16px", borderBottom: "1px solid var(--line)", flex: "none" }}>
             <span style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 700, fontSize: "13px", letterSpacing: "2px", color: "var(--dim)" }}>数据明细</span>
             <span className="tnum" style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "11px", letterSpacing: "1px", color: "var(--dim2)" }}>{visible.length} 条记录{selectedGroup !== null ? ` · ${selectedGroup}` : ""}</span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "104px minmax(128px, 1.25fr) minmax(132px, 1fr) 88px 92px", gap: "0 8px", margin: "0 16px", padding: "0 8px", borderBottom: "1px solid var(--line)", alignItems: "center", minHeight: "32px", flex: "none" }}>
-            {['开始时间', '车手', '车辆', '时长', '操作'].map((label) => <span key={label} style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px", color: "var(--dim2)", padding: "6px 0", textAlign: "center", whiteSpace: "nowrap" }}>{label}</span>)}
+          <div style={{ display: "grid", gridTemplateColumns: RECORD_COLUMNS, gap: "0 8px", margin: "0 16px", padding: "0 8px", borderBottom: "1px solid var(--line)", alignItems: "center", minHeight: "32px", flex: "none" }}>
+            {['', '开始时间', '车手', '车辆', '时长'].map((label) => <span key={label} style={{ fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px", color: "var(--dim2)", padding: "6px 0", textAlign: "center", whiteSpace: "nowrap" }}>{label}</span>)}
           </div>
           <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
             {visible.length === 0 ? <div style={{ padding: "32px", textAlign: "center", color: "var(--dim2)", fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px" }}>没有匹配的记录</div> : selectedGroup === null ? dateGroups.map((group) => <section key={group.key} data-testid={`overlay-date-group-${group.key}`}><div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "14px 16px 0", padding: "5px 8px", background: "var(--bg2)", borderBottom: "1px solid var(--line)", color: "var(--dim)", fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "11px", fontWeight: 700, letterSpacing: "1.2px" }}><span style={{ width: "3px", height: "12px", background: BLUE }} /><span>{group.key === "UNKNOWN DATE" ? "未知日期" : group.key}</span><span className="tnum" style={{ marginLeft: "auto", color: "var(--dim2)", fontSize: "10px" }}>{group.records.length} 条</span></div>{group.records.map(renderRecord)}</section>) : visible.map(renderRecord)}
           </div>
         </section>
-
-        <aside style={{ borderLeft: "1px solid var(--line)", background: "var(--bg2)", padding: "16px", display: "flex", flexDirection: "column", minHeight: 0 }}>
+      } right={
+        <aside className="overlay-record-details" style={{ background: "var(--bg2)", padding: "12px", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflowY: "auto" }}>
           <div style={{ color: BLUE, fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "10px", fontWeight: 700, letterSpacing: "1.5px" }}>已选记录</div>
-          {selected ? <div style={{ marginTop: "18px" }}><div style={{ fontSize: "22px", fontWeight: 700, fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', letterSpacing: "1px" }}>{selected.racer || "—"}</div><div style={{ marginTop: "4px", color: "var(--dim)", fontSize: "13px" }}>{selected.vehicle || "—"}</div><div style={{ marginTop: "18px", display: "grid", gap: "9px", fontSize: "12px" }}><div><span style={{ color: "var(--dim2)" }}>日期</span><strong style={{ float: "right" }}>{selected.record_date || "—"}</strong></div><div><span style={{ color: "var(--dim2)" }}>开始时间</span><strong className="tnum" style={{ float: "right" }}>{selected.start_time || "—"}</strong></div><div><span style={{ color: "var(--dim2)" }}>时长</span><strong className="tnum" style={{ float: "right" }}>{formatDurationShort(selected.duration)}</strong></div><div><span style={{ color: "var(--dim2)" }}>通道</span><strong className="tnum" style={{ float: "right" }}>{selected.channel_count}</strong></div></div></div> : <div style={{ margin: "auto 0", textAlign: "center", color: "var(--dim2)" }}><div style={{ color: BLUE_DARK, fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "13px", letterSpacing: "1.5px" }}>SELECT A RECORD</div><div style={{ marginTop: "8px", fontSize: "11px" }}>请先选择一条遥测记录</div></div>}
+          {selected ? <div style={{ margin: "12px 0" }}>
+            <div style={{ fontSize: "17px", fontWeight: 700, fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', overflowWrap: "anywhere" }}>{selected.racer || "—"}</div>
+            <div style={{ marginTop: "2px", color: "var(--dim)", fontSize: "12px" }}>{selected.vehicle || "—"}</div>
+            <dl className="overlay-record-details__fields">
+              {[["日期", selected.record_date || "—"], ["开始时间", selected.start_time || "—"], ["时长", formatDurationShort(selected.duration)], ["通道", selected.channel_count]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd className="tnum">{value}</dd></div>)}
+            </dl>
+          </div> : <div style={{ margin: "auto 0", textAlign: "center", color: "var(--dim2)" }}><div style={{ color: BLUE_DARK, fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontSize: "12px", letterSpacing: "1px" }}>SELECT A RECORD</div><div style={{ marginTop: "6px", fontSize: "11px" }}>请先选择一条遥测记录</div></div>}
           <button disabled={!selected} onClick={onContinue} style={{ marginTop: "auto", width: "100%", padding: "9px 12px", background: selected ? BLUE : "var(--panel)", border: `1px solid ${selected ? BLUE : "var(--line)"}`, color: selected ? "#fff" : "var(--dim2)", fontFamily: '"F1 Display", "Microsoft YaHei", sans-serif', fontWeight: 700, fontSize: "11px", letterSpacing: "1px", cursor: selected ? "pointer" : "default" }}>进入操作台</button>
         </aside>
-      </div>
+      } />
     </main>
   );
 };
@@ -254,7 +274,7 @@ export const OverlayBindingPanel: React.FC<OverlayBindingPanelProps> = ({ fileHa
   const autoMatched = Object.values(autoBindings).filter(Boolean).length;
 
   return (
-    <aside data-testid="overlay-bindings" style={{ borderRight: "1px solid var(--line)", minHeight: 0, overflowY: "auto", background: "var(--bg2)", padding: "14px 12px", color: "var(--text)" }}>
+    <aside data-testid="overlay-bindings" style={{ minWidth: 0, minHeight: 0, overflowY: "auto", background: "var(--bg2)", padding: "12px 10px", color: "var(--text)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", fontFamily: '"F1 Display", sans-serif', fontWeight: 700, fontSize: "12px", letterSpacing: "1.8px", color: "var(--dim)" }}>
         <span style={{ width: "3px", height: "12px", background: BLUE }} />CHANNEL BINDINGS
       </div>
@@ -448,8 +468,9 @@ export const OverlayView: React.FC = () => {
         <button onClick={() => setStep("select")} style={{ padding: "7px 12px", background: "transparent", border: "1px solid var(--line)", color: "var(--text)", cursor: "pointer" }}>更换记录</button>
         <button data-testid="overlay-render" disabled={busy || !dataset} onClick={() => void startVideoExport()} style={{ padding: "8px 14px", background: busy || !dataset ? "var(--panel)" : BLUE, border: `1px solid ${busy || !dataset ? "var(--line)" : BLUE}`, color: busy || !dataset ? "var(--dim2)" : "#fff", fontFamily: '"F1 Display", sans-serif', fontWeight: 700, letterSpacing: "1px", cursor: busy || !dataset ? "default" : "pointer" }}>开始 Overlay 渲染</button>
       </header>
-      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "320px minmax(0,1fr) 260px" }}>
+      <ResizableColumns storageKey="scut.overlay.workbench-layout" defaultLeft={300} minLeft={220} minCenter={360} left={
         <OverlayBindingPanel fileHash={selectedHash ?? dataset?.file_hash ?? ""} channels={dataset?.channels ?? []} onBindingsChange={onBindingsChange} />
+      } center={
         <section style={{ minWidth: 0, minHeight: 0, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--dim)", fontFamily: '"F1 Display", sans-serif', fontSize: "10px", letterSpacing: "1.5px" }}><span style={{ width: "3px", height: "12px", background: BLUE }} />OVERLAY WORKBENCH<span style={{ marginLeft: "auto", color: status.includes("FAILED") ? "var(--red)" : status === "FRAME READY" ? "#6ee7b7" : "var(--dim2)" }}>{status}</span></div>
           <div data-testid="overlay-progress" style={{ border: `1px solid ${busy ? BLUE : "var(--line)"}`, background: "var(--panel)", padding: "12px 14px", boxShadow: busy ? `0 0 0 1px ${BLUE}22` : undefined }}>
@@ -463,16 +484,16 @@ export const OverlayView: React.FC = () => {
           </div>
           <div style={{ border: "1px solid var(--line)", background: "var(--panel)", padding: "11px 12px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--dim)", fontSize: "12px", fontWeight: 700 }}><span>画面预览</span><span style={{ color: "var(--dim2)", fontSize: "10px", fontWeight: 400 }}>速度峰值帧 · 按当前通道绑定</span><button onClick={() => void generatePreview()} disabled={busy} style={{ marginLeft: "auto", padding: "5px 9px", background: "transparent", border: "1px solid var(--line)", color: "var(--text)", fontSize: "10px", cursor: isRendering ? "default" : "pointer" }}>更新预览</button></div>
-            <div data-testid="overlay-preview" style={{ marginTop: "9px", minHeight: "250px", display: "grid", placeItems: "center", background: "#15181d", backgroundImage: "linear-gradient(45deg,#20242b 25%,transparent 25%),linear-gradient(-45deg,#20242b 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#20242b 75%),linear-gradient(-45deg,transparent 75%,#20242b 75%)", backgroundSize: "24px 24px", backgroundPosition: "0 0,0 12px,12px -12px,-12px 0" }}>
-              {previewUrl ? <img src={previewUrl} alt="Overlay preview" style={{ maxWidth: "100%", maxHeight: "360px", width: "100%", objectFit: "contain" }} /> : <div style={{ textAlign: "center", color: "var(--dim2)" }}><div style={{ color: BLUE, fontFamily: '"F1 Display", sans-serif', fontSize: "14px", letterSpacing: "2px" }}>OVERLAY PREVIEW</div><div style={{ marginTop: "7px", fontSize: "11px" }}>完成通道绑定后点击“更新预览”</div></div>}
+            <div data-testid="overlay-preview" style={{ marginTop: "9px", minHeight: "280px", display: "grid", placeItems: "center", background: "#15181d", backgroundImage: "linear-gradient(45deg,#20242b 25%,transparent 25%),linear-gradient(-45deg,#20242b 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#20242b 75%),linear-gradient(-45deg,transparent 75%,#20242b 75%)", backgroundSize: "24px 24px", backgroundPosition: "0 0,0 12px,12px -12px,-12px 0" }}>
+              {previewUrl ? <img src={previewUrl} alt="Overlay preview" style={{ maxWidth: "100%", maxHeight: "420px", width: "100%", objectFit: "contain" }} /> : <div style={{ textAlign: "center", color: "var(--dim2)" }}><div style={{ color: BLUE, fontFamily: '"F1 Display", sans-serif', fontSize: "14px", letterSpacing: "2px" }}>OVERLAY PREVIEW</div><div style={{ marginTop: "7px", fontSize: "11px" }}>完成通道绑定后点击“更新预览”</div></div>}
             </div>
-            <div style={{ marginTop: "8px", height: "62px", overflow: "hidden", background: "#0d1117", border: "1px solid var(--line)" }}>{previewUrl ? <img src={previewUrl} alt="Overlay bottom strip preview" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "bottom" }} /> : <div style={{ color: "var(--dim2)", fontSize: "10px", textAlign: "center", paddingTop: "22px" }}>底栏预览</div>}</div>
           </div>
           {error && <div style={{ borderLeft: "3px solid var(--red)", paddingLeft: "9px", color: "var(--red)", fontSize: "11px" }}>{error}</div>}
         </section>
-        <aside style={{ borderLeft: "1px solid var(--line)", padding: "14px", background: "var(--bg2)", fontSize: "11px", overflowY: "auto" }}>
+      } right={
+        <aside style={{ minWidth: 0, padding: "12px 10px", background: "var(--bg2)", fontSize: "11px", overflowY: "auto" }}>
           <div style={{ color: BLUE, fontFamily: '"F1 Display", sans-serif', fontWeight: 700, fontSize: "10px", letterSpacing: "1.5px" }}>OUTPUT CONFIG</div>
-          <div style={{ marginTop: "14px", display: "grid", gap: "8px" }}>
+          <div className="overlay-output-fields" style={{ marginTop: "10px", display: "grid", gap: "7px" }}>
             <label style={{ color: "var(--dim2)" }}>画布尺寸<select aria-label="画布尺寸" value={`${renderConfig.width}x${renderConfig.height}`} onChange={(event) => { const [width, height] = event.target.value.split("x").map(Number); setRenderConfig((previous) => ({ ...previous, width, height })); }} style={{ width: "100%", marginTop: "4px", background: "var(--bg)", border: "1px solid var(--line)", color: "var(--text)", padding: "4px", fontSize: "10px" }}>{OVERLAY_RESOLUTIONS.map((resolution) => <option key={resolution.label} value={`${resolution.width}x${resolution.height}`}>{resolution.label}</option>)}</select></label>
             <label style={{ color: "var(--dim2)" }}>输出帧率<select aria-label="输出帧率" value={renderConfig.fps} onChange={(event) => setRenderConfig((previous) => ({ ...previous, fps: Number(event.target.value) }))} style={{ width: "100%", marginTop: "4px", background: "var(--bg)", border: "1px solid var(--line)", color: "var(--text)", padding: "4px", fontSize: "10px" }}><option value="100">100 FPS</option><option value="60">60 FPS</option><option value="30">30 FPS</option></select></label>
             <label style={{ color: "var(--dim2)" }}>渲染采样<select aria-label="渲染采样帧率" value={renderConfig.renderFps} onChange={(event) => setRenderConfig((previous) => ({ ...previous, renderFps: Number(event.target.value) }))} style={{ width: "100%", marginTop: "4px", background: "var(--bg)", border: "1px solid var(--line)", color: "var(--text)", padding: "4px", fontSize: "10px" }}><option value="20">20 FPS</option><option value="10">10 FPS</option><option value="30">30 FPS</option></select></label>
@@ -482,7 +503,7 @@ export const OverlayView: React.FC = () => {
           </div>
           <div style={{ marginTop: "18px", paddingTop: "12px", borderTop: "1px solid var(--line)" }}><div style={{ color: "var(--dim2)", marginBottom: "6px" }}>输出目录</div><div style={{ display: "flex", gap: "5px" }}><input aria-label="输出目录" value={outputDir} onChange={(event) => setOutputDir(event.target.value)} placeholder="选择导出目录" style={{ minWidth: 0, width: "100%", background: "var(--bg)", border: "1px solid var(--line)", color: "var(--text)", padding: "5px 6px", fontSize: "10px" }} /><button onClick={() => void chooseOutputDir()} style={{ flex: "none", padding: "4px 6px", background: "transparent", border: "1px solid var(--line)", color: "var(--text)", fontSize: "10px", cursor: "pointer" }}>更改</button></div><div title={outputFile ?? (outputDir || undefined)} style={{ marginTop: "6px", color: outputDir ? "var(--text)" : "var(--dim2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{outputFile ?? (outputDir ? `${outputDir}\\dashboard_${renderConfig.fps === 100 ? "100fps_" : ""}alpha.mov` : "生成时选择目录")}</div>{outputDir && <button onClick={() => void openOutputFolder()} style={{ marginTop: "7px", padding: "4px 7px", background: "transparent", border: "1px solid var(--line)", color: "var(--dim)", fontSize: "10px", cursor: "pointer" }}>打开输出目录</button>}</div>
         </aside>
-      </div>
+      } />
     </main>
   );
 };

@@ -1,5 +1,6 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { decodeFrame } from "./frame";
+import { readRemoteBaseUrl } from "./remote";
 import type {
   ImportStage,
   ImportStatus,
@@ -296,7 +297,7 @@ export function saveSelectedChannels(fileHash: string, channels: string[]): Prom
   return invoke<void>("save_selected_channels", { fileHash, channels });
 }
 
-/** 在系统文件管理器中定位该记录的原始源文件。 */
+/** 在系统文件管理器中定位记录的归档源文件，兼容旧原文件路径。 */
 export function revealRecord(hash: string): Promise<void> {
   return invoke<void>("reveal_record", { hash });
 }
@@ -430,6 +431,24 @@ export function selectActiveChannel(
   return mostRecentlyChecked ?? selectDefaultSpeedChannel(channels) ?? channels[0].key;
 }
 
+// ===== 云端数据同步（IPC 收口在此文件）=====
+
+/** 从云端下载一个数据文件到中转目录，返回本地路径（导入成功后用 cloudRemoveTransit 清理） */
+export function cloudDownloadFile(
+  baseUrl: string,
+  token: string,
+  fileHash: string,
+  fileExt: string,
+  fileName: string,
+): Promise<string> {
+  return invoke<string>("cloud_download_file", { url: baseUrl, token, fileHash, fileExt, fileName });
+}
+
+/** 删除云端同步中转目录内的文件；路径必须位于 <缓存>/cloud-downloads 内，否则拒绝 */
+export function cloudRemoveTransit(path: string): Promise<void> {
+  return invoke<void>("cloud_remove_transit", { path });
+}
+
 // ===== 软件更新（tauri-plugin-updater；IPC 收口在此文件）=====
 
 export async function getAppVersion(): Promise<string> {
@@ -437,11 +456,22 @@ export async function getAppVersion(): Promise<string> {
   return getVersion();
 }
 
+async function checkConfiguredUpdate() {
+  const baseUrl = readRemoteBaseUrl();
+  if (!baseUrl) throw new Error("请先填写服务器 Base URL");
+  const { Update } = await import("@tauri-apps/plugin-updater");
+  const metadata = await invoke<ConstructorParameters<typeof Update>[0] | null>("check_for_update", { baseUrl });
+  return metadata ? new Update(metadata) : null;
+}
+
 export async function checkForUpdate(): Promise<{ version: string; notes: string } | null> {
-  const { check } = await import("@tauri-apps/plugin-updater");
-  const update = await check();
+  const update = await checkConfiguredUpdate();
   if (!update) return null;
-  return { version: update.version, notes: update.body ?? "" };
+  try {
+    return { version: update.version, notes: update.body ?? "" };
+  } finally {
+    await update.close();
+  }
 }
 
 export type UpdateProgress =
@@ -450,8 +480,7 @@ export type UpdateProgress =
   | { event: "finished" };
 
 export async function downloadAndInstallUpdate(onProgress?: (p: UpdateProgress) => void): Promise<void> {
-  const { check } = await import("@tauri-apps/plugin-updater");
-  const update = await check();
+  const update = await checkConfiguredUpdate();
   if (!update) throw new Error("没有可用更新");
   await update.downloadAndInstall((event) => {
     switch (event.event) {

@@ -702,6 +702,16 @@ fn find_ffmpeg() -> Result<PathBuf, String> {
             }
         }
     }
+    if let Ok(cwd) = std::env::current_dir() {
+        for candidate in [
+            cwd.join("resources").join("ffmpeg.exe"),
+            cwd.join("target").join("release").join("ffmpeg.exe"),
+        ] {
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+        }
+    }
     let mut probe = Command::new("ffmpeg");
     probe
         .arg("-version")

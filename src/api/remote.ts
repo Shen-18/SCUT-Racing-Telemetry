@@ -1,5 +1,3 @@
-import type { RecordSummary } from "./types";
-
 export interface RemoteHealth {
   ok: boolean;
   service: string;
@@ -17,6 +15,15 @@ export function normalizeRemoteBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
 }
 
+export function readRemoteBaseUrl(): string {
+  try {
+    if (typeof localStorage === "undefined") return "";
+    return normalizeRemoteBaseUrl(localStorage.getItem("scut.remote-server-url") || "");
+  } catch {
+    return "";
+  }
+}
+
 export async function checkRemoteHealth(baseUrl: string): Promise<RemoteHealth> {
   const controller = new AbortController();
   const timer = globalThis.setTimeout(() => controller.abort(), 1800);
@@ -29,11 +36,15 @@ export async function checkRemoteHealth(baseUrl: string): Promise<RemoteHealth> 
   }
 }
 
-export async function listRemoteDateNotes(baseUrl: string): Promise<RemoteDateNote[]> {
+export async function listRemoteDateNotes(baseUrl: string, token?: string): Promise<RemoteDateNote[]> {
   const controller = new AbortController();
   const timer = globalThis.setTimeout(() => controller.abort(), 1800);
   try {
-    const response = await fetch(`${normalizeRemoteBaseUrl(baseUrl)}/api/v1/date-notes`, { signal: controller.signal });
+    const response = await fetch(`${normalizeRemoteBaseUrl(baseUrl)}/api/v1/date-notes`, {
+      signal: controller.signal,
+      headers: token ? { authorization: `Bearer ${token}` } : undefined,
+    });
+    if (response.status === 401) throw new Error("访问密钥无效或已被吊销");
     if (!response.ok) throw new Error(`服务器返回 HTTP ${response.status}`);
     const body = (await response.json()) as { date_notes?: RemoteDateNote[] };
     return body.date_notes ?? [];
@@ -42,74 +53,51 @@ export async function listRemoteDateNotes(baseUrl: string): Promise<RemoteDateNo
   }
 }
 
-export interface RemoteDatasetIndex {
+/** 云端数据集索引条目（GET /api/v1/datasets 返回行，只取同步所需字段） */
+export interface RemoteDatasetFile {
   file_hash: string;
   file_name: string;
   file_type: string;
-  record_date: string;
-  start_time: string;
-  session: string;
-  vehicle: string;
-  racer: string;
-  championship: string;
-  duration: number;
-  sample_rate_hz: number;
   file_size: number;
-  source_mtime_unix: number;
+  record_date: string;
+  racer: string;
+  vehicle: string;
+  session: string;
 }
 
-export interface RemoteSyncResult {
-  synced: number;
-  skipped: number;
-}
-
-const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-// 云端 record_date 是 DATE 列；日期无法解析的记录留本地，不阻塞整包同步
-export function toRemoteDatasetIndex(record: RecordSummary): RemoteDatasetIndex | null {
-  const recordDate = record.record_date.trim();
-  if (!DATE_KEY_PATTERN.test(recordDate)) return null;
-  return {
-    file_hash: record.file_hash,
-    file_name: record.file_name,
-    file_type: record.file_type,
-    record_date: recordDate,
-    start_time: record.start_time,
-    session: record.session,
-    vehicle: record.vehicle,
-    racer: record.racer,
-    championship: "",
-    duration: record.duration,
-    sample_rate_hz: 0,
-    file_size: record.file_size,
-    source_mtime_unix: record.source_mtime_unix,
-  };
-}
-
-export async function syncDatasetIndex(baseUrl: string, records: readonly RecordSummary[]): Promise<RemoteSyncResult> {
+export async function listRemoteDatasets(baseUrl: string, token: string): Promise<RemoteDatasetFile[]> {
   const origin = normalizeRemoteBaseUrl(baseUrl);
   if (!origin) throw new Error("未配置云端服务器地址");
-  const datasets = records
-    .map(toRemoteDatasetIndex)
-    .filter((item): item is RemoteDatasetIndex => item !== null);
-  if (datasets.length === 0) return { synced: 0, skipped: records.length };
-
+  if (!token.trim()) throw new Error("未填写访问密钥");
   const controller = new AbortController();
-  const timer = globalThis.setTimeout(() => controller.abort(), 30000);
+  const timer = globalThis.setTimeout(() => controller.abort(), 10000);
   try {
-    const response = await fetch(`${origin}/api/v1/admin/datasets/bulk`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ datasets }),
+    const response = await fetch(`${origin}/api/v1/datasets`, {
       signal: controller.signal,
+      headers: { authorization: `Bearer ${token.trim()}` },
     });
+    if (response.status === 401) throw new Error("访问密钥无效或已被吊销");
     if (!response.ok) throw new Error(`服务器返回 HTTP ${response.status}`);
-    const body = (await response.json()) as { count?: number };
-    return {
-      synced: typeof body.count === "number" ? body.count : datasets.length,
-      skipped: records.length - datasets.length,
-    };
+    const body = (await response.json()) as { datasets?: RemoteDatasetFile[] };
+    return body.datasets ?? [];
   } finally {
     globalThis.clearTimeout(timer);
   }
+}
+
+/** 云端有而本地没有的记录（按内容哈希增量比对；云端重复哈希只保留第一条） */
+export function diffRemoteDatasets(
+  cloud: readonly RemoteDatasetFile[],
+  localHashes: readonly string[] | ReadonlySet<string>
+): RemoteDatasetFile[] {
+  const have = localHashes instanceof Set ? localHashes : new Set(localHashes);
+  const seen = new Set<string>();
+  const fresh: RemoteDatasetFile[] = [];
+  for (const item of cloud) {
+    if (!item || typeof item.file_hash !== "string" || item.file_hash.length !== 64) continue;
+    if (have.has(item.file_hash) || seen.has(item.file_hash)) continue;
+    seen.add(item.file_hash);
+    fresh.push(item);
+  }
+  return fresh;
 }

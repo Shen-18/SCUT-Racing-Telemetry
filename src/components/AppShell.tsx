@@ -12,6 +12,8 @@ import * as client from "../api/client";
 import { checkForUpdate, downloadAndInstall, type UpdateInfo } from "../api/updater";
 import { invoke as invokeCmd } from "../api/client";
 import { UpdateDialog } from "./UpdateDialog";
+import { CloudSyncDialog } from "./CloudSyncDialog";
+import { readRemoteBaseUrl } from "../api/remote";
 import { getDatasetFileName } from "../api/dataset";
 import { formatClockTime } from "../utils/time";
 import { LEFT_WIDTH_RANGE, RIGHT_WIDTH_RANGE } from "../state/appStore";
@@ -83,6 +85,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
   const [startupUpdateMessage, setStartupUpdateMessage] = useState("");
 
   useEffect(() => {
+    if (!readRemoteBaseUrl()) return;
     checkForUpdate()
       .then((info) => {
         if (info) setStartupUpdate(info);
@@ -90,6 +93,14 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
       .catch(() => {
         // 静默：网络/服务端不可达不打扰用户
       });
+  }, []);
+
+  // 启动云端数据同步：开了自动同步且地址/密钥齐全时，静默检查并直接下载新记录（失败不打扰）
+  useEffect(() => {
+    const state = useAppStore.getState();
+    const baseUrl = readRemoteBaseUrl();
+    if (!state.remoteAutosync || !baseUrl || !state.remoteToken.trim()) return;
+    void state.checkCloudUpdates({ auto: true }).catch(() => undefined);
   }, []);
 
   const runStartupInstall = async () => {
@@ -123,6 +134,8 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
   const setTheme = useAppStore((s) => s.setTheme);
   const importJobs = useAppStore((s) => s.importJobs);
   const updateImportStatus = useAppStore((s) => s.updateImportStatus);
+  const cloudSyncPhase = useAppStore((s) => s.cloudSync.phase);
+  const dismissCloudSync = useAppStore((s) => s.dismissCloudSync);
   const leftWidth = useAppStore((s) => s.leftWidth);
   const rightWidth = useAppStore((s) => s.rightWidth);
   const setLeftWidth = useAppStore((s) => s.setLeftWidth);
@@ -134,7 +147,6 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
   const playing = useAppStore((s) => s.playing);
   const setPlaying = useAppStore((s) => s.setPlaying);
   const view = viewOverride ?? storeView;
-  const [navHover, setNavHover] = useState<"overlay" | "database" | null>(null);
   const [settingsScope, setSettingsScope] = useState<SettingsScope>("database");
 
   const [error, setError] = useState<string | null>(null);
@@ -239,6 +251,16 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
   const isSettings = view === "settings";
   const isOverlaySettings = isSettings && settingsScope === "overlay";
   const topbarIsOverlay = isOverlay || isOverlaySettings;
+  const [sweepDirection, setSweepDirection] = useState<"to-overlay" | "to-database" | null>(null);
+  const prevOverlayRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    if (prevOverlayRef.current !== null && prevOverlayRef.current !== topbarIsOverlay) {
+      setSweepDirection(topbarIsOverlay ? "to-overlay" : "to-database");
+    }
+    prevOverlayRef.current = topbarIsOverlay;
+  }, [topbarIsOverlay]);
+
   const databaseNavActive = isLibrary || (isSettings && settingsScope === "database");
   const overlayNavActive = isOverlay || isOverlaySettings;
 
@@ -342,9 +364,16 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
           background: topbarIsOverlay ? "#2A4A98" : "var(--red)",
           flex: "none",
           userSelect: "none",
-          transition: "background-color 360ms cubic-bezier(0.22, 1, 0.36, 1)",
+          transition: "background-color 800ms cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
+        {sweepDirection && (
+          <div
+            key={sweepDirection + (topbarIsOverlay ? "-ov" : "-db")}
+            className={`topbar-sweep-layer topbar-sweep--${sweepDirection}`}
+            onAnimationEnd={() => setSweepDirection(null)}
+          />
+        )}
         {/* Logo：白色 logo 图（负责人 2026-09-16 指定） */}
         <img
           src={logoUrl}
@@ -359,32 +388,28 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
             style={{ display: "flex", alignItems: "stretch", height: "100%", marginLeft: "16px", transition: "opacity 160ms ease" }}
           >
             <span
-              className={`nav-tab${databaseNavActive ? " nav-tab--active" : ""}`}
+              className={`nav-tab nav-tab--database${databaseNavActive ? " nav-tab--active" : ""}`}
               data-testid="nav-database"
               onClick={() => setView("library")}
-              onMouseEnter={() => setNavHover("database")}
-              onMouseLeave={() => setNavHover(null)}
               style={{
-                color: databaseNavActive ? "#FFFFFF" : navHover === "database" ? "#E33B32" : "rgba(255,255,255,0.72)",
+                color: databaseNavActive ? "#FFFFFF" : "rgba(255,255,255,0.72)",
                 cursor: databaseNavActive ? "default" : "pointer",
                 transition: "color 300ms cubic-bezier(0.22, 1, 0.36, 1)",
               }}
             >
-              DATABASE
+              <span className="nav-tab__label" data-label="DATABASE">DATABASE</span>
             </span>
             <span
-              className={`nav-tab${overlayNavActive ? " nav-tab--active" : ""}`}
+              className={`nav-tab nav-tab--overlay${overlayNavActive ? " nav-tab--active" : ""}`}
               data-testid="nav-overlay"
               onClick={() => enterOverlay()}
               title="选择记录并生成透明 HUD"
-              onMouseEnter={() => setNavHover("overlay")}
-              onMouseLeave={() => setNavHover(null)}
               style={{
-                color: overlayNavActive ? "#FFFFFF" : navHover === "overlay" ? "#8EA8F2" : "rgba(255,255,255,0.82)",
+                color: overlayNavActive ? "#FFFFFF" : "rgba(255,255,255,0.82)",
                 transition: "color 300ms cubic-bezier(0.22, 1, 0.36, 1), background-color 300ms cubic-bezier(0.22, 1, 0.36, 1)",
               }}
             >
-              OVERLAY
+              <span className="nav-tab__label" data-label="OVERLAY">OVERLAY</span>
             </span>
             <span className="nav-tab nav-tab--disabled" title="WiFi 设备下载于后续版本提供" style={{ color: "rgba(255,255,255,0.42)" }}>
               WIFI DOWNLOAD
@@ -431,8 +456,13 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
             </>
           )}
           {(isLibrary || isOverlay || isSettings) && (
-            <GhostButton onRed testId="open-settings" onClick={openSettings} title="打开当前页面的设置">
-              SETTINGS
+            <GhostButton
+              onRed
+              testId="open-settings"
+              onClick={isSettings ? () => setView(settingsScope === "overlay" ? "overlay" : "library") : openSettings}
+              title={isSettings ? "返回当前页面" : "打开当前页面的设置"}
+            >
+              {isSettings ? "BACK" : "SETTINGS"}
             </GhostButton>
           )}
           <GhostButton onRed onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title="切换主题">
@@ -695,6 +725,7 @@ export const AppShell: React.FC<AppShellProps> = ({ viewOverride }) => {
           onDismiss={() => setStartupUpdateDismissed(true)}
         />
       )}
+      {cloudSyncPhase === "confirm" && <CloudSyncDialog onDismiss={dismissCloudSync} />}
     </div>
   );
 };

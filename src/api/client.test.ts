@@ -81,4 +81,19 @@ describe("api client and frame decode contract", () => {
     );
     spy.mockRestore();
   });
+
+  it("downloads by hash while forwarding the indexed original file name", async () => {
+    const spy = vi.spyOn(client.clientApi, "invoke").mockResolvedValueOnce("C:/cache/cloud-downloads/张三 A04.xrk");
+    await expect(
+      client.cloudDownloadFile("http://server", "token", "a".repeat(64), "xrk", "张三 A04.xrk"),
+    ).resolves.toContain("张三 A04.xrk");
+    expect(spy).toHaveBeenCalledWith("cloud_download_file", {
+      url: "http://server",
+      token: "token",
+      fileHash: "a".repeat(64),
+      fileExt: "xrk",
+      fileName: "张三 A04.xrk",
+    });
+    spy.mockRestore();
+  });
 });

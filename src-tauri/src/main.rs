@@ -375,28 +375,26 @@ fn save_selected_channels(
     Ok(())
 }
 
-/// 在系统文件管理器中定位记录的原始源文件（资源管理器 /select）。
+/// 在系统文件管理器中定位归档源文件，兼容旧记录的原路径与数据目录。
 #[tauri::command(async)]
 fn reveal_record(hash: String, state: tauri::State<'_, Arc<AppState>>) -> Result<(), CmdError> {
     if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(command_error("invalid_hash", hash));
     }
-    let dataset = state.cache.dataset(&hash).map_err(state::cache_error)?;
-    let source = dataset.manifest().meta.file_path.clone();
-    drop(dataset);
-    let source = source
-        .canonicalize()
-        .map_err(|e| command_error("source_missing", format!("{}: {e}", source.display())))?;
+    let source = records::record_location(&state.cache, &hash)?;
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("explorer")
-            .arg(format!("/select,\"{}\"", source.display()))
+        let mut command = std::process::Command::new("explorer.exe");
+        if source.is_file() {
+            command.arg("/select,");
+        }
+        command.arg(records::file_manager_path(&source))
             .spawn()
             .map_err(|e| command_error("reveal_failed", e))?;
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let Some(dir) = source.parent() else {
+        let Some(dir) = (if source.is_dir() { Some(source.as_path()) } else { source.parent() }) else {
             return Err(command_error(
                 "source_missing",
                 source.display().to_string(),
@@ -609,6 +607,8 @@ fn main() {
             overlay_export::cancel_overlay_export,
             overlay_export::open_overlay_folder,
             cloud::cloud_download_file,
+            cloud::cloud_remove_transit,
+            cloud::check_for_update,
             cloud::exit_app,
             list_records,
             save_record_note,

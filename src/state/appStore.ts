@@ -2,7 +2,51 @@ import { create } from "zustand";
 import type { DatasetMeta, ImportStatus, WindowFrame, ImportStage } from "../api/client";
 import * as client from "../api/client";
 import { getDatasetDuration } from "../api/dataset";
+import { diffRemoteDatasets, listRemoteDatasets, normalizeRemoteBaseUrl, type RemoteDatasetFile } from "../api/remote";
 import { clampToSampleRange, clampWindowToSampleRange, type SampleRange } from "../utils/sampleRange";
+
+export type CloudSyncPhase = "idle" | "checking" | "confirm" | "downloading" | "importing" | "done" | "error";
+
+export interface CloudSyncState {
+  phase: CloudSyncPhase;
+  /** 本次检查发现的云端新记录（完成后保留，提示条可一键重下） */
+  newFiles: RemoteDatasetFile[];
+  done: number;
+  total: number;
+  currentName: string;
+  message: string;
+  lastSyncAt: number | null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function remoteBaseUrl(): string {
+  if (typeof localStorage === "undefined") return "";
+  try {
+    return normalizeRemoteBaseUrl(localStorage.getItem("scut.remote-server-url") || "");
+  } catch {
+    return "";
+  }
+}
+
+/** 轮询导入作业直到终态；进度经由 importJobs 喂给底部进度条 */
+async function waitForImportJob(jobId: number): Promise<ImportStatus> {
+  for (;;) {
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 500));
+    const status = await client.importStatus(jobId);
+    useAppStore.getState().updateImportStatus(status);
+    if (
+      status.stage === "Ready" ||
+      status.stage === "Failed" ||
+      status.stage === "Cancelled" ||
+      status.stage === "Duplicate"
+    ) {
+      return status;
+    }
+  }
+}
 
 export interface AppState {
   dataset: DatasetMeta | null;
@@ -26,6 +70,12 @@ export interface AppState {
   overlayStep: "select" | "operations";
   playing: boolean;
   detailFocusKey: string | null;
+
+  remoteToken: string;
+  remoteAutosync: boolean;
+  cloudSync: CloudSyncState;
+  /** 同步导入进行中：updateImportStatus 暂停"导入完成自动打开分析页"，避免批量同步时页面被反复劫走 */
+  cloudSyncBusy: boolean;
 
   openDataset(fileHash: string): Promise<void>;
   setView(view: "library" | "analysis" | "overlay" | "settings"): void;
@@ -52,6 +102,15 @@ export interface AppState {
   prioritizeImport(jobId: number, channels: string[]): Promise<void>;
   applyFrame(frame: WindowFrame): boolean;
   updateImportStatus(status: ImportStatus): void;
+
+  setRemoteToken(token: string): void;
+  setRemoteAutosync(enabled: boolean): void;
+  /** 拉云端索引与本地比对；auto=true 时发现新记录直接下载（启动静默），否则停在 confirm 等确认 */
+  checkCloudUpdates(options?: { auto?: boolean }): Promise<void>;
+  runCloudSync(): Promise<void>;
+  dismissCloudSync(): void;
+  /** 忽略本轮发现的新记录（清空待下载清单，提示条消失） */
+  ignoreCloudSync(): void;
 }
 
 export const LEFT_WIDTH_RANGE = { min: 220, max: 420, default: 280 } as const;
@@ -95,6 +154,24 @@ function readRememberSelectedChannels(): boolean {
   }
 }
 
+function readRemoteToken(): string {
+  if (typeof localStorage === "undefined") return "";
+  try {
+    return localStorage.getItem("scut.remote-token") || "";
+  } catch {
+    return "";
+  }
+}
+
+function readRemoteAutosync(): boolean {
+  if (typeof localStorage === "undefined") return true;
+  try {
+    return localStorage.getItem("scut.remote-autosync") !== "false";
+  } catch {
+    return true;
+  }
+}
+
 async function datasetSampleRange(id: number): Promise<SampleRange | null> {
   // The cursor/timeline activity area belongs to the dataset, not to the
   // currently selected channel.  Individual channels can legitimately start
@@ -129,6 +206,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   overlayStep: "select",
   trackMapSplitterEnabled: readTrackMapSplitterEnabled(),
   rememberSelectedChannels: readRememberSelectedChannels(),
+  remoteToken: readRemoteToken(),
+  remoteAutosync: readRemoteAutosync(),
+  cloudSync: { phase: "idle", newFiles: [], done: 0, total: 0, currentName: "", message: "", lastSyncAt: null },
+  cloudSyncBusy: false,
 
   bumpGeneration() {
     set((state) => ({ generation: state.generation + 1 }));
@@ -385,6 +466,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     }));
     const shouldOpen =
+      !get().cloudSyncBusy &&
       status.meta_ready &&
       status.file_hash &&
       get().dataset?.file_hash !== status.file_hash &&
@@ -395,5 +477,167 @@ export const useAppStore = create<AppState>((set, get) => ({
         .openDataset(status.file_hash)
         .catch(() => set({ openingFileHash: null }));
     }
+  },
+
+  setRemoteToken(token: string) {
+    set({ remoteToken: token });
+    try {
+      localStorage.setItem("scut.remote-token", token.trim());
+    } catch {
+      // Embedded webviews may disable local storage; the current session still works.
+    }
+  },
+
+  setRemoteAutosync(enabled: boolean) {
+    set({ remoteAutosync: enabled });
+    try {
+      localStorage.setItem("scut.remote-autosync", String(enabled));
+    } catch {
+      // Embedded webviews may disable local storage; the current session still works.
+    }
+  },
+
+  async checkCloudUpdates(options?: { auto?: boolean }): Promise<void> {
+    const auto = options?.auto ?? false;
+    const baseUrl = remoteBaseUrl();
+    const token = get().remoteToken.trim();
+    if (!baseUrl || !token) {
+      if (!auto) {
+        set((s) => ({ cloudSync: { ...s.cloudSync, phase: "error", message: "请先填写服务器地址与访问密钥。" } }));
+      }
+      return;
+    }
+    if (get().cloudSyncBusy) return;
+    set((s) => ({ cloudSync: { ...s.cloudSync, phase: "checking", message: auto ? s.cloudSync.message : "" } }));
+    try {
+      const [cloud, local] = await Promise.all([listRemoteDatasets(baseUrl, token), client.listRecords("")]);
+      const fresh = diffRemoteDatasets(cloud, local.map((record) => record.file_hash));
+      const now = Date.now();
+      if (fresh.length === 0) {
+        set((s) => ({
+          cloudSync: {
+            ...s.cloudSync,
+            phase: "idle",
+            newFiles: [],
+            done: 0,
+            total: 0,
+            currentName: "",
+            lastSyncAt: now,
+            message: auto ? "" : "已是最新数据。",
+          },
+        }));
+        return;
+      }
+      set((s) => ({
+        cloudSync: {
+          ...s.cloudSync,
+          phase: auto ? "downloading" : "confirm",
+          newFiles: fresh,
+          done: 0,
+          total: fresh.length,
+          currentName: "",
+          lastSyncAt: now,
+        },
+      }));
+      if (auto) await get().runCloudSync();
+    } catch (error) {
+      // 启动静默检查失败不打扰；手动检查给出原因
+      set((s) => ({
+        cloudSync: {
+          ...s.cloudSync,
+          phase: s.cloudSync.phase === "checking" ? "idle" : s.cloudSync.phase,
+          message: auto ? s.cloudSync.message : `同步检查失败：${errorMessage(error)}`,
+        },
+      }));
+    }
+  },
+
+  async runCloudSync(): Promise<void> {
+    const files = get().cloudSync.newFiles;
+    if (files.length === 0 || get().cloudSyncBusy) return;
+    const baseUrl = remoteBaseUrl();
+    const token = get().remoteToken.trim();
+    if (!baseUrl || !token) {
+      set((s) => ({ cloudSync: { ...s.cloudSync, phase: "error", message: "请先填写服务器地址与访问密钥。" } }));
+      return;
+    }
+
+    set({ cloudSyncBusy: true });
+    const failures: string[] = [];
+    let imported = 0;
+    let duplicated = 0;
+    try {
+      set((s) => ({ cloudSync: { ...s.cloudSync, phase: "downloading", total: files.length, done: 0, message: "" } }));
+      for (let index = 0; index < files.length; index++) {
+        const file = files[index];
+        set((s) => ({ cloudSync: { ...s.cloudSync, done: index, currentName: file.file_name } }));
+        let path: string;
+        try {
+          const ext = (file.file_type || "bin").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || "bin";
+          path = await client.cloudDownloadFile(baseUrl, token, file.file_hash, ext, file.file_name);
+        } catch (error) {
+          failures.push(`下载 ${file.file_name} 失败：${errorMessage(error)}`);
+          continue;
+        }
+        set((s) => ({ cloudSync: { ...s.cloudSync, phase: "importing", done: index, currentName: file.file_name } }));
+        try {
+          const outcomes = await client.importFiles([path]);
+          const outcome = outcomes[0];
+          if (outcome?.status === "queued" && outcome.job_id !== null) {
+            get().trackImport(outcome.job_id);
+            const status = await waitForImportJob(outcome.job_id);
+            if (status.stage === "Ready") imported++;
+            else if (status.stage === "Failed") {
+              failures.push(`导入 ${outcome.file_name} 失败：${status.error ?? "未知错误"}`);
+            } else {
+              duplicated++;
+            }
+          } else if (outcome?.status === "duplicate") {
+            duplicated++;
+          } else if (outcome?.status === "failed") {
+            failures.push(`导入 ${outcome.file_name} 失败：${outcome.message ?? "未知错误"}`);
+          }
+        } catch (error) {
+          failures.push(`导入失败：${errorMessage(error)}`);
+        }
+        // 导入管线已把源文件归档进数据目录，中转副本用完即删（幂等）
+        await client.cloudRemoveTransit(path).catch(() => undefined);
+        set((s) => ({ cloudSync: { ...s.cloudSync, done: index + 1, currentName: "" } }));
+      }
+    } finally {
+      set({ cloudSyncBusy: false });
+    }
+
+    const parts: string[] = [];
+    if (imported > 0) parts.push(`新增 ${imported} 条记录`);
+    if (duplicated > 0) parts.push(`${duplicated} 条本地已存在`);
+    if (failures.length > 0) parts.push(`${failures.length} 个失败`);
+    set((s) => ({
+      cloudSync: {
+        ...s.cloudSync,
+        phase: "done",
+        message: `同步完成：${parts.length > 0 ? parts.join("，") : "没有需要同步的记录"}`,
+        lastSyncAt: Date.now(),
+      },
+    }));
+  },
+
+  dismissCloudSync() {
+    // 保留 newFiles：提示条上仍可一键重新发起下载
+    set((s) => ({ cloudSync: { ...s.cloudSync, phase: "idle", message: "" } }));
+  },
+
+  ignoreCloudSync() {
+    set((s) => ({
+      cloudSync: {
+        phase: "idle",
+        newFiles: [],
+        done: 0,
+        total: 0,
+        currentName: "",
+        message: "",
+        lastSyncAt: s.cloudSync.lastSyncAt,
+      },
+    }));
   },
 }));

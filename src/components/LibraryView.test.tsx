@@ -44,9 +44,9 @@ describe("filterRecords", () => {
 describe("groupRecords", () => {
   it("groups by recording date when category is time", () => {
     const groups: RecordGroup[] = groupRecords(records, "time");
-    expect(groups.map((g) => g.key)).toEqual(["2026-09-14", "2026-09-15"]);
-    expect(groups[0].records.map((r) => r.file_hash)).toEqual(["b"]);
-    expect(groups[1].records.map((r) => r.file_hash)).toEqual(["a", "c"]);
+    expect(groups.map((g) => g.key)).toEqual(["2026-09-15", "2026-09-14"]);
+    expect(groups[0].records.map((r) => r.file_hash)).toEqual(["a", "c"]);
+    expect(groups[1].records.map((r) => r.file_hash)).toEqual(["b"]);
   });
 
   it("groups by vehicle when category is vehicle, newest group first", () => {

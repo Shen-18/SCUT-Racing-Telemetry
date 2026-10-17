@@ -5,6 +5,7 @@ import type { RecordSummary } from "../api/client";
 import { LEFT_WIDTH_RANGE, useAppStore } from "../state/appStore";
 import { ColumnSplitter } from "./ColumnSplitter";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
+import { RecordNoteDialog } from "./RecordNoteDialog";
 import { formatDateTime, formatDurationShort } from "../utils/time";
 
 // 资料库主页（2026-09-16 负责人重构）：
@@ -50,13 +51,22 @@ export function groupRecords(
   }
   const groups = [...map.entries()].map(([key, recs]) => ({ key, records: recs }));
   for (const group of groups) {
-    group.records.sort((a, b) => b.source_mtime_unix - a.source_mtime_unix);
+    group.records.sort(
+      (a, b) =>
+        (b.start_time || '').localeCompare(a.start_time || '') ||
+        b.source_mtime_unix - a.source_mtime_unix ||
+        b.file_hash.localeCompare(a.file_hash)
+    );
   }
-  groups.sort(
-    (a, b) =>
-      Math.max(...b.records.map((r) => r.source_mtime_unix)) -
-      Math.max(...a.records.map((r) => r.source_mtime_unix))
-  );
+  if (category === 'time') {
+    groups.sort((a, b) => b.key.localeCompare(a.key));
+  } else {
+    groups.sort(
+      (a, b) =>
+        Math.max(...b.records.map((r) => r.source_mtime_unix)) -
+        Math.max(...a.records.map((r) => r.source_mtime_unix))
+    );
+  }
   return groups;
 }
 
@@ -132,10 +142,13 @@ export interface LibraryHomeViewProps {
   onToggleSelectAll?(hashes: string[], select: boolean): void;
   onDeleteSelected?(): void;
   onReveal?(fileHash: string): void;
+  onEditNote?(fileHash: string): void;
   onDeleteDay?(dayKey: string): void;
   onExportOne(fileHash: string): void;
   onExportSelected(): void;
   onExportDay(dayKey: string): void;
+  /** 云端同步提示条（容器根据 store 状态拼装；null = 不显示） */
+  syncBanner?: React.ReactNode;
 }
 
 export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
@@ -157,10 +170,12 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
   onToggleSelectAll,
   onDeleteSelected,
   onReveal,
+  onEditNote,
   onDeleteDay,
   onExportOne,
   onExportSelected,
   onExportDay,
+  syncBanner = null,
 }) => {
   const categoryWidth = useAppStore((s) => s.leftWidth);
   const setCategoryWidth = useAppStore((s) => s.setLeftWidth);
@@ -192,9 +207,14 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
     }
     const sections = [...buckets.entries()].map(([key, recs]) => ({
       key,
-      records: [...recs].sort((a, b) => b.source_mtime_unix - a.source_mtime_unix),
+      records: [...recs].sort(
+        (a, b) =>
+          (b.start_time || '').localeCompare(a.start_time || '') ||
+          b.source_mtime_unix - a.source_mtime_unix ||
+          b.file_hash.localeCompare(a.file_hash)
+      ),
     }));
-    sections.sort((a, b) => (a.key < b.key ? 1 : -1));
+    sections.sort((a, b) => b.key.localeCompare(a.key));
     return sections;
   }, [records, visible, selectedGroup]);
 
@@ -238,6 +258,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                               ? [{ key: "overlay", label: "用于 Overlay", onSelect: () => onUseForOverlay(hash) }]
                               : []),
                             { key: "reveal", label: "打开文件目录", onSelect: () => onReveal?.(hash) },
+                            ...(onEditNote ? [{ key: "edit-note", label: "编辑备注", onSelect: () => onEditNote(hash) }] : []),
                             { key: "export", label: "导出此记录", onSelect: () => onExportOne(hash) },
                             { key: "delete", label: "删除此记录", danger: true, onSelect: () => onDelete(hash) },
                             {
@@ -291,11 +312,22 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                       >
                         {record.start_time || "—"}
                       </span>
-                      <span
+                      <button
+                        type="button"
                         data-testid="record-note"
-                        title={record.record_note?.trim() || undefined}
+                        aria-label={`编辑备注 ${record.file_name}`}
+                        title={record.record_note?.trim() || "点击编辑备注"}
+                        onClick={(event) => { event.stopPropagation(); onEditNote?.(record.file_hash); }}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
                         style={{
                           minWidth: 0,
+                          width: "100%",
+                          padding: 0,
+                          border: "none",
+                          background: "transparent",
+                          font: "inherit",
+                          cursor: "text",
                           color: "var(--dim)",
                           whiteSpace: "nowrap",
                           overflow: "hidden",
@@ -304,7 +336,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
                         }}
                       >
                         {record.record_note?.trim() ? notePreview(record.record_note, 48) : "—"}
-                      </span>
+                      </button>
                       <span style={{ color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {record.racer || "—"}
                       </span>
@@ -635,6 +667,7 @@ export const LibraryHomeView: React.FC<LibraryHomeViewProps> = ({
             导入文件
           </button>
         </div>
+        {syncBanner}
         {error ? (
           <div style={{ margin: "16px", borderLeft: "3px solid var(--red)", background: "var(--bg2)", padding: "10px 14px", fontSize: "13px" }}>
             <div>{error}</div>
@@ -782,6 +815,11 @@ export const LibraryView: React.FC = () => {
   const [notice, setNotice] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [noteRecord, setNoteRecord] = useState<RecordSummary | null>(null);
+  // 云端同步状态（启动自动同步 / 手动检查都汇在这里展示与刷新）
+  const cloudSync = useAppStore((s) => s.cloudSync);
+  const runCloudSync = useAppStore((s) => s.runCloudSync);
+  const ignoreCloudSync = useAppStore((s) => s.ignoreCloudSync);
   // 导入未完成时轮询记录列表，让新记录自动出现
   useEffect(() => {
     if (!importing) return;
@@ -799,7 +837,8 @@ export const LibraryView: React.FC = () => {
         try {
           const baseUrl = normalizeRemoteBaseUrl(localStorage.getItem("scut.remote-server-url") || "");
           if (baseUrl) {
-            const notes = await listRemoteDateNotes(baseUrl);
+            const token = useAppStore.getState().remoteToken;
+            const notes = await listRemoteDateNotes(baseUrl, token || undefined);
             const byDate = new Map(notes.map((item) => [item.date_key, item.note]));
             merged = list.map((record) => ({
               ...record,
@@ -821,6 +860,15 @@ export const LibraryView: React.FC = () => {
       cancelled = true;
     };
   }, [reloadTick]);
+
+  // 云端同步：导入期间轮询记录列表让新记录陆续出现，完成后整表刷新一次
+  useEffect(() => {
+    if (cloudSync.phase === "importing") setImporting(true);
+    if (cloudSync.phase === "done") {
+      setImporting(false);
+      setReloadTick((t) => t + 1);
+    }
+  }, [cloudSync.phase]);
 
 
   const runImport = useCallback(async (paths: string[]) => {
@@ -933,7 +981,8 @@ export const LibraryView: React.FC = () => {
   // 右键"打开文件目录"：资源管理器定位原始源文件
   const handleReveal = useCallback((fileHash: string) => {
     client.revealRecord(fileHash).catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(err instanceof Error ? err.message :
+        typeof err === "object" && err !== null && "message" in err ? String(err.message) : String(err));
     });
   }, []);
 
@@ -993,6 +1042,86 @@ export const LibraryView: React.FC = () => {
     });
   }, []);
 
+  // 云端同步提示条：检查/下载/导入/完成/失败与"有待下载数据"六个状态
+  const syncBanner = (() => {
+    const { phase, newFiles, done, total, currentName, message } = cloudSync;
+    if (phase === "idle" && newFiles.length === 0) return null;
+    let text = "";
+    let actions: React.ReactNode = null;
+    const ghostButtonStyle: React.CSSProperties = {
+      background: "transparent",
+      border: "1px solid var(--line)",
+      color: "var(--text)",
+      fontSize: "11px",
+      padding: "3px 10px",
+      cursor: "pointer",
+      flex: "none",
+    };
+    switch (phase) {
+      case "checking":
+        text = "正在检查云端新数据…";
+        break;
+      case "confirm":
+        text = `云端有 ${newFiles.length} 条新数据，等待确认下载。`;
+        break;
+      case "downloading":
+        text = `云端同步：正在下载 ${done}/${total}${currentName ? ` · ${currentName}` : ""}`;
+        break;
+      case "importing":
+        text = "云端同步：正在导入并构建缓存…";
+        break;
+      case "done":
+      case "error":
+        text = message;
+        actions = (
+          <button data-testid="cloud-sync-dismiss" onClick={ignoreCloudSync} style={ghostButtonStyle}>
+            关闭
+          </button>
+        );
+        break;
+      default:
+        if (newFiles.length > 0) {
+          text = `云端有 ${newFiles.length} 条新数据待下载`;
+          actions = (
+            <>
+              <button
+                data-testid="cloud-sync-banner-download"
+                onClick={() => void runCloudSync()}
+                style={{ ...ghostButtonStyle, borderColor: "var(--red)", color: "var(--red)", fontWeight: 700 }}
+              >
+                立即下载
+              </button>
+              <button data-testid="cloud-sync-ignore" onClick={ignoreCloudSync} style={ghostButtonStyle}>
+                忽略
+              </button>
+            </>
+          );
+        }
+    }
+    if (!text) return null;
+    return (
+      <div
+        data-testid="cloud-sync-banner"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "6px 16px",
+          borderBottom: "1px solid var(--line)",
+          background: "var(--bg2)",
+          fontSize: "12px",
+          color: phase === "error" ? "var(--red)" : "var(--text)",
+          flex: "none",
+        }}
+      >
+        <span style={{ width: "3px", height: "12px", background: "var(--red)", flex: "none", display: "inline-block" }} />
+        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>
+        <span style={{ flex: 1 }} />
+        {actions}
+      </div>
+    );
+  })();
+
   return (
     <div
       style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", flex: 1, minHeight: 0, position: "relative" }}
@@ -1041,6 +1170,7 @@ export const LibraryView: React.FC = () => {
         onUseForOverlay={(hash) => enterOverlay(hash)}
         onDelete={(hash) => void handleDelete(hash)}
         onReveal={handleReveal}
+        onEditNote={(hash) => setNoteRecord(records?.find((record) => record.file_hash === hash) ?? null)}
         onDeleteDay={handleDeleteDay}
         onRetry={() => setReloadTick((t) => t + 1)}
         onPickFiles={() => void handlePickFiles()}
@@ -1057,7 +1187,21 @@ export const LibraryView: React.FC = () => {
         onExportOne={(hash) => void exportTo([hash])}
         onExportSelected={() => void exportTo([...selected])}
         onExportDay={handleExportDay}
+        syncBanner={syncBanner}
       />
+
+      {noteRecord && (
+        <RecordNoteDialog
+          key={noteRecord.file_hash}
+          record={noteRecord}
+          onClose={() => setNoteRecord(null)}
+          onSave={async (note) => {
+            await client.saveRecordNote(noteRecord.file_hash, note);
+            setRecords((previous) => previous?.map((record) => record.file_hash === noteRecord.file_hash ? { ...record, record_note: note } : record) ?? null);
+            setNoteRecord(null);
+          }}
+        />
+      )}
 
       {/* 拖入遮罩：覆盖一级栏以下全部区域（一级栏保持可见） */}
       {dragOver && (
