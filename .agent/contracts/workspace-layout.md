@@ -1,5 +1,3 @@
-# 工作区目录约束
+# 历史文档入口
 
-权威说明已统一到 [工作区目录说明](../工作区目录说明.md)。新增、移动和清理文件前必须阅读。
-
-项目文档仅进入 `.agent/`；可移动配置进入 `config/`；验收脚本进入 `tests/tooling/`；前端产物为 `target/frontend/`。根 `docs/`、`scripts/`、`dist/` 不再使用。
+这份文档属于过去的实施阶段。完整原文保留在 [历史归档](../archive/2026-10-09/agent/contracts/workspace-layout.md)；当前实现与待办见 [项目文档](../README.md)。

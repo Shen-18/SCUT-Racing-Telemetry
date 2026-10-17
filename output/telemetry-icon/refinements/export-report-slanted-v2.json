@@ -1,0 +1,74 @@
+{
+  "size": [
+    1254,
+    1254
+  ],
+  "alpha_range": [
+    0,
+    255
+  ],
+  "before_text_bounds": [
+    {
+      "left": 93,
+      "right": 944,
+      "top": 452,
+      "bottom": 612,
+      "height": 161
+    },
+    {
+      "left": 83,
+      "right": 1158,
+      "top": 643,
+      "bottom": 825,
+      "height": 183
+    }
+  ],
+  "after_text_bounds": [
+    {
+      "left": 62,
+      "right": 999,
+      "top": 415,
+      "bottom": 610,
+      "height": 196
+    },
+    {
+      "left": 78,
+      "right": 1171,
+      "top": 676,
+      "bottom": 864,
+      "height": 189
+    }
+  ],
+  "old_row_gap": 30,
+  "new_row_gap": 65,
+  "ico_sizes": [
+    [
+      16,
+      16
+    ],
+    [
+      24,
+      24
+    ],
+    [
+      32,
+      32
+    ],
+    [
+      48,
+      48
+    ],
+    [
+      64,
+      64
+    ],
+    [
+      128,
+      128
+    ],
+    [
+      256,
+      256
+    ]
+  ]
+}

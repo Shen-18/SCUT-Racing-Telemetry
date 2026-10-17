@@ -1,0 +1,11 @@
+# SCUT Racing Telemetry 图标 V1
+
+使用内置 image_gen 生成，以项目 Logo.jpg 为品牌参考。PNG 保留生成的透明通道，ICO 包含 16、24、32、48、64、128、256 像素尺寸。
+
+设计方向：深石墨色圆角底、白色 SCUT 主字形、蓝红绿三条遥测曲线。三色延续车队标志，曲线表达车辆信号采集与分析。此文件夹提供设计成品，应用图标配置尚未修改。
+
+已核对：方形 RGBA 图像、四角透明、ICO 尺寸齐全，并查看 256 至 16 像素的缩小预览。16 像素下主要依靠白色字形与三色信号轮廓识别。
+
+## 最终生成提示词
+
+Use case: logo-brand. Asset type: a single polished desktop application icon for SCUT Racing Telemetry, a motorsport vehicle telemetry analysis application. Input image 1 is a BRAND REFERENCE, not the layout to copy. Design a NEW square application icon using the original logo's distinctive slanted angular SCUT letterforms and the brand's blue/red/green identity. Output the icon alone, front-facing, centered, no mockup, no labels or presentation sheet. Composition: a solid deep graphite rounded square tile (#171C24), moderately rounded corners, small transparent margin outside the tile. In the upper-middle of the tile place one large clean WHITE original-style 'SCUT' wordmark, taking about 78% of tile width; reproduce the bespoke bold slanted geometric SCUT shapes from the reference, including the speed cuts in the S and broad angular C/U/T. Omit 'Racing', 'E', 'A', and all three original stacked rows; this new app icon contains SCUT only once. Beneath the wordmark integrate a bold compact telemetry signal motif: three smooth but angular data traces in blue, red, and green, illustrating sampled race-car signals with clearly distinct rises and falls. Traces should share the forward-moving angle and visual rhythm of the SCUT letterforms and form a cohesive compact emblem, not a detailed chart. Use vivid but restrained blue (#4276DA), red (#EE4930), green (#85B843), strong thick strokes, few bends, no tiny gridlines, axes, numbers, nodes or small print. Balance the typography and telemetry graphic as a unified icon with substantial breathing room. Style: extremely clean precise flat vector-like motorsport engineering identity, confident and minimal, crisp antialiased contours, high contrast, optically centered, legible at 32 pixels. No gradients, neon glow, texture, chrome, bevels, shadows, 3D, circuits, racing cars, medical ECG or decorative tiny text. The rounded-square tile must be fully opaque; transparency ONLY outside its outer silhouette. Make the final result feel like a professionally designed native desktop software icon.

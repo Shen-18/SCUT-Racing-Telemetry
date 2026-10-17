@@ -1,0 +1,151 @@
+[
+  {
+    "original": ".agent\\工作进度.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\工作进度.md",
+    "sha256": "185A6B556FC45A1896DC373F8B69A7E5F798578028FB066AE16D9D3B0B9BDAAE"
+  },
+  {
+    "original": ".agent\\工作区目录说明.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\工作区目录说明.md",
+    "sha256": "726E4746A49446FE6E9100043D90BB6C2E21749756C43359E5D804BED1239E03"
+  },
+  {
+    "original": ".agent\\交接文档-2026-10-07-全栈交接-v5.md",
+    "archive": ".agent\\archive\\2026-10-09\\private\\交接文档-2026-10-07-全栈交接-v5.md",
+    "sha256": "DC5D79A87D358780FD40B97AC3ECD91923C3979D934430772E44C9E1522B416C",
+    "initial_sha256": "62933F5CD54F222260300FF1CE6B7514965BC42BF57924C6E0CCBA60F4400349",
+    "revision_note": "归档期间并行凭据整理更新了原文和副本，采用当前安全版本，不恢复明文凭据。"
+  },
+  {
+    "original": ".agent\\agy-staff-调用手册.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\agy-staff-调用手册.md",
+    "sha256": "B839DC178A296DAAF4E353CD0DCBF8C2F2E0F8EDDC77C94FFF9AF2D4942FB0C5"
+  },
+  {
+    "original": ".agent\\architecture-review.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\architecture-review.md",
+    "sha256": "66AA0D9483966D1816D205AFB1D16CBD99952362942E73CE1055B249FB78247C"
+  },
+  {
+    "original": ".agent\\README.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\README.md",
+    "sha256": "5F09C14D2BB0C2BD3ABB23EEBB74D9F7F1455037F97FE2880880C0D77AA60DAA"
+  },
+  {
+    "original": ".agent\\Workbuddy_20260910_0008_Tauri_v2_Construction_Manual.markdown",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\Workbuddy_20260910_0008_Tauri_v2_Construction_Manual.markdown",
+    "sha256": "DAE8B0DC797CCB511D98933BCFDDA184A65F2C82AF5CCCFE734CA00BAEA45F01"
+  },
+  {
+    "original": ".agent\\adr\\0001-architecture.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\adr\\0001-architecture.md",
+    "sha256": "1874238F00841017F630387924899DDD84C6A7A76CF169D65F1CCE29D8DE02D0"
+  },
+  {
+    "original": ".agent\\adr\\0002-ipc.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\adr\\0002-ipc.md",
+    "sha256": "77565D07281CEF84F5CC91D1E36DC016BED93193442FB551617B2E3C7F3EBE68"
+  },
+  {
+    "original": ".agent\\adr\\0003-soa.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\adr\\0003-soa.md",
+    "sha256": "83E3E10E0338308A295A61063B8C763B6A780D3EF47E46D0678A230B67EB16C1"
+  },
+  {
+    "original": ".agent\\adr\\0004-pyramid-cache.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\adr\\0004-pyramid-cache.md",
+    "sha256": "4F9152705DFAB9129B8ABE373D7B63605B4780216952B0A400DBDB6C5C871F16"
+  },
+  {
+    "original": ".agent\\adr\\0005-testing.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\adr\\0005-testing.md",
+    "sha256": "AE151B5B60262D6BD32CF49E77FD02F0E5D7015F7C644B1A056C674C960702EA"
+  },
+  {
+    "original": ".agent\\adr\\0006-retention-backup.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\adr\\0006-retention-backup.md",
+    "sha256": "D72F382EACFB13FA9BA401F57160912BCE23441C3D4197D98F177D695DF8E7CE"
+  },
+  {
+    "original": ".agent\\adr\\0007-evidence-gates.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\adr\\0007-evidence-gates.md",
+    "sha256": "FDDCAC011ECF48F69A3C30792C6C70B4B1CA920B9F18E6ABBB0B3791DA69553C"
+  },
+  {
+    "original": ".agent\\adr\\0008-f1-visual-design.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\adr\\0008-f1-visual-design.md",
+    "sha256": "6A62CFF5741CC19A5C32A91C351F5115475A4CF38526AF1973A98AC46D3F7442"
+  },
+  {
+    "original": ".agent\\adr\\README.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\adr\\README.md",
+    "sha256": "7BA2B7DA646D57F2D54F5D9811C261CC5519583F99B44F5A4829CFDD5B115F5E"
+  },
+  {
+    "original": ".agent\\contracts\\core-api.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\contracts\\core-api.md",
+    "sha256": "12A0138A40373824C12887D5ECD4AC7623399B9C056C2C07510A783E178BA048"
+  },
+  {
+    "original": ".agent\\contracts\\dependencies.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\contracts\\dependencies.md",
+    "sha256": "38E530BF65A298206C6AF5592DB68E479086BA903107AD2AA6DE52E46DB7E2AA"
+  },
+  {
+    "original": ".agent\\contracts\\golden-fixtures.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\contracts\\golden-fixtures.md",
+    "sha256": "4DDCAFC1AC336556502DE2F3E83C3E08060C0D0799F05135044425DCB8D8CD13"
+  },
+  {
+    "original": ".agent\\contracts\\workspace-layout.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\contracts\\workspace-layout.md",
+    "sha256": "2C69428E558899F317711E11D24F3FDF4EF9FDF93564B51429352048AD601820"
+  },
+  {
+    "original": ".agent\\plans\\2026-09-24-overlay-demo.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\plans\\2026-09-24-overlay-demo.md",
+    "sha256": "99C100A9021680639992DD6FF61F0495FAB0A567BC03828E8E48F5AD0355F13E"
+  },
+  {
+    "original": ".agent\\plans\\2026-10-07-数据同步方案.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\plans\\2026-10-07-数据同步方案.md",
+    "sha256": "50B69AD030C1CBC8BEAEC4A05A7A277463D16DB7B4EC265B51C33CD16B568965"
+  },
+  {
+    "original": ".agent\\specs\\2026-09-24-overlay-demo-design.md",
+    "archive": ".agent\\archive\\2026-10-09\\agent\\specs\\2026-09-24-overlay-demo-design.md",
+    "sha256": "2924BCC478EC906A004EC8587BF96F07CE91C228299E0D47DEE76290B1257E82"
+  },
+  {
+    "original": "docs\\superpowers\\plans\\2026-10-03-overlay-video-export-parity.md",
+    "archive": ".agent\\archive\\2026-10-09\\docs\\superpowers\\plans\\2026-10-03-overlay-video-export-parity.md",
+    "sha256": "CF56BA6F098C0BBA1C2F91B4D42C9DE7D3A121F3ADFF493CA48BEA25C8E64A0C"
+  },
+  {
+    "original": "docs\\superpowers\\plans\\2026-10-03-sqlite-index-migration.md",
+    "archive": ".agent\\archive\\2026-10-09\\docs\\superpowers\\plans\\2026-10-03-sqlite-index-migration.md",
+    "sha256": "7A7F2F4931280F42856581E545903874DBDCBFEFCAAD4D1C09D269DC14B5C165"
+  },
+  {
+    "original": "docs\\superpowers\\plans\\2026-10-06-admin-panel-and-cloud-distribution.md",
+    "archive": ".agent\\archive\\2026-10-09\\docs\\superpowers\\plans\\2026-10-06-admin-panel-and-cloud-distribution.md",
+    "sha256": "8AD8B2D2AD2BBA0410D560E00D265FEFC7E024AB46A8DF090C46584DBE3E9F97",
+    "initial_sha256": "8AD8B2D2AD2BBA0410D560E00D265FEFC7E024AB46A8DF090C46584DBE3E9F97",
+    "revision_note": "归档期间并行凭据整理更新了原文和副本，采用当前安全版本，不恢复明文凭据。"
+  },
+  {
+    "original": "docs\\superpowers\\specs\\2026-10-02-sqlite-store-design.md",
+    "archive": ".agent\\archive\\2026-10-09\\docs\\superpowers\\specs\\2026-10-02-sqlite-store-design.md",
+    "sha256": "66B31A315168F5AF236B7B144C3084ACEDB09A8B04731384F1EA480BDAFE35F8"
+  },
+  {
+    "original": "docs\\superpowers\\specs\\2026-10-03-overlay-video-export-parity.md",
+    "archive": ".agent\\archive\\2026-10-09\\docs\\superpowers\\specs\\2026-10-03-overlay-video-export-parity.md",
+    "sha256": "6757582017FCF9E83212E3D823E8CBE20B6902BC8CF8A6A92FFEDF35922164E5"
+  },
+  {
+    "original": "docs\\superpowers\\specs\\2026-10-06-admin-panel-and-access-keys-design.md",
+    "archive": ".agent\\archive\\2026-10-09\\docs\\superpowers\\specs\\2026-10-06-admin-panel-and-access-keys-design.md",
+    "sha256": "3388729ACE820F2F6B531D17EF03FF94D2B12B4861BF8F4C070A62DDF180C0F4"
+  }
+]
